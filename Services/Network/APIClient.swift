@@ -80,6 +80,7 @@ final class APIClient {
             guard let token = authToken, !token.isEmpty else {
                 throw APIError.missingAuthToken
             }
+
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -109,6 +110,7 @@ final class APIClient {
 
             guard 200...299 ~= http.statusCode else {
                 let serverMessage = extractServerMessage(from: data)
+
                 if http.statusCode == 401 {
                     throw APIError.unauthorized(message: serverMessage)
                 } else {
@@ -130,6 +132,35 @@ final class APIClient {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
 
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+
+            let formatterWithMilliseconds = ISO8601DateFormatter()
+            formatterWithMilliseconds.formatOptions = [
+                .withInternetDateTime,
+                .withFractionalSeconds
+            ]
+
+            if let date = formatterWithMilliseconds.date(from: value) {
+                return date
+            }
+
+            let formatterWithoutMilliseconds = ISO8601DateFormatter()
+            formatterWithoutMilliseconds.formatOptions = [
+                .withInternetDateTime
+            ]
+
+            if let date = formatterWithoutMilliseconds.date(from: value) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date: \(value)"
+            )
+        }
+
         do {
             return try decoder.decode(type, from: data)
         } catch {
@@ -147,12 +178,15 @@ final class APIClient {
     }
 
     private func extractServerMessage(from data: Data) -> String? {
-        guard !data.isEmpty else { return nil }
+        guard !data.isEmpty else {
+            return nil
+        }
 
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let error = json["error"] as? String, !error.isEmpty {
                 return error
             }
+
             if let message = json["message"] as? String, !message.isEmpty {
                 return message
             }
@@ -165,17 +199,58 @@ final class APIClient {
 
         return nil
     }
+    // MARK: - Training
 
+    func fetchTraining() async throws -> MobileTrainingResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileTrainingResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+    
+    func fetchTrainingCourseDetail(courseId: String) async throws -> MobileTrainingCourseDetailResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileTrainingCourseDetailResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+    
     // MARK: - Session Helpers
 
     func hasValidSession() -> Bool {
-        guard let token = authToken, !token.isEmpty else { return false }
+        guard let token = authToken, !token.isEmpty else {
+            return false
+        }
+
         return true
     }
 
     func clearSession() {
         authToken = nil
     }
+    
 
     // MARK: - Auth
 
@@ -194,7 +269,10 @@ final class APIClient {
         let response = try decode(LoginResponse.self, from: data)
 
         guard response.success else {
-            throw APIError.serverError(statusCode: 401, message: response.error ?? "Login failed.")
+            throw APIError.serverError(
+                statusCode: 401,
+                message: response.error ?? "Login failed."
+            )
         }
 
         guard let token = response.token, !token.isEmpty else {
@@ -267,7 +345,45 @@ final class APIClient {
         }
     }
 
-    // MARK: - Dispatch Stats
+    // MARK: - Messages
+
+    func fetchMessages() async throws -> MobileMessagesResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/messages",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileMessagesResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func markMessageRead(id: String) async throws -> MarkMessageReadResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/messages/\(id)/read",
+            method: "POST",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MarkMessageReadResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    // MARK: - Dispatch
 
     func fetchDispatchStats() async throws -> DispatchStatsResponse {
         let request = try makeRequest(
@@ -286,7 +402,29 @@ final class APIClient {
             throw error
         }
     }
+
+    func fetchDispatchHistory(window: String = "24h") async throws -> DispatchHistoryResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/dispatches",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "window", value: window)
+            ],
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(DispatchHistoryResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
 }
+
 
 // MARK: - Errors
 
@@ -308,28 +446,38 @@ extension APIClient {
             switch self {
             case .invalidURL:
                 return "The server URL is invalid."
+
             case .invalidResponse:
                 return "The server returned an invalid response."
+
             case .missingAuthToken:
                 return "Authentication token is missing."
+
             case .missingTokenInResponse:
                 return "Login succeeded, but no authentication token was returned."
+
             case .unauthorized(let message):
                 return message ?? "You are not authorized. Please sign in again."
+
             case .sessionExpired:
                 return "Your session expired. Please sign in again."
+
             case .serverError(let statusCode, let message):
                 if let message, !message.isEmpty {
                     return "Server error (\(statusCode)): \(message)"
                 } else {
                     return "Server error (\(statusCode))."
                 }
+
             case .networkError(let error):
                 return "Network error: \(error.localizedDescription)"
+
             case .decodingError(let message):
                 return "Failed to decode the server response. \(message)"
+
             case .encodingError(let message):
                 return "Failed to encode the request. \(message)"
+
             case .unknown(let message):
                 return "Unexpected error: \(message)"
             }
@@ -364,6 +512,7 @@ extension APIClient {
     struct Member: Decodable {
         let name: String
         let role: String
+        let company: String?
         let memberId: String?
         let expiration: String?
         let email: String?
@@ -390,6 +539,8 @@ extension APIClient {
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
+        let activeDispatches: [ActiveDispatch]?
+        let messageSummary: MessageSummary?
         let lastUpdated: String?
         let sourceLabel: String?
         let statsMessage: String?
@@ -398,6 +549,22 @@ extension APIClient {
         let notesConfigured: Bool?
         let notesMessage: String?
         let error: String?
+    }
+
+    struct ActiveDispatch: Decodable, Identifiable {
+        let id: String
+        let callType: String
+        let address: String?
+        let placeName: String?
+        let message: String?
+        let units: [String]
+        let dispatchedAt: Date?
+        let priority: String?
+        let isWorkingFire: Bool?
+    }
+
+    struct MessageSummary: Decodable {
+        let unreadCount: Int
     }
 
     struct AttentionItem: Decodable, Identifiable {
@@ -440,6 +607,8 @@ extension APIClient {
         let department: DispatchBucket?
         let station: DispatchBucket?
         let lastUpdated: String?
+        let sourceLabel: String?
+        let message: String?
     }
 
     struct DispatchStats: Decodable {
@@ -466,5 +635,36 @@ extension APIClient {
         let ems7d: Int?
         let ems30d: Int?
         let emsYtd: Int?
+    }
+
+    struct DispatchHistoryResponse: Decodable {
+        let success: Bool
+        let window: String
+        let fetchedAt: Date?
+        let sourceLabel: String?
+        let activeDispatches: [ActiveDispatch]
+        let historicalDispatches: [DispatchHistoryItem]
+    }
+
+    struct DispatchHistoryItem: Decodable, Identifiable {
+        let id: String
+        let stableId: String?
+        let callType: String
+        let message: String?
+        let placeName: String?
+        let address: String?
+        let address2: String?
+        let city: String?
+        let state: String?
+        let latitude: Double?
+        let longitude: Double?
+        let units: [String]
+        let tacChannel: String?
+        let status: String?
+        let dispatchedAt: Date?
+        let lastActivityAt: Date?
+        let priority: String?
+        let isWorkingFire: Bool?
+        let isClosed: Bool?
     }
 }
