@@ -5,17 +5,26 @@ struct AppScreen<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                AppTheme.navy
-                    .ignoresSafeArea()
+        ZStack {
+            AppTheme.navy
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 14) {
+                if !title.isEmpty {
+                    Text(title)
+                        .font(.largeTitle.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 10)
+                }
 
                 content()
             }
-            .navigationTitle(title)
-            .toolbarBackground(AppTheme.navy, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .toolbarBackground(AppTheme.navy, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

@@ -4,14 +4,63 @@ import Combine
 @MainActor
 final class DashboardViewModel: ObservableObject {
     @Published var state: DashboardState = .empty(for: .member)
+    @Published var activeDispatches: [APIClient.ActiveDispatch] = []
 
-    func load(role: UserRole) {
+    private var hasLoaded = false
+    private var isLoadingDashboard = false
+    private var lastLoadedAt: Date?
+    private let minimumRefreshInterval: TimeInterval = 60
+
+    func loadIfNeeded(role: UserRole) {
+        guard !hasLoaded else { return }
+
         Task {
-            await loadDashboard(role: role)
+            await loadDashboard(role: role, force: false)
         }
     }
 
-    private func loadDashboard(role: UserRole) async {
+    func refresh(role: UserRole) {
+        Task {
+            await loadDashboard(role: role, force: true)
+        }
+    }
+
+    func refreshIfStale(role: UserRole) {
+        if let lastLoadedAt, Date().timeIntervalSince(lastLoadedAt) < minimumRefreshInterval {
+            return
+        }
+
+        Task {
+            await loadDashboard(role: role, force: true)
+        }
+    }
+
+    func addActiveDispatch(from dispatch: DispatchNotificationPayload) {
+        let activeDispatch = APIClient.ActiveDispatch(
+            id: dispatch.id,
+            callType: dispatch.callType ?? dispatch.title,
+            address: dispatch.address,
+            placeName: nil,
+            message: dispatch.address,
+            units: dispatch.units,
+            dispatchedAt: Date(),
+            priority: "HIGH",
+            isWorkingFire: isLikelyWorkingFire(dispatch)
+        )
+        activeDispatches.removeAll { $0.id == activeDispatch.id }
+        activeDispatches.insert(activeDispatch, at: 0)
+    }
+
+    private func loadDashboard(role: UserRole, force: Bool) async {
+        guard !isLoadingDashboard else { return }
+
+        if !force, hasLoaded {
+            return
+        }
+
+        isLoadingDashboard = true
+        defer { isLoadingDashboard = false }
+
         state = DashboardState(
             greeting: state.greeting,
             role: role,
@@ -34,6 +83,8 @@ final class DashboardViewModel: ObservableObject {
         do {
             let dashboard = try await APIClient.shared.fetchDashboard()
 
+            activeDispatches = dashboard.activeDispatches ?? []
+
             let departmentYtd = dashboard.department?.totalYtd
             let stationYtd = dashboard.station?.totalYtd
 
@@ -55,7 +106,12 @@ final class DashboardViewModel: ObservableObject {
                 isLoading: false,
                 errorMessage: nil
             )
+
+            hasLoaded = true
+            lastLoadedAt = Date()
         } catch {
+            activeDispatches = []
+
             state = DashboardState(
                 greeting: "Welcome",
                 role: role,
@@ -77,6 +133,23 @@ final class DashboardViewModel: ObservableObject {
 
             print("Dashboard load failed: \(error.localizedDescription)")
         }
+    }
+
+    private func isLikelyWorkingFire(_ dispatch: DispatchNotificationPayload) -> Bool {
+        let combinedText = [
+            dispatch.title,
+            dispatch.callType,
+            dispatch.body
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        .lowercased()
+
+        return combinedText.contains("working fire") ||
+            combinedText.contains("structure fire") ||
+            combinedText.contains("confirmed fire") ||
+            combinedText.contains("2nd alarm") ||
+            combinedText.contains("second alarm")
     }
 
     private func mapBulletins(from updates: [APIClient.DashboardUpdate]) -> [DashboardBulletin] {

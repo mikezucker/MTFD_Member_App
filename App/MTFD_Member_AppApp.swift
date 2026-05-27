@@ -1,3 +1,4 @@
+
 import SwiftUI
 
 @main
@@ -8,7 +9,7 @@ struct MTFD_Member_AppApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(SessionManager.shared) // 👈 THIS is what you're missing
+                .environmentObject(SessionManager.shared)
         }
     }
 }

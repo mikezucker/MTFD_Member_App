@@ -423,6 +423,15 @@ final class APIClient {
             throw error
         }
     }
+    func fetchMobileSchedule() async throws -> MobileScheduleResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/schedule",
+            requiresAuth: true
+        )
+
+        let data = try await performRequest(request)
+        return try decode(MobileScheduleResponse.self, from: data)
+    }
 }
 
 
@@ -666,5 +675,27 @@ extension APIClient {
         let priority: String?
         let isWorkingFire: Bool?
         let isClosed: Bool?
+    }
+    
+    struct MobileScheduleResponse: Decodable {
+        let success: Bool
+        let message: String?
+        let date: String?
+        let entries: [MobileScheduleEntry]
+    }
+
+    struct MobileScheduleEntry: Decodable, Identifiable {
+        let id: String
+        let title: String
+        let station: String?
+        let timeRange: String
+        let staffing: [String]
+        let staffingDetails: [MobileScheduleStaffingDetail]
+    }
+
+    struct MobileScheduleStaffingDetail: Decodable {
+        let name: String?
+        let qualifier: String?
+        let isVacant: Bool
     }
 }

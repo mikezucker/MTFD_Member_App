@@ -12,17 +12,26 @@ final class NotificationManager: NSObject, ObservableObject {
 
     func requestPermission() async {
         let center = UNUserNotificationCenter.current()
-        center.delegate = self
 
         do {
-            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+            let granted = try await center.requestAuthorization(
+                options: [.alert, .badge, .sound, .criticalAlert]
+            )
+
+            print("🔔 Notification permission granted:", granted)
+
+            let settings = await center.notificationSettings()
+            print("🔔 authorizationStatus:", settings.authorizationStatus.rawValue)
+            print("🔊 soundSetting:", settings.soundSetting.rawValue)
+            print("🚨 criticalAlertSetting:", settings.criticalAlertSetting.rawValue)
+
             if granted {
                 await MainActor.run {
                     UIApplication.shared.registerForRemoteNotifications()
                 }
             }
         } catch {
-            print("Notification permission error:", error)
+            print("❌ Notification permission error:", error)
         }
     }
 
@@ -36,4 +45,11 @@ final class NotificationManager: NSObject, ObservableObject {
     }
 }
 
-extension NotificationManager: UNUserNotificationCenterDelegate {}
+extension NotificationManager: UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        return [.banner, .sound, .badge]
+    }
+}

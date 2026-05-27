@@ -7,6 +7,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var keyboardHeight: CGFloat = 0
 
     @FocusState private var focusedField: Field?
 
@@ -15,36 +16,37 @@ struct LoginView: View {
         case password
     }
 
+    private let navy = Color(red: 0.03, green: 0.08, blue: 0.18)
+    private let gold = Color(red: 1.0, green: 0.78, blue: 0.05)
+
     var body: some View {
         ZStack {
-            AppTheme.navy
-                .ignoresSafeArea()
+            navy.ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 24) {
-                    Spacer()
-                        .frame(height: 40)
-
+                VStack(spacing: 22) {
                     Image("MTFDLogo")
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 220)
+                        .frame(width: keyboardHeight > 0 ? 135 : 185)
+                        .padding(.top, keyboardHeight > 0 ? 12 : 34)
                         .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
+                        .animation(.easeOut(duration: 0.25), value: keyboardHeight)
 
                     VStack(spacing: 2) {
                         Text("Morris Township")
                         Text("Fire Department")
                         Text("Member App")
                     }
-                    .font(.custom("Didot", size: 30))
-                    .kerning(1.2)
+                    .font(.system(size: keyboardHeight > 0 ? 24 : 30, weight: .semibold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white)
+                    .animation(.easeOut(duration: 0.25), value: keyboardHeight)
 
                     Rectangle()
-                        .fill(Color.white.opacity(0.6))
+                        .fill(Color.white.opacity(0.55))
                         .frame(height: 1)
-                        .padding(.horizontal, 40)
+                        .padding(.horizontal, 46)
 
                     Text("Member Access Portal")
                         .font(.caption)
@@ -63,7 +65,8 @@ struct LoginView: View {
                             }
                             .padding()
                             .background(Color.white)
-                            .cornerRadius(10)
+                            .foregroundColor(.black)
+                            .cornerRadius(12)
 
                         SecureField("Password", text: $password)
                             .textContentType(.password)
@@ -76,7 +79,8 @@ struct LoginView: View {
                             }
                             .padding()
                             .background(Color.white)
-                            .cornerRadius(10)
+                            .foregroundColor(.black)
+                            .cornerRadius(12)
 
                         if let errorMessage {
                             Text(errorMessage)
@@ -101,9 +105,9 @@ struct LoginView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(AppTheme.gold)
+                            .background(gold)
                             .foregroundColor(.black)
-                            .cornerRadius(10)
+                            .cornerRadius(12)
                         }
                         .disabled(
                             isLoading ||
@@ -114,15 +118,25 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 24)
 
-                    Spacer()
-                        .frame(height: 40)
+                    Spacer(minLength: keyboardHeight > 0 ? 180 : 32)
                 }
                 .frame(maxWidth: .infinity)
+                .padding(.bottom, keyboardHeight > 0 ? 20 : 0)
+                .offset(y: keyboardHeight > 0 ? -70 : 0)
+                .animation(.easeOut(duration: 0.25), value: keyboardHeight)
             }
             .scrollDismissesKeyboard(.interactively)
             .onTapGesture {
                 focusedField = nil
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                keyboardHeight = frame.height
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            keyboardHeight = 0
         }
     }
 
@@ -134,11 +148,8 @@ struct LoginView: View {
         errorMessage = nil
         isLoading = true
 
-        do {
-            try await sessionManager.login(email: email, password: password)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await sessionManager.login(email: email, password: password)
+        errorMessage = sessionManager.errorMessage
 
         isLoading = false
     }
