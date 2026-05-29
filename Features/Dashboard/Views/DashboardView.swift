@@ -98,6 +98,16 @@ struct DashboardView: View {
                                 }
                             }
 
+                            if !viewModel.state.assignedTrainingPreview.isEmpty {
+                                sectionTitle("Assigned Training")
+
+                                DashboardAssignedTrainingPreviewCard(
+                                    items: viewModel.state.assignedTrainingPreview
+                                ) {
+                                    handleNavigation(to: .trainingAssigned)
+                                }
+                            }
+
                             if !viewModel.state.stationUpdates.isEmpty {
                                 sectionTitle("Station Update")
 
@@ -124,29 +134,6 @@ struct DashboardView: View {
                                 ForEach(viewModel.state.attentionItems) { item in
                                     DashboardAttentionCard(item: item) {
                                         handleNavigation(to: item.destination)
-                                    }
-                                }
-                            }
-
-                            if !viewModel.state.progressItems.isEmpty {
-                                sectionTitle("Progress")
-
-                                ForEach(viewModel.state.progressItems) { item in
-                                    ProgressCard(title: item.title, progress: item.progress)
-                                        .onTapGesture {
-                                            handleNavigation(to: item.destination)
-                                        }
-                                }
-                            }
-
-                            if !viewModel.state.quickActions.isEmpty {
-                                sectionTitle("Quick Actions")
-
-                                LazyVGrid(columns: gridColumns, spacing: 12) {
-                                    ForEach(viewModel.state.quickActions) { action in
-                                        DashboardQuickActionTile(action: action) { destination in
-                                            handleNavigation(to: destination)
-                                        }
                                     }
                                 }
                             }
@@ -389,6 +376,78 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 2)
         }
+    }
+}
+
+private struct DashboardAssignedTrainingPreviewCard: View {
+    let items: [DashboardTrainingPreviewItem]
+    let onTap: () -> Void
+
+    private var visibleItems: [DashboardTrainingPreviewItem] {
+        Array(items.prefix(3))
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Assigned Training")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Text("\(items.count) active assignment\(items.count == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.68))
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                VStack(spacing: 10) {
+                    ForEach(visibleItems) { item in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(item.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                Text(item.progressText)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(item.isOverdue ? .orange : .white.opacity(0.72))
+                            }
+
+                            ProgressView(value: Double(item.progressPercent), total: 100)
+                                .tint(item.isOverdue ? .orange : AppTheme.gold)
+                        }
+                        .padding(10)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                }
+
+                if items.count > visibleItems.count {
+                    Text("+ \(items.count - visibleItems.count) more in Training")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.gold)
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

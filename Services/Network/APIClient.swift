@@ -301,6 +301,72 @@ final class APIClient {
         }
     }
 
+    func updateProfile(name: String, email: String, phone: String?) async throws -> MemberResponse {
+        let payload = UpdateProfileRequest(
+            name: name,
+            email: email,
+            phone: phone,
+            confirmedFirstDueSync: true
+        )
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/profile",
+            method: "PATCH",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MemberResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func fetchNotificationPreferences() async throws -> NotificationPreferencesResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/notification-preferences",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(NotificationPreferencesResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateNotificationPreferences(_ preferences: NotificationPreferences) async throws -> NotificationPreferencesResponse {
+        let body = try encode(preferences)
+
+        let request = try makeRequest(
+            path: "/api/mobile/notification-preferences",
+            method: "PATCH",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(NotificationPreferencesResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     func logout() {
         clearSession()
     }
@@ -501,6 +567,13 @@ extension APIClient {
         let email: String
         let password: String
     }
+
+    struct UpdateProfileRequest: Encodable {
+        let name: String
+        let email: String
+        let phone: String?
+        let confirmedFirstDueSync: Bool
+    }
 }
 
 // MARK: - Response Models
@@ -525,6 +598,21 @@ extension APIClient {
         let memberId: String?
         let expiration: String?
         let email: String?
+        let phone: String?
+        let attributes: [String]?
+
+        var isReliefDriver: Bool {
+            attributes?.contains { attribute in
+                let normalized = attribute
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                    .replacingOccurrences(of: " ", with: "_")
+                    .replacingOccurrences(of: "-", with: "_")
+
+                return normalized == "RELIEF_DRIVER"
+                    || normalized == "RELIEFDRIVER"
+            } == true
+        }
     }
 
     struct AnnouncementsResponse: Decodable {
@@ -545,6 +633,7 @@ extension APIClient {
         let attentionItems: [AttentionItem]?
         let latestUpdates: [LatestUpdate]?
         let trainingSummary: TrainingSummary?
+        let assignedTrainingPreview: [DashboardTrainingPreviewItem]?
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
@@ -589,6 +678,27 @@ extension APIClient {
         let title: String
         let subtitle: String?
         let createdAt: String?
+    }
+
+    struct DashboardTrainingPreviewItem: Decodable, Identifiable {
+        let id: String
+        let courseId: String
+        let title: String
+        let progressStatus: String
+        let progressPercent: Int
+        let dueAt: Date?
+        let isOverdue: Bool?
+
+        var progressText: String {
+            switch progressStatus {
+            case "COMPLETED":
+                return "Completed"
+            case "IN_PROGRESS":
+                return "\(progressPercent)% complete"
+            default:
+                return progressPercent > 0 ? "\(progressPercent)% complete" : "Not started"
+            }
+        }
     }
 
     struct TrainingSummary: Decodable {

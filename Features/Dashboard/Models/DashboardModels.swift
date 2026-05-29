@@ -22,6 +22,15 @@ struct DashboardProgressItem: Identifiable, Hashable {
     let destination: AppDestination
 }
 
+struct DashboardTrainingPreviewItem: Identifiable, Hashable {
+    let id: String
+    let courseId: String
+    let title: String
+    let progressText: String
+    let progressPercent: Int
+    let isOverdue: Bool
+}
+
 struct DashboardAttentionItem: Identifiable, Hashable {
     let id = UUID()
     let title: String
@@ -56,6 +65,7 @@ struct DashboardState {
     let attentionItems: [DashboardAttentionItem]
     let quickActions: [DashboardQuickAction]
     let progressItems: [DashboardProgressItem]
+    let assignedTrainingPreview: [DashboardTrainingPreviewItem]
 
     // Legacy headline values, keep for compatibility
     var stationCallTotal: Int? = nil
@@ -80,6 +90,7 @@ struct DashboardState {
             attentionItems: [],
             quickActions: [],
             progressItems: [],
+            assignedTrainingPreview: [],
             stationCallTotal: nil,
             departmentCallTotal: nil,
             dashboardDepartment: nil,

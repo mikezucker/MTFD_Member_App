@@ -47,6 +47,7 @@ final class DashboardViewModel: ObservableObject {
             priority: "HIGH",
             isWorkingFire: isLikelyWorkingFire(dispatch)
         )
+
         activeDispatches.removeAll { $0.id == activeDispatch.id }
         activeDispatches.insert(activeDispatch, at: 0)
     }
@@ -68,8 +69,9 @@ final class DashboardViewModel: ObservableObject {
             stationUpdates: state.stationUpdates,
             departmentUpdates: state.departmentUpdates,
             attentionItems: state.attentionItems,
-            quickActions: state.quickActions,
+            quickActions: [],
             progressItems: state.progressItems,
+            assignedTrainingPreview: state.assignedTrainingPreview,
             stationCallTotal: state.stationCallTotal,
             departmentCallTotal: state.departmentCallTotal,
             dashboardDepartment: state.dashboardDepartment,
@@ -94,9 +96,10 @@ final class DashboardViewModel: ObservableObject {
                 alerts: [],
                 stationUpdates: mapBulletins(from: dashboard.stationUpdates ?? []),
                 departmentUpdates: mapBulletins(from: dashboard.departmentUpdates ?? []),
-                attentionItems: buildAttentionItems(for: role),
-                quickActions: buildQuickActions(for: role),
-                progressItems: buildProgressItems(for: role),
+                attentionItems: mapAttentionItems(from: dashboard.attentionItems ?? []),
+                quickActions: [],
+                progressItems: buildProgressItems(for: role, summary: dashboard.trainingSummary),
+                assignedTrainingPreview: mapTrainingPreview(from: dashboard.assignedTrainingPreview ?? []),
                 stationCallTotal: stationYtd,
                 departmentCallTotal: departmentYtd,
                 dashboardDepartment: dashboard.department,
@@ -118,9 +121,10 @@ final class DashboardViewModel: ObservableObject {
                 alerts: [],
                 stationUpdates: [],
                 departmentUpdates: [],
-                attentionItems: buildAttentionItems(for: role),
-                quickActions: buildQuickActions(for: role),
-                progressItems: buildProgressItems(for: role),
+                attentionItems: [],
+                quickActions: [],
+                progressItems: [],
+                assignedTrainingPreview: [],
                 stationCallTotal: nil,
                 departmentCallTotal: nil,
                 dashboardDepartment: nil,
@@ -163,81 +167,60 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    private func buildAttentionItems(for role: UserRole) -> [DashboardAttentionItem] {
-        switch role {
-        case .chief:
-            return [
-                DashboardAttentionItem(
-                    title: "Training Reviews Pending",
-                    subtitle: "Officer and member training items need review",
-                    actionLabel: "Open",
-                    destination: .trainingAssigned
-                ),
-                DashboardAttentionItem(
-                    title: "Department Messages",
-                    subtitle: "Review important department communication",
-                    actionLabel: "Open",
-                    destination: .messageCenter
-                )
-            ]
+    private func mapAttentionItems(from items: [APIClient.AttentionItem]) -> [DashboardAttentionItem] {
+        items.map { item in
+            let normalized = item.destination?.lowercased() ?? ""
 
-        case .officer:
-            return [
-                DashboardAttentionItem(
-                    title: "Crew Training Queue",
-                    subtitle: "Assigned training and approvals need attention",
-                    actionLabel: "Open",
-                    destination: .trainingAssigned
-                ),
-                DashboardAttentionItem(
-                    title: "Company Messages",
-                    subtitle: "Review important company communication",
-                    actionLabel: "Open",
-                    destination: .messageCenter
-                )
-            ]
-
-        case .member:
-            return [
-                DashboardAttentionItem(
-                    title: "Assigned Training",
-                    subtitle: "You have training items ready to complete",
-                    actionLabel: "Open",
-                    destination: .trainingAssigned
-                ),
-                DashboardAttentionItem(
-                    title: "Department Messages",
-                    subtitle: "Check the latest department communication",
-                    actionLabel: "Open",
-                    destination: .messageCenter
-                )
-            ]
+            return DashboardAttentionItem(
+                title: item.title,
+                subtitle: item.subtitle,
+                actionLabel: item.actionLabel ?? "Open",
+                destination: normalized.contains("training")
+                    ? .trainingAssigned
+                    : .messageCenter
+            )
         }
     }
 
-    private func buildQuickActions(for role: UserRole) -> [DashboardQuickAction] {
-        [
-            DashboardQuickAction(
-                title: "Training",
-                systemImage: "graduationcap.fill",
-                destination: .trainingAssigned
-            ),
-            DashboardQuickAction(
-                title: "Messages",
-                systemImage: "bubble.left.and.bubble.right.fill",
-                destination: .messageCenter
+    private func mapTrainingPreview(
+        from items: [APIClient.DashboardTrainingPreviewItem]
+    ) -> [DashboardTrainingPreviewItem] {
+        items.map {
+            DashboardTrainingPreviewItem(
+                id: $0.id,
+                courseId: $0.courseId,
+                title: $0.title,
+                progressText: $0.progressText,
+                progressPercent: $0.progressPercent,
+                isOverdue: $0.isOverdue ?? false
             )
-        ]
+        }
     }
 
-    private func buildProgressItems(for role: UserRole) -> [DashboardProgressItem] {
+    private func buildProgressItems(
+        for role: UserRole,
+        summary: APIClient.TrainingSummary?
+    ) -> [DashboardProgressItem] {
+        guard let summary else {
+            return []
+        }
+
+        let assigned = summary.assignedTrainingCount ?? 0
+        let completed = summary.completedTrainingCount ?? 0
+
+        guard assigned > 0 else {
+            return []
+        }
+
+        let progress = min(Double(completed) / Double(assigned), 1.0)
+
         switch role {
         case .chief, .officer:
             return [
                 DashboardProgressItem(
                     title: "Training Completion",
-                    progress: 0.65,
-                    subtitle: "Crew assigned vs completed",
+                    progress: progress,
+                    subtitle: "\(completed) of \(assigned) assigned training items completed",
                     destination: .trainingAssigned
                 )
             ]
@@ -246,8 +229,8 @@ final class DashboardViewModel: ObservableObject {
             return [
                 DashboardProgressItem(
                     title: "Assigned Training",
-                    progress: 0.40,
-                    subtitle: "Your assigned vs completed training",
+                    progress: progress,
+                    subtitle: "\(completed) of \(assigned) assigned training items completed",
                     destination: .trainingAssigned
                 )
             ]
