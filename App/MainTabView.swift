@@ -202,20 +202,108 @@ private struct GlobalDispatchBanner: View {
 private struct CommandView: View {
     @EnvironmentObject private var session: SessionManager
 
-    private var roleTitle: String {
-        switch session.currentUser?.role.uppercased() {
-        case "ADMIN":
-            return "Administrator"
-        case "CHIEF":
-            return "Chief"
-        case "OFFICER_CAREER":
-            return "Career Officer"
-        case "OFFICER_VOLUNTEER":
-            return "Volunteer Officer"
-        default:
-            return "Officer"
+    private var role: String {
+        session.currentUser?.role.uppercased() ?? ""
+    }
+
+    var body: some View {
+        if role == "ADMIN" || role == "CHIEF" {
+            ChiefCommandView()
+        } else {
+            LieutenantCommandView()
         }
     }
+}
+
+private struct ChiefCommandView: View {
+    var body: some View {
+        CommandWorkspaceView(
+            title: "Chief Command",
+            subtitle: "Department-wide command workspace",
+            description: "Monitor department operations, staffing, training compliance, messages, documents, and future apparatus location tools.",
+            tiles: [
+                CommandTileData(
+                    title: "Department Operations",
+                    subtitle: "View active incidents, department-wide status, dispatch activity, and operational priorities.",
+                    systemImage: "shield.lefthalf.filled"
+                ),
+                CommandTileData(
+                    title: "Staffing Overview",
+                    subtitle: "Review today’s staffing, vacancies, relief driver coverage, and department schedule status.",
+                    systemImage: "person.3.sequence.fill"
+                ),
+                CommandTileData(
+                    title: "Training Compliance",
+                    subtitle: "Track assigned training, overdue members, JPR progress, and evaluator sign-offs.",
+                    systemImage: "checklist.checked"
+                ),
+                CommandTileData(
+                    title: "Department Messages",
+                    subtitle: "Prepare department-wide messages, announcements, and operational updates.",
+                    systemImage: "megaphone.fill"
+                ),
+                CommandTileData(
+                    title: "Documents / SOPs",
+                    subtitle: "Review SOP acknowledgements, missing signatures, and document completion status.",
+                    systemImage: "doc.text.magnifyingglass"
+                ),
+                CommandTileData(
+                    title: "Apparatus GPS",
+                    subtitle: "Future apparatus location map, stale-location warnings, and vehicle status overview.",
+                    systemImage: "location.north.line.fill"
+                )
+            ]
+        )
+    }
+}
+
+private struct LieutenantCommandView: View {
+    var body: some View {
+        CommandWorkspaceView(
+            title: "Lieutenant Command",
+            subtitle: "Station and company command workspace",
+            description: "Focus on assigned members, station staffing, training progress, station messages, and operational readiness.",
+            tiles: [
+                CommandTileData(
+                    title: "Station Operations",
+                    subtitle: "View active incidents, assigned units, station/company status, and operational updates.",
+                    systemImage: "building.2.crop.circle.fill"
+                ),
+                CommandTileData(
+                    title: "My Staffing",
+                    subtitle: "Review station/company schedule, vacancies, assigned members, and relief driver coverage.",
+                    systemImage: "person.2.badge.gearshape.fill"
+                ),
+                CommandTileData(
+                    title: "Training Progress",
+                    subtitle: "Track assigned member training, JPR completion, skill checkoffs, and sign-offs.",
+                    systemImage: "checkmark.seal.fill"
+                ),
+                CommandTileData(
+                    title: "Station Messages",
+                    subtitle: "Prepare station or company-specific messages and updates.",
+                    systemImage: "text.bubble.fill"
+                ),
+                CommandTileData(
+                    title: "Documents",
+                    subtitle: "Review SOPs, station documents, acknowledgements, and required signatures.",
+                    systemImage: "doc.text.fill"
+                ),
+                CommandTileData(
+                    title: "Members",
+                    subtitle: "View assigned member status, profiles, roles, and readiness information.",
+                    systemImage: "person.crop.rectangle.stack.fill"
+                )
+            ]
+        )
+    }
+}
+
+private struct CommandWorkspaceView: View {
+    let title: String
+    let subtitle: String
+    let description: String
+    let tiles: [CommandTileData]
 
     var body: some View {
         AppScreen(title: "Command") {
@@ -230,41 +318,9 @@ private struct CommandView: View {
                         ],
                         spacing: 14
                     ) {
-                        commandTile(
-                            title: "Active Dispatch",
-                            subtitle: "Monitor active incidents, units, CAD notes, and location details.",
-                            systemImage: "bell.and.waves.left.and.right.fill"
-                        )
-
-                        commandTile(
-                            title: "Staffing",
-                            subtitle: "Review today’s schedule, vacancies, assignments, and relief driver coverage.",
-                            systemImage: "person.3.sequence.fill"
-                        )
-
-                        commandTile(
-                            title: "Training",
-                            subtitle: "Track assigned training, overdue items, JPRs, and evaluator sign-offs.",
-                            systemImage: "checklist.checked"
-                        )
-
-                        commandTile(
-                            title: "Messages",
-                            subtitle: "Prepare officer, station, company, and department communications.",
-                            systemImage: "text.bubble.fill"
-                        )
-
-                        commandTile(
-                            title: "Documents",
-                            subtitle: "Review SOP acknowledgements, missing signatures, and document status.",
-                            systemImage: "doc.text.magnifyingglass"
-                        )
-
-                        commandTile(
-                            title: "Members",
-                            subtitle: "View member status, profile updates, assignments, and role information.",
-                            systemImage: "person.crop.rectangle.stack.fill"
-                        )
+                        ForEach(tiles) { tile in
+                            commandTile(tile)
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -276,15 +332,15 @@ private struct CommandView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Officer / Chief Tools")
+            Text(title)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundStyle(.white)
 
-            Text("\(roleTitle) command workspace")
+            Text(subtitle)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.white.opacity(0.72))
 
-            Text("Command-facing tools grouped separately from the member dashboard.")
+            Text(description)
                 .font(.footnote)
                 .foregroundStyle(.white.opacity(0.62))
                 .fixedSize(horizontal: false, vertical: true)
@@ -292,13 +348,9 @@ private struct CommandView: View {
         }
     }
 
-    private func commandTile(
-        title: String,
-        subtitle: String,
-        systemImage: String
-    ) -> some View {
+    private func commandTile(_ tile: CommandTileData) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: systemImage)
+            Image(systemName: tile.systemImage)
                 .font(.system(size: 24, weight: .semibold))
                 .foregroundStyle(AppTheme.gold)
                 .frame(width: 42, height: 42)
@@ -306,11 +358,11 @@ private struct CommandView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(title)
+                Text(tile.title)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
 
-                Text(subtitle)
+                Text(tile.subtitle)
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.66))
                     .lineLimit(4)
@@ -329,3 +381,11 @@ private struct CommandView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 }
+
+private struct CommandTileData: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let systemImage: String
+}
+
