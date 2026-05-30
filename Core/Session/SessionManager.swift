@@ -88,6 +88,16 @@ final class SessionManager: ObservableObject {
         errorMessage = nil
     }
 
+    func updateProfile(name: String, email: String, phone: String?) async throws {
+        let response = try await APIClient.shared.updateProfile(
+            name: name,
+            email: email,
+            phone: phone
+        )
+
+        currentUser = response.member
+    }
+
     func registerPushTokenIfAvailable() async {
         print("📬 registerPushTokenIfAvailable called")
 

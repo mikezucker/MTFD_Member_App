@@ -8,41 +8,87 @@ struct DashboardHeaderView: View {
     let isBellRinging: Bool
     let onTapMessages: () -> Void
 
+    private var displayName: String {
+        let trimmedName = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedName.isEmpty ? "Member" : trimmedName
+    }
+
+    private var timeBasedGreeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+
+        switch hour {
+        case 5..<12:
+            return "Good morning"
+        case 12..<17:
+            return "Good afternoon"
+        default:
+            return "Good evening"
+        }
+    }
+
+    private var headerSubtitle: String {
+        let cleanedRole = roleTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedStation = stationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if cleanedRole.isEmpty {
+            return cleanedStation
+        }
+
+        if cleanedStation.isEmpty {
+            return cleanedRole
+        }
+
+        return "\(cleanedRole) • \(cleanedStation)"
+    }
+
+    private var messageStatusText: String {
+        if unreadCount <= 0 {
+            return "No unread messages"
+        }
+
+        return "\(unreadCount) unread message\(unreadCount == 1 ? "" : "s")"
+    }
+
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
+        HStack(alignment: .center, spacing: 12) {
             Image("MTFDLogo")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 68, height: 68)
-                .clipShape(Circle())
+                .frame(width: 76, height: 76)
                 .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Welcome \(firstName.isEmpty ? "Member" : firstName)")
-                    .font(.title2.weight(.bold))
+                Text("\(timeBasedGreeting), \(displayName)")
+                    .font(.system(size: 24, weight: .bold, design: .default))
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+                    .minimumScaleFactor(0.58)
+                    .allowsTightening(true)
 
-                Text(roleTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.86))
-                    .lineLimit(1)
+                if !headerSubtitle.isEmpty {
+                    Text(headerSubtitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.78)
+                        .allowsTightening(true)
+                }
 
-                Text(stationTitle)
+                Text(messageStatusText)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.white.opacity(0.65))
                     .lineLimit(1)
             }
+            .layoutPriority(1)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 4)
 
             Button(action: onTapMessages) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: isBellRinging ? "bell.badge.fill" : "bell.fill")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 52, height: 52)
+                        .frame(width: 50, height: 50)
                         .background(.white.opacity(0.14))
                         .clipShape(Circle())
 
@@ -61,9 +107,9 @@ struct DashboardHeaderView: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Open messages")
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 16)
-        .padding(.bottom, 18)
+        .padding(.horizontal, 18)
+        .padding(.top, 14)
+        .padding(.bottom, 16)
         .background(
             LinearGradient(
                 colors: [
@@ -75,10 +121,4 @@ struct DashboardHeaderView: View {
             )
         )
     }
-}//
-//  DashboardHeaderView.swift
-//  MTFD Member App
-//
-//  Created by Michael Zucker on 5/11/26.
-//
-
+}
