@@ -322,6 +322,8 @@ private struct CommandWorkspaceView: View {
 
                     staffingOverviewSection
 
+                    trainingOversightSection
+
                     LazyVGrid(
                         columns: [
                             GridItem(.flexible(), spacing: 14),
@@ -353,6 +355,142 @@ private struct CommandWorkspaceView: View {
         .sheet(item: $selectedDispatch) { dispatch in
             DispatchDetailView(dispatch: dispatch)
         }
+    }
+
+    private var trainingOversightSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Training Oversight")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+
+                    Text("Assigned training and readiness indicators")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                Spacer()
+
+                if !dashboardViewModel.state.assignedTrainingPreview.isEmpty {
+                    Text("\(dashboardViewModel.state.assignedTrainingPreview.count) active")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(AppTheme.gold.opacity(0.16))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if dashboardViewModel.state.assignedTrainingPreview.isEmpty {
+                commandInfoCard(
+                    title: "No active assigned training",
+                    message: "Assigned training, JPR readiness, and evaluator sign-offs will appear here as they become available.",
+                    systemImage: "checkmark.seal.fill"
+                )
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(Array(dashboardViewModel.state.assignedTrainingPreview.prefix(3))) { item in
+                        commandTrainingRow(item)
+                    }
+                }
+
+                if dashboardViewModel.state.assignedTrainingPreview.count > 3 {
+                    Text("+ \(dashboardViewModel.state.assignedTrainingPreview.count - 3) more training assignment\(dashboardViewModel.state.assignedTrainingPreview.count - 3 == 1 ? "" : "s")")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.56))
+                        .padding(.leading, 4)
+                }
+            }
+        }
+    }
+
+    private func commandTrainingRow(_ item: DashboardTrainingPreviewItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: trainingStatusIcon(for: item))
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(trainingStatusColor(for: item))
+                .frame(width: 28, height: 28)
+                .background(trainingStatusColor(for: item).opacity(0.16))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(item.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+
+                    if item.isOverdue {
+                        Text("OVERDUE")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red.opacity(0.85))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                Text(item.progressText)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .lineLimit(2)
+
+                ProgressView(value: trainingProgress(for: item))
+                    .tint(trainingStatusColor(for: item))
+            }
+
+            Spacer(minLength: 0)
+
+            Text("\(Int(trainingProgress(for: item) * 100))%")
+                .font(.caption.bold())
+                .foregroundStyle(trainingStatusColor(for: item))
+        }
+        .padding(14)
+        .background(.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(item.isOverdue ? Color.red.opacity(0.45) : Color.white.opacity(0.10), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func trainingProgress(for item: DashboardTrainingPreviewItem) -> Double {
+        min(max(Double(item.progressPercent) / 100.0, 0), 1)
+    }
+
+    private func trainingStatusColor(for item: DashboardTrainingPreviewItem) -> Color {
+        if item.isOverdue {
+            return .red
+        }
+
+        if trainingProgress(for: item) >= 0.8 {
+            return .green
+        }
+
+        if trainingProgress(for: item) >= 0.5 {
+            return .orange
+        }
+
+        return .red
+    }
+
+    private func trainingStatusIcon(for item: DashboardTrainingPreviewItem) -> String {
+        if item.isOverdue {
+            return "exclamationmark.triangle.fill"
+        }
+
+        if trainingProgress(for: item) >= 1.0 {
+            return "checkmark.seal.fill"
+        }
+
+        if trainingProgress(for: item) >= 0.5 {
+            return "clock.badge.checkmark.fill"
+        }
+
+        return "exclamationmark.triangle.fill"
     }
 
     private var staffingOverviewSection: some View {
