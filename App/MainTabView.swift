@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MainTabView: View {
+    @EnvironmentObject private var session: SessionManager
     @StateObject private var router = NavigationRouter.shared
     @State private var showGlobalDispatchBanner = false
     @State private var activeDispatchPayload: AppNotificationPayload?
@@ -28,6 +29,14 @@ struct MainTabView: View {
                         Label("Home", systemImage: "house.fill")
                     }
                     .tag(NavigationRouter.AppTab.home)
+
+                if canUseCommandTab {
+                    CommandView()
+                        .tabItem {
+                            Label("Command", systemImage: "shield.lefthalf.filled")
+                        }
+                        .tag(NavigationRouter.AppTab.command)
+                }
 
                 TrainingView()
                     .tabItem {
@@ -95,6 +104,15 @@ struct MainTabView: View {
         }) { payload in
             DispatchDetailView(dispatch: payload)
         }
+    }
+
+    private var canUseCommandTab: Bool {
+        let role = session.currentUser?.role.uppercased()
+
+        return role == "ADMIN"
+            || role == "CHIEF"
+            || role == "OFFICER_CAREER"
+            || role == "OFFICER_VOLUNTEER"
     }
 
     private func openDispatchDetail(_ payload: AppNotificationPayload) {
@@ -177,5 +195,137 @@ private struct GlobalDispatchBanner: View {
             .shadow(color: .black.opacity(0.25), radius: 18, y: 10)
         }
         .buttonStyle(.plain)
+    }
+}
+
+
+private struct CommandView: View {
+    @EnvironmentObject private var session: SessionManager
+
+    private var roleTitle: String {
+        switch session.currentUser?.role.uppercased() {
+        case "ADMIN":
+            return "Administrator"
+        case "CHIEF":
+            return "Chief"
+        case "OFFICER_CAREER":
+            return "Career Officer"
+        case "OFFICER_VOLUNTEER":
+            return "Volunteer Officer"
+        default:
+            return "Officer"
+        }
+    }
+
+    var body: some View {
+        AppScreen(title: "Command") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    header
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible(), spacing: 14),
+                            GridItem(.flexible(), spacing: 14)
+                        ],
+                        spacing: 14
+                    ) {
+                        commandTile(
+                            title: "Active Dispatch",
+                            subtitle: "Monitor active incidents, units, CAD notes, and location details.",
+                            systemImage: "bell.and.waves.left.and.right.fill"
+                        )
+
+                        commandTile(
+                            title: "Staffing",
+                            subtitle: "Review today’s schedule, vacancies, assignments, and relief driver coverage.",
+                            systemImage: "person.3.sequence.fill"
+                        )
+
+                        commandTile(
+                            title: "Training",
+                            subtitle: "Track assigned training, overdue items, JPRs, and evaluator sign-offs.",
+                            systemImage: "checklist.checked"
+                        )
+
+                        commandTile(
+                            title: "Messages",
+                            subtitle: "Prepare officer, station, company, and department communications.",
+                            systemImage: "text.bubble.fill"
+                        )
+
+                        commandTile(
+                            title: "Documents",
+                            subtitle: "Review SOP acknowledgements, missing signatures, and document status.",
+                            systemImage: "doc.text.magnifyingglass"
+                        )
+
+                        commandTile(
+                            title: "Members",
+                            subtitle: "View member status, profile updates, assignments, and role information.",
+                            systemImage: "person.crop.rectangle.stack.fill"
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 28)
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Officer / Chief Tools")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text("\(roleTitle) command workspace")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.72))
+
+            Text("Command-facing tools grouped separately from the member dashboard.")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+        }
+    }
+
+    private func commandTile(
+        title: String,
+        subtitle: String,
+        systemImage: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(AppTheme.gold)
+                .frame(width: 42, height: 42)
+                .background(Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
+        .padding(16)
+        .background(Color.white.opacity(0.09))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 }

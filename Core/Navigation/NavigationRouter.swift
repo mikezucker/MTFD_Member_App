@@ -15,6 +15,7 @@ final class NavigationRouter: ObservableObject {
 
     enum AppTab {
         case home
+        case command
         case training
         case documents
         case schedule
