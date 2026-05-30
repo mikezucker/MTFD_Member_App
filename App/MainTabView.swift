@@ -300,6 +300,10 @@ private struct LieutenantCommandView: View {
 }
 
 private struct CommandWorkspaceView: View {
+    @EnvironmentObject private var session: SessionManager
+    @StateObject private var dashboardViewModel = DashboardViewModel()
+    @State private var selectedDispatch: DispatchNotificationPayload?
+
     let title: String
     let subtitle: String
     let description: String
@@ -310,6 +314,10 @@ private struct CommandWorkspaceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     header
+
+                    if !dashboardViewModel.activeDispatches.isEmpty {
+                        activeDispatchSection
+                    }
 
                     LazyVGrid(
                         columns: [
@@ -327,7 +335,59 @@ private struct CommandWorkspaceView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 28)
             }
+            .refreshable {
+                dashboardViewModel.refresh(role: mappedCommandUserRole)
+            }
         }
+        .task {
+            dashboardViewModel.loadIfNeeded(role: mappedCommandUserRole)
+        }
+        .sheet(item: $selectedDispatch) { dispatch in
+            DispatchDetailView(dispatch: dispatch)
+        }
+    }
+
+    private var activeDispatchSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Active Dispatches")
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            ActiveDispatchStackView(dispatches: dashboardViewModel.activeDispatches) { activeDispatch in
+                selectedDispatch = makeDispatchPayload(from: activeDispatch)
+            }
+        }
+    }
+
+    private var mappedCommandUserRole: UserRole {
+        let rawRole = session.currentUser?.role.uppercased() ?? ""
+
+        if rawRole == "ADMIN" || rawRole == "CHIEF" {
+            return .chief
+        }
+
+        if rawRole.contains("OFFICER") {
+            return .officer
+        }
+
+        return .member
+    }
+
+    private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {
+        DispatchNotificationPayload(
+            type: activeDispatch.priority == "CRITICAL" ? .dispatchCritical : .dispatch,
+            id: activeDispatch.id,
+            title: activeDispatch.callType,
+            body: activeDispatch.message ?? activeDispatch.address,
+            callType: activeDispatch.callType,
+            address: activeDispatch.address,
+            units: activeDispatch.units,
+            isWorkingFire: activeDispatch.isWorkingFire ?? false,
+            stationId: nil,
+            messageId: nil,
+            trainingId: nil,
+            documentId: nil
+        )
     }
 
     private var header: some View {
