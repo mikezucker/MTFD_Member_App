@@ -302,6 +302,7 @@ private struct LieutenantCommandView: View {
 private struct CommandWorkspaceView: View {
     @EnvironmentObject private var session: SessionManager
     @StateObject private var dashboardViewModel = DashboardViewModel()
+    @StateObject private var scheduleViewModel = ScheduleViewModel()
     @State private var selectedDispatch: DispatchNotificationPayload?
 
     let title: String
@@ -318,6 +319,8 @@ private struct CommandWorkspaceView: View {
                     if !dashboardViewModel.activeDispatches.isEmpty {
                         activeDispatchSection
                     }
+
+                    staffingOverviewSection
 
                     LazyVGrid(
                         columns: [
@@ -337,14 +340,223 @@ private struct CommandWorkspaceView: View {
             }
             .refreshable {
                 dashboardViewModel.refresh(role: mappedCommandUserRole)
+                await scheduleViewModel.refresh()
             }
         }
         .task {
             dashboardViewModel.loadIfNeeded(role: mappedCommandUserRole)
+
+            if scheduleViewModel.entries.isEmpty {
+                await scheduleViewModel.load()
+            }
         }
         .sheet(item: $selectedDispatch) { dispatch in
             DispatchDetailView(dispatch: dispatch)
         }
+    }
+
+    private var staffingOverviewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Staffing Overview")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+
+                    Text(scheduleViewModel.date ?? "Today’s schedule")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                Spacer()
+
+                if scheduleVacancyCount > 0 {
+                    Text("\(scheduleVacancyCount) vacant")
+                        .font(.caption.bold())
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.orange.opacity(0.16))
+                        .clipShape(Capsule())
+                } else if !scheduleViewModel.entries.isEmpty {
+                    Text("Covered")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(AppTheme.gold.opacity(0.16))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if scheduleViewModel.isLoading && scheduleViewModel.entries.isEmpty {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+            } else if scheduleViewModel.entries.isEmpty {
+                commandInfoCard(
+                    title: "No staffing entries",
+                    message: scheduleViewModel.errorMessage ?? "No schedule entries were returned for today.",
+                    systemImage: "calendar.badge.exclamationmark"
+                )
+            } else {
+                HStack(spacing: 10) {
+                    commandMetricCard(
+                        title: "Assignments",
+                        value: "\(scheduleFilledCount)",
+                        systemImage: "person.crop.circle.fill"
+                    )
+
+                    commandMetricCard(
+                        title: "Vacancies",
+                        value: "\(scheduleVacancyCount)",
+                        systemImage: "person.crop.circle.badge.exclamationmark"
+                    )
+                }
+
+                VStack(spacing: 10) {
+                    ForEach(schedulePreviewEntries) { entry in
+                        commandScheduleRow(entry)
+                    }
+                }
+            }
+        }
+    }
+
+    private var schedulePreviewEntries: [APIClient.MobileScheduleEntry] {
+        Array(scheduleViewModel.entries.prefix(4))
+    }
+
+    private var scheduleFilledCount: Int {
+        scheduleViewModel.entries.reduce(0) { total, entry in
+            total + entry.staffingDetails.filter { !$0.isVacant }.count
+        }
+    }
+
+    private var scheduleVacancyCount: Int {
+        scheduleViewModel.entries.reduce(0) { total, entry in
+            total + entry.staffingDetails.filter { $0.isVacant }.count
+        }
+    }
+
+    private func commandScheduleRow(_ entry: APIClient.MobileScheduleEntry) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text(entry.timeRange)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(AppTheme.gold)
+                }
+
+                Spacer()
+
+                if let station = entry.station, !station.isEmpty {
+                    Text(station)
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.76))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.white.opacity(0.10))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if entry.staffing.isEmpty {
+                Text("No staffing listed")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.58))
+            } else {
+                ForEach(Array(entry.staffing.prefix(3).enumerated()), id: \.offset) { _, staff in
+                    HStack(spacing: 8) {
+                        Image(systemName: staff.lowercased().contains("vacant") ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(staff.lowercased().contains("vacant") ? .orange : AppTheme.gold)
+                            .frame(width: 16)
+
+                        Text(staff)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.78))
+                            .lineLimit(1)
+                    }
+                }
+
+                if entry.staffing.count > 3 {
+                    Text("+ \(entry.staffing.count - 3) more")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.52))
+                        .padding(.leading, 24)
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func commandMetricCard(
+        title: String,
+        value: String,
+        systemImage: String
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func commandInfoCard(
+        title: String,
+        message: String,
+        systemImage: String
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.64))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private var activeDispatchSection: some View {
