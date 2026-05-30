@@ -4,7 +4,9 @@ struct NotificationEngine {
 
     static func shouldNotify(
         payload: AppNotificationPayload,
-        preferences: NotificationPreferences
+        preferences: NotificationPreferences,
+        canUseScheduleBasedNotifications: Bool = false,
+        isCurrentlyWorking: Bool = false
     ) -> Bool {
 
         print("🧠 Evaluating notification")
@@ -21,7 +23,12 @@ struct NotificationEngine {
 
         switch payload.type {
         case .dispatch, .dispatchCritical:
-            return shouldNotifyDispatch(payload: payload, preferences: preferences)
+            return shouldNotifyDispatch(
+                payload: payload,
+                preferences: preferences,
+                canUseScheduleBasedNotifications: canUseScheduleBasedNotifications,
+                isCurrentlyWorking: isCurrentlyWorking
+            )
 
         case .departmentMessage:
             guard preferences.departmentMessagesEnabled else {
@@ -66,7 +73,9 @@ struct NotificationEngine {
 
     private static func shouldNotifyDispatch(
         payload: AppNotificationPayload,
-        preferences: NotificationPreferences
+        preferences: NotificationPreferences,
+        canUseScheduleBasedNotifications: Bool,
+        isCurrentlyWorking: Bool
     ) -> Bool {
 
         guard preferences.dispatchAlertsEnabled else {
@@ -94,14 +103,38 @@ struct NotificationEngine {
             }
         }
 
+        let scheduleMode = payload.type == .dispatchCritical
+            ? preferences.criticalAlertScheduleMode
+            : preferences.normalAlertScheduleMode
+
+        switch scheduleMode {
+        case .always:
+            break
+
+        case .never:
+            print("🔕 Suppressed: dispatch schedule mode is off")
+            return false
+
+        case .onlyWhenWorking:
+            guard canUseScheduleBasedNotifications else {
+                print("⚠️ Only while working selected, but this user is not eligible for schedule-based notifications. Falling back to always.")
+                break
+            }
+
+            guard isCurrentlyWorking else {
+                print("🔕 Suppressed: user is not currently listed on schedule")
+                return false
+            }
+        }
+
         if preferences.workingOnly {
-            let isWorking =
+            let isWorkingFire =
                 payload.isWorkingFire ||
                 incomingType.contains("WORKING") ||
                 incomingType.contains("STRUCTURE FIRE") ||
                 incomingType.contains("BUILDING FIRE")
 
-            if !isWorking {
+            if !isWorkingFire {
                 print("🔕 Suppressed: working fires only enabled")
                 print("   incoming:", incomingType)
                 return false

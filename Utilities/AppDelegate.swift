@@ -62,28 +62,33 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
 
-        let preferences = NotificationPreferencesViewModel().preferences
+        Task {
+            let preferences = NotificationPreferencesViewModel().preferences
+            let scheduleContext = await makeScheduleNotificationContext()
 
-        guard NotificationEngine.shouldNotify(
-            payload: payload,
-            preferences: preferences
-        ) else {
-            print("🔕 Notification suppressed by preferences:", payload.id)
+            guard NotificationEngine.shouldNotify(
+                payload: payload,
+                preferences: preferences,
+                canUseScheduleBasedNotifications: scheduleContext.canUseScheduleBasedNotifications,
+                isCurrentlyWorking: scheduleContext.isCurrentlyWorking
+            ) else {
+                print("🔕 Notification suppressed by preferences:", payload.id)
 
-            completionHandler([])
-            return
+                completionHandler([])
+                return
+            }
+
+            print("✅ Notification allowed by preferences:", payload.id)
+
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .didReceiveDispatchNotification,
+                    object: payload
+                )
+            }
+
+            completionHandler([.banner, .sound, .badge])
         }
-
-        print("✅ Notification allowed by preferences:", payload.id)
-
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .didReceiveDispatchNotification,
-                object: payload
-            )
-        }
-
-        completionHandler([.banner, .sound, .badge])
     }
 
     // MARK: - Notification Tap Handling
@@ -104,27 +109,104 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
 
-        let preferences = NotificationPreferencesViewModel().preferences
+        Task {
+            let preferences = NotificationPreferencesViewModel().preferences
+            let scheduleContext = await makeScheduleNotificationContext()
 
-        guard NotificationEngine.shouldNotify(
-            payload: payload,
-            preferences: preferences
-        ) else {
-            print("🔕 Tapped notification ignored by preferences:", payload.id)
+            guard NotificationEngine.shouldNotify(
+                payload: payload,
+                preferences: preferences,
+                canUseScheduleBasedNotifications: scheduleContext.canUseScheduleBasedNotifications,
+                isCurrentlyWorking: scheduleContext.isCurrentlyWorking
+            ) else {
+                print("🔕 Tapped notification ignored by preferences:", payload.id)
+
+                completionHandler()
+                return
+            }
+
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .didReceiveDispatchNotification,
+                    object: payload
+                )
+
+                NavigationRouter.shared.route(from: payload)
+            }
 
             completionHandler()
-            return
+        }
+    }
+
+    private func makeScheduleNotificationContext() async -> (canUseScheduleBasedNotifications: Bool, isCurrentlyWorking: Bool) {
+        guard let currentUser = await MainActor.run(body: { SessionManager.shared.currentUser }) else {
+            return (false, false)
         }
 
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(
-                name: .didReceiveDispatchNotification,
-                object: payload
+        let role = currentUser.role.uppercased()
+
+        let canUseScheduleBasedNotifications =
+            role == "CHIEF" ||
+            role == "OFFICER_CAREER" ||
+            role == "MEMBER_CAREER" ||
+            currentUser.isReliefDriver
+
+        guard canUseScheduleBasedNotifications else {
+            return (false, false)
+        }
+
+        do {
+            let response = try await APIClient.shared.fetchMobileSchedule()
+            let isWorking = isUserListedOnSchedule(
+                currentUser: currentUser,
+                entries: response.entries
             )
 
-            NavigationRouter.shared.route(from: payload)
+            print("🗓️ Schedule notification context:", "eligible=\(canUseScheduleBasedNotifications)", "working=\(isWorking)")
+
+            return (canUseScheduleBasedNotifications, isWorking)
+        } catch {
+            print("⚠️ Failed to fetch schedule for notification context:", error.localizedDescription)
+            return (canUseScheduleBasedNotifications, false)
+        }
+    }
+
+    private func isUserListedOnSchedule(
+        currentUser: APIClient.Member,
+        entries: [APIClient.MobileScheduleEntry]
+    ) -> Bool {
+        let userName = normalizedScheduleName(currentUser.name)
+
+        guard !userName.isEmpty else {
+            return false
         }
 
-        completionHandler()
+        for entry in entries {
+            for detail in entry.staffingDetails {
+                guard !detail.isVacant,
+                      let name = detail.name else {
+                    continue
+                }
+
+                let scheduleName = normalizedScheduleName(name)
+
+                if scheduleName == userName ||
+                    scheduleName.contains(userName) ||
+                    userName.contains(scheduleName) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    private func normalizedScheduleName(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: ".", with: "")
+            .replacingOccurrences(of: ",", with: "")
+            .replacingOccurrences(of: "  ", with: " ")
     }
 }
