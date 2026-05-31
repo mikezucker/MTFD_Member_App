@@ -303,6 +303,7 @@ private struct CommandWorkspaceView: View {
     @EnvironmentObject private var session: SessionManager
     @StateObject private var dashboardViewModel = DashboardViewModel()
     @StateObject private var scheduleViewModel = ScheduleViewModel()
+    @StateObject private var messageViewModel = MessageCenterViewModel()
     @State private var selectedDispatch: DispatchNotificationPayload?
 
     let title: String
@@ -324,6 +325,8 @@ private struct CommandWorkspaceView: View {
 
                     trainingOversightSection
 
+                    messagesOverviewSection
+
                     LazyVGrid(
                         columns: [
                             GridItem(.flexible(), spacing: 14),
@@ -343,6 +346,7 @@ private struct CommandWorkspaceView: View {
             .refreshable {
                 dashboardViewModel.refresh(role: mappedCommandUserRole)
                 await scheduleViewModel.refresh()
+                await messageViewModel.refresh()
             }
         }
         .task {
@@ -351,10 +355,157 @@ private struct CommandWorkspaceView: View {
             if scheduleViewModel.entries.isEmpty {
                 await scheduleViewModel.load()
             }
+
+            await messageViewModel.loadMessagesIfNeeded()
         }
         .sheet(item: $selectedDispatch) { dispatch in
             DispatchDetailView(dispatch: dispatch)
         }
+    }
+
+    private var messagesOverviewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Messages Overview")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+
+                    Text("Department, station, training, document, and operational updates")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                Spacer()
+
+                if messageViewModel.unreadCount > 0 {
+                    Text("\(messageViewModel.unreadCount) unread")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.red.opacity(0.82))
+                        .clipShape(Capsule())
+                } else if !messageViewModel.messages.isEmpty {
+                    Text("All read")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(AppTheme.gold.opacity(0.16))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if messageViewModel.isLoading && messageViewModel.messages.isEmpty {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+            } else if commandPreviewMessages.isEmpty {
+                commandInfoCard(
+                    title: "No messages",
+                    message: messageViewModel.errorMessage ?? "Department, station, and training messages will appear here.",
+                    systemImage: "tray"
+                )
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(commandPreviewMessages) { message in
+                        commandMessageRow(message)
+                    }
+                }
+            }
+        }
+    }
+
+    private var commandPreviewMessages: [MobileMessage] {
+        Array(
+            messageViewModel.messages
+                .filter { message in
+                    message.type != "DISPATCH" &&
+                    message.type != "DISPATCH_UPDATE" &&
+                    message.dispatchId == nil
+                }
+                .prefix(3)
+        )
+    }
+
+    private func commandMessageRow(_ message: MobileMessage) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: messageIcon(for: message))
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(message.isRead ? AppTheme.gold : .red)
+                .frame(width: 30, height: 30)
+                .background((message.isRead ? AppTheme.gold : Color.red).opacity(0.16))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 6) {
+                    Text(message.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+
+                    if !message.isRead {
+                        Text("NEW")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red.opacity(0.85))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                if let body = message.body, !body.isEmpty {
+                    Text(body)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(2)
+                }
+
+                Text(messageTypeLabel(for: message))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.50))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(message.isRead ? Color.white.opacity(0.10) : Color.red.opacity(0.42), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func messageIcon(for message: MobileMessage) -> String {
+        let type = message.type.uppercased()
+
+        if type.contains("TRAINING") {
+            return "checklist.checked"
+        }
+
+        if type.contains("DOCUMENT") || type.contains("SOP") {
+            return "doc.text.fill"
+        }
+
+        if type.contains("STATION") {
+            return "building.2.fill"
+        }
+
+        if type.contains("ANNOUNCEMENT") || type.contains("DEPARTMENT") {
+            return "megaphone.fill"
+        }
+
+        return "text.bubble.fill"
+    }
+
+    private func messageTypeLabel(for message: MobileMessage) -> String {
+        message.type
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
     }
 
     private var trainingOversightSection: some View {
