@@ -236,7 +236,8 @@ private struct ChiefCommandView: View {
                 CommandTileData(
                     title: "Training Compliance",
                     subtitle: "Track assigned training, overdue members, JPR progress, and evaluator sign-offs.",
-                    systemImage: "checklist.checked"
+                    systemImage: "checklist.checked",
+                    destination: .training
                 ),
                 CommandTileData(
                     title: "Department Messages",
@@ -279,7 +280,8 @@ private struct LieutenantCommandView: View {
                 CommandTileData(
                     title: "Training Progress",
                     subtitle: "Track assigned member training, JPR completion, skill checkoffs, and sign-offs.",
-                    systemImage: "checkmark.seal.fill"
+                    systemImage: "checkmark.seal.fill",
+                    destination: .training
                 ),
                 CommandTileData(
                     title: "Station Messages",
@@ -383,6 +385,12 @@ private struct CommandWorkspaceView: View {
                     title: mappedCommandUserRole == .chief ? "Department Staffing" : "Station Staffing",
                     date: scheduleViewModel.date,
                     entries: scheduleViewModel.entries
+                )
+
+            case .training:
+                CommandTrainingDetailView(
+                    title: mappedCommandUserRole == .chief ? "Department Training" : "Station Training",
+                    items: dashboardViewModel.state.assignedTrainingPreview
                 )
             }
         }
@@ -988,11 +996,14 @@ private struct CommandWorkspaceView: View {
 
 private enum CommandDestination: Identifiable {
     case staffing
+    case training
 
     var id: String {
         switch self {
         case .staffing:
             return "staffing"
+        case .training:
+            return "training"
         }
     }
 }
@@ -1197,3 +1208,270 @@ private struct CommandStaffingDetailView: View {
     }
 }
 
+
+private struct CommandTrainingDetailView: View {
+    let title: String
+    let items: [DashboardTrainingPreviewItem]
+
+    private var overdueCount: Int {
+        items.filter { $0.isOverdue }.count
+    }
+
+    private var completedCount: Int {
+        items.filter { $0.progressPercent >= 100 }.count
+    }
+
+    private var averageProgress: Int {
+        guard !items.isEmpty else { return 0 }
+
+        let total = items.reduce(0) { $0 + $1.progressPercent }
+        return total / items.count
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.navy
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
+
+                        HStack(spacing: 10) {
+                            metricCard(
+                                title: "Assigned",
+                                value: "\(items.count)",
+                                systemImage: "checklist.checked"
+                            )
+
+                            metricCard(
+                                title: "Overdue",
+                                value: "\(overdueCount)",
+                                systemImage: "exclamationmark.triangle.fill",
+                                isWarning: overdueCount > 0
+                            )
+                        }
+
+                        HStack(spacing: 10) {
+                            metricCard(
+                                title: "Completed",
+                                value: "\(completedCount)",
+                                systemImage: "checkmark.seal.fill"
+                            )
+
+                            metricCard(
+                                title: "Avg. progress",
+                                value: "\(averageProgress)%",
+                                systemImage: "chart.line.uptrend.xyaxis"
+                            )
+                        }
+
+                        jprReadinessCard
+
+                        if items.isEmpty {
+                            emptyCard
+                        } else {
+                            VStack(spacing: 12) {
+                                ForEach(items) { item in
+                                    trainingDetailCard(item)
+                                }
+                            }
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(AppTheme.navy, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text("Training assignments, progress, overdue items, and JPR readiness")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.68))
+
+            Text("Evaluator sign-offs and detailed JPR workflows will plug into this view as the training module expands.")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var jprReadinessCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "signature")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("JPR / Evaluator Readiness")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Text("Pending JPR reviews, skill checkoffs, and evaluator sign-offs will appear here when the training workflow is fully wired.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(AppTheme.gold.opacity(0.22), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var emptyCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("No active assigned training")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Text("Assigned training, overdue items, and JPR reviews will appear here.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func metricCard(
+        title: String,
+        value: String,
+        systemImage: String,
+        isWarning: Bool = false
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(isWarning ? .red : AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func trainingDetailCard(_ item: DashboardTrainingPreviewItem) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: trainingStatusIcon(for: item))
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(trainingStatusColor(for: item))
+                    .frame(width: 30, height: 30)
+                    .background(trainingStatusColor(for: item).opacity(0.16))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text(item.title)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+
+                        if item.isOverdue {
+                            Text("OVERDUE")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Color.red.opacity(0.85))
+                                .clipShape(Capsule())
+                        }
+                    }
+
+                    Text(item.progressText)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.66))
+                }
+
+                Spacer()
+
+                Text("\(item.progressPercent)%")
+                    .font(.caption.bold())
+                    .foregroundStyle(trainingStatusColor(for: item))
+            }
+
+            ProgressView(value: trainingProgress(for: item))
+                .tint(trainingStatusColor(for: item))
+        }
+        .padding(16)
+        .background(.white.opacity(0.09))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(item.isOverdue ? Color.red.opacity(0.45) : Color.white.opacity(0.10), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func trainingProgress(for item: DashboardTrainingPreviewItem) -> Double {
+        min(max(Double(item.progressPercent) / 100.0, 0), 1)
+    }
+
+    private func trainingStatusColor(for item: DashboardTrainingPreviewItem) -> Color {
+        if item.isOverdue {
+            return .red
+        }
+
+        if item.progressPercent >= 80 {
+            return .green
+        }
+
+        if item.progressPercent >= 50 {
+            return .orange
+        }
+
+        return .red
+    }
+
+    private func trainingStatusIcon(for item: DashboardTrainingPreviewItem) -> String {
+        if item.isOverdue {
+            return "exclamationmark.triangle.fill"
+        }
+
+        if item.progressPercent >= 100 {
+            return "checkmark.seal.fill"
+        }
+
+        if item.progressPercent >= 50 {
+            return "clock.badge.checkmark.fill"
+        }
+
+        return "exclamationmark.triangle.fill"
+    }
+}
