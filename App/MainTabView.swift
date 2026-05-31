@@ -230,7 +230,8 @@ private struct ChiefCommandView: View {
                 CommandTileData(
                     title: "Staffing Overview",
                     subtitle: "Review today’s staffing, vacancies, relief driver coverage, and department schedule status.",
-                    systemImage: "person.3.sequence.fill"
+                    systemImage: "person.3.sequence.fill",
+                    destination: .staffing
                 ),
                 CommandTileData(
                     title: "Training Compliance",
@@ -272,7 +273,8 @@ private struct LieutenantCommandView: View {
                 CommandTileData(
                     title: "My Staffing",
                     subtitle: "Review station/company schedule, vacancies, assigned members, and relief driver coverage.",
-                    systemImage: "person.2.badge.gearshape.fill"
+                    systemImage: "person.2.badge.gearshape.fill",
+                    destination: .staffing
                 ),
                 CommandTileData(
                     title: "Training Progress",
@@ -305,11 +307,24 @@ private struct CommandWorkspaceView: View {
     @StateObject private var scheduleViewModel = ScheduleViewModel()
     @StateObject private var messageViewModel = MessageCenterViewModel()
     @State private var selectedDispatch: DispatchNotificationPayload?
+    @State private var selectedCommandDestination: CommandDestination?
 
-    let title: String
-    let subtitle: String
-    let description: String
-    let tiles: [CommandTileData]
+    private let title: String
+    private let subtitle: String
+    private let description: String
+    private let tiles: [CommandTileData]
+
+    init(
+        title: String,
+        subtitle: String,
+        description: String,
+        tiles: [CommandTileData]
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.description = description
+        self.tiles = tiles
+    }
 
     var body: some View {
         AppScreen(title: "Command") {
@@ -360,6 +375,16 @@ private struct CommandWorkspaceView: View {
         }
         .sheet(item: $selectedDispatch) { dispatch in
             DispatchDetailView(dispatch: dispatch)
+        }
+        .sheet(item: $selectedCommandDestination) { destination in
+            switch destination {
+            case .staffing:
+                CommandStaffingDetailView(
+                    title: mappedCommandUserRole == .chief ? "Department Staffing" : "Station Staffing",
+                    date: scheduleViewModel.date,
+                    entries: scheduleViewModel.entries
+                )
+            }
         }
     }
 
@@ -910,36 +935,65 @@ private struct CommandWorkspaceView: View {
     }
 
     private func commandTile(_ tile: CommandTileData) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: tile.systemImage)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(AppTheme.gold)
-                .frame(width: 42, height: 42)
-                .background(Color.white.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+        Button {
+            guard let destination = tile.destination else { return }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(tile.title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
+            selectedCommandDestination = destination
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    Image(systemName: tile.systemImage)
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(AppTheme.gold)
+                        .frame(width: 42, height: 42)
+                        .background(Color.white.opacity(0.10))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                Text(tile.subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.66))
-                    .lineLimit(4)
-                    .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+
+                    if tile.destination != nil {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white.opacity(0.42))
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(tile.title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text(tile.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
             }
-
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
+            .padding(16)
+            .background(Color.white.opacity(tile.destination == nil ? 0.07 : 0.09))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.white.opacity(tile.destination == nil ? 0.08 : 0.14), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 18))
         }
-        .frame(maxWidth: .infinity, minHeight: 172, alignment: .topLeading)
-        .padding(16)
-        .background(Color.white.opacity(0.09))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .buttonStyle(.plain)
+        .disabled(tile.destination == nil)
+    }
+}
+
+private enum CommandDestination: Identifiable {
+    case staffing
+
+    var id: String {
+        switch self {
+        case .staffing:
+            return "staffing"
+        }
     }
 }
 
@@ -948,5 +1002,198 @@ private struct CommandTileData: Identifiable {
     let title: String
     let subtitle: String
     let systemImage: String
+    var destination: CommandDestination? = nil
+}
+
+private struct CommandStaffingDetailView: View {
+    let title: String
+    let date: String?
+    let entries: [APIClient.MobileScheduleEntry]
+
+    private var filledCount: Int {
+        entries.reduce(0) { total, entry in
+            total + entry.staffingDetails.filter { !$0.isVacant }.count
+        }
+    }
+
+    private var vacancyCount: Int {
+        entries.reduce(0) { total, entry in
+            total + entry.staffingDetails.filter { $0.isVacant }.count
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.navy
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
+
+                        HStack(spacing: 10) {
+                            metricCard(
+                                title: "Filled",
+                                value: "\(filledCount)",
+                                systemImage: "person.crop.circle.fill"
+                            )
+
+                            metricCard(
+                                title: "Vacant",
+                                value: "\(vacancyCount)",
+                                systemImage: "person.crop.circle.badge.exclamationmark",
+                                isWarning: vacancyCount > 0
+                            )
+                        }
+
+                        if entries.isEmpty {
+                            emptyCard
+                        } else {
+                            VStack(spacing: 12) {
+                                ForEach(entries) { entry in
+                                    staffingDetailCard(entry)
+                                }
+                            }
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(AppTheme.navy, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text(date ?? "Today’s schedule")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.68))
+
+            Text("Review staffing assignments, vacancies, and coverage for the current schedule.")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var emptyCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("No staffing entries")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Text("No schedule entries were returned for today.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func metricCard(
+        title: String,
+        value: String,
+        systemImage: String,
+        isWarning: Bool = false
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(isWarning ? .orange : AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func staffingDetailCard(_ entry: APIClient.MobileScheduleEntry) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(entry.title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text(entry.timeRange)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(AppTheme.gold)
+                }
+
+                Spacer()
+
+                if let station = entry.station, !station.isEmpty {
+                    Text(station)
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.78))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(.white.opacity(0.10))
+                        .clipShape(Capsule())
+                }
+            }
+
+            if entry.staffing.isEmpty {
+                Text("No staffing listed")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.58))
+            } else {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(Array(entry.staffing.enumerated()), id: \.offset) { _, staff in
+                        HStack(alignment: .top, spacing: 10) {
+                            let isVacant = staff.lowercased().contains("vacant")
+
+                            Image(systemName: isVacant ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(isVacant ? .orange : AppTheme.gold)
+                                .frame(width: 22)
+
+                            Text(staff)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.86))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(.white.opacity(0.09))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
 }
 
