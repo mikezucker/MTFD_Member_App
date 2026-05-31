@@ -242,7 +242,8 @@ private struct ChiefCommandView: View {
                 CommandTileData(
                     title: "Department Messages",
                     subtitle: "Prepare department-wide messages, announcements, and operational updates.",
-                    systemImage: "megaphone.fill"
+                    systemImage: "megaphone.fill",
+                    destination: .messages
                 ),
                 CommandTileData(
                     title: "Documents / SOPs",
@@ -286,7 +287,8 @@ private struct LieutenantCommandView: View {
                 CommandTileData(
                     title: "Station Messages",
                     subtitle: "Prepare station or company-specific messages and updates.",
-                    systemImage: "text.bubble.fill"
+                    systemImage: "text.bubble.fill",
+                    destination: .messages
                 ),
                 CommandTileData(
                     title: "Documents",
@@ -392,6 +394,13 @@ private struct CommandWorkspaceView: View {
                     title: mappedCommandUserRole == .chief ? "Department Training" : "Station Training",
                     items: dashboardViewModel.state.assignedTrainingPreview
                 )
+
+            case .messages:
+                CommandMessagesDetailView(
+                    title: mappedCommandUserRole == .chief ? "Department Messages" : "Station Messages",
+                    messages: commandPreviewAllMessages,
+                    unreadCount: messageViewModel.unreadCount
+                )
             }
         }
     }
@@ -452,15 +461,15 @@ private struct CommandWorkspaceView: View {
     }
 
     private var commandPreviewMessages: [MobileMessage] {
-        Array(
-            messageViewModel.messages
-                .filter { message in
-                    message.type != "DISPATCH" &&
-                    message.type != "DISPATCH_UPDATE" &&
-                    message.dispatchId == nil
-                }
-                .prefix(3)
-        )
+        Array(commandPreviewAllMessages.prefix(3))
+    }
+
+    private var commandPreviewAllMessages: [MobileMessage] {
+        messageViewModel.messages.filter { message in
+            message.type != "DISPATCH" &&
+            message.type != "DISPATCH_UPDATE" &&
+            message.dispatchId == nil
+        }
     }
 
     private func commandMessageRow(_ message: MobileMessage) -> some View {
@@ -997,6 +1006,7 @@ private struct CommandWorkspaceView: View {
 private enum CommandDestination: Identifiable {
     case staffing
     case training
+    case messages
 
     var id: String {
         switch self {
@@ -1004,6 +1014,8 @@ private enum CommandDestination: Identifiable {
             return "staffing"
         case .training:
             return "training"
+        case .messages:
+            return "messages"
         }
     }
 }
@@ -1473,5 +1485,472 @@ private struct CommandTrainingDetailView: View {
         }
 
         return "exclamationmark.triangle.fill"
+    }
+}
+
+
+private struct CommandMessagesDetailView: View {
+    let title: String
+    let messages: [MobileMessage]
+    let unreadCount: Int
+
+    @State private var showCreateMessage = false
+    @State private var createdMessage: MobileMessage?
+
+    private var displayedMessages: [MobileMessage] {
+        if let createdMessage,
+           !messages.contains(where: { $0.id == createdMessage.id }) {
+            return [createdMessage] + messages
+        }
+
+        return messages
+    }
+
+    private var readCount: Int {
+        displayedMessages.filter { $0.isRead }.count
+    }
+
+    private var unreadVisibleCount: Int {
+        displayedMessages.filter { !$0.isRead }.count
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.navy
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        header
+
+                        HStack(spacing: 10) {
+                            metricCard(
+                                title: "Messages",
+                                value: "\(displayedMessages.count)",
+                                systemImage: "text.bubble.fill"
+                            )
+
+                            metricCard(
+                                title: "Unread",
+                                value: "\(unreadVisibleCount)",
+                                systemImage: "bell.badge.fill",
+                                isWarning: unreadVisibleCount > 0
+                            )
+                        }
+
+                        HStack(spacing: 10) {
+                            metricCard(
+                                title: "Read",
+                                value: "\(readCount)",
+                                systemImage: "checkmark.circle.fill"
+                            )
+
+                            metricCard(
+                                title: "App unread",
+                                value: "\(unreadCount)",
+                                systemImage: "tray.full.fill",
+                                isWarning: unreadCount > 0
+                            )
+                        }
+
+                        futureActionsCard
+
+                        if displayedMessages.isEmpty {
+                            emptyCard
+                        } else {
+                            VStack(spacing: 12) {
+                                ForEach(displayedMessages) { message in
+                                    messageDetailCard(message)
+                                }
+                            }
+                        }
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showCreateMessage = true
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .accessibilityLabel("Create message")
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(AppTheme.navy, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .sheet(isPresented: $showCreateMessage) {
+                CommandCreateMessageView { message in
+                    createdMessage = message
+                    showCreateMessage = false
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.white)
+
+            Text("Message center overview")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white.opacity(0.68))
+
+            Text("Create and review command messages. Messages are saved through the shared backend and will appear in the app and website message center.")
+                .font(.footnote)
+                .foregroundStyle(.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var futureActionsCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "megaphone.fill")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Command messaging")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Text("Chiefs and officers can create messages here. The backend enforces audience permissions.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(AppTheme.gold.opacity(0.22), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var emptyCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "tray")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("No messages")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Text("Department, station, training, uniform, and document updates will appear here.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func metricCard(
+        title: String,
+        value: String,
+        systemImage: String,
+        isWarning: Bool = false
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(isWarning ? .red : AppTheme.gold)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(value)
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.62))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func messageDetailCard(_ message: MobileMessage) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: messageIcon(for: message))
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(message.isRead ? AppTheme.gold : .red)
+                .frame(width: 30, height: 30)
+                .background((message.isRead ? AppTheme.gold : Color.red).opacity(0.16))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text(message.title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+
+                    if !message.isRead {
+                        Text("NEW")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.red.opacity(0.85))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                if let body = message.body, !body.isEmpty {
+                    Text(body)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(3)
+                }
+
+                Text(messageTypeLabel(for: message))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.50))
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(.white.opacity(0.09))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(message.isRead ? Color.white.opacity(0.10) : Color.red.opacity(0.42), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func messageIcon(for message: MobileMessage) -> String {
+        let type = message.type.uppercased()
+
+        if type.contains("TRAINING") {
+            return "checklist.checked"
+        }
+
+        if type.contains("DOCUMENT") || type.contains("SOP") {
+            return "doc.text.fill"
+        }
+
+        if type.contains("STATION") {
+            return "building.2.fill"
+        }
+
+        if type.contains("ANNOUNCEMENT") || type.contains("DEPARTMENT") {
+            return "megaphone.fill"
+        }
+
+        return "text.bubble.fill"
+    }
+
+    private func messageTypeLabel(for message: MobileMessage) -> String {
+        message.type
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+    }
+}
+
+private struct CommandCreateMessageView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let onCreated: (MobileMessage) -> Void
+
+    @State private var title = ""
+    @State private var bodyText = ""
+    @State private var audience = "OFFICERS"
+    @State private var priority = "NORMAL"
+    @State private var isSending = false
+    @State private var errorMessage: String?
+
+    private let audiences = [
+        ("OFFICERS", "Officers"),
+        ("ALL_MEMBERS", "All Members"),
+        ("CHIEFS", "Chiefs")
+    ]
+
+    private let priorities = [
+        ("NORMAL", "Normal"),
+        ("HIGH", "High"),
+        ("CRITICAL", "Critical")
+    ]
+
+    private var messageType: String {
+        audience == "ALL_MEMBERS" ? "ANNOUNCEMENT" : "OFFICER_NOTE"
+    }
+
+    private var canSend: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                AppTheme.navy
+                    .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Create Command Message")
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundStyle(.white)
+
+                            Text("Send a message through the shared MTFD message center. The backend will enforce role permissions.")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.64))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Title")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white.opacity(0.72))
+
+                            TextField("Message title", text: $title)
+                                .textInputAutocapitalization(.sentences)
+                                .padding(12)
+                                .background(.white.opacity(0.10))
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Message")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white.opacity(0.72))
+
+                            TextEditor(text: $bodyText)
+                                .frame(minHeight: 140)
+                                .scrollContentBackground(.hidden)
+                                .padding(8)
+                                .background(.white.opacity(0.10))
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Audience")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white.opacity(0.72))
+
+                            Picker("Audience", selection: $audience) {
+                                ForEach(audiences, id: \.0) { value, label in
+                                    Text(label).tag(value)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Priority")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white.opacity(0.72))
+
+                            Picker("Priority", selection: $priority) {
+                                ForEach(priorities, id: \.0) { value, label in
+                                    Text(label).tag(value)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                        }
+
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.red)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.red.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+
+                        Button {
+                            Task {
+                                await sendMessage()
+                            }
+                        } label: {
+                            HStack {
+                                if isSending {
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+
+                                Text(isSending ? "Sending..." : "Send Message")
+                                    .font(.headline.weight(.semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(canSend ? AppTheme.gold : Color.white.opacity(0.16))
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        }
+                        .disabled(!canSend)
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationTitle("New Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbarBackground(AppTheme.navy, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+        }
+    }
+
+    private func sendMessage() async {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = bodyText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedTitle.isEmpty else {
+            errorMessage = "Title is required."
+            return
+        }
+
+        isSending = true
+        errorMessage = nil
+
+        do {
+            let response = try await APIClient.shared.createCommandMessage(
+                title: trimmedTitle,
+                body: trimmedBody.isEmpty ? nil : trimmedBody,
+                audience: audience,
+                priority: priority,
+                type: messageType,
+                actionType: "NONE"
+            )
+
+            onCreated(response.message)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isSending = false
     }
 }

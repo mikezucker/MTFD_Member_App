@@ -449,6 +449,42 @@ final class APIClient {
         }
     }
 
+
+    func createCommandMessage(
+        title: String,
+        body: String?,
+        audience: String,
+        priority: String = "NORMAL",
+        type: String,
+        actionType: String = "NONE"
+    ) async throws -> CreateCommandMessageResponse {
+        let payload = CreateCommandMessageRequest(
+            title: title,
+            body: body,
+            audience: audience,
+            priority: priority,
+            type: type,
+            actionType: actionType
+        )
+
+        let request = try makeRequest(
+            path: "/api/mobile/command/messages",
+            method: "POST",
+            body: try encode(payload),
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(CreateCommandMessageResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     // MARK: - Dispatch
 
     func fetchDispatchStats() async throws -> DispatchStatsResponse {
@@ -573,6 +609,15 @@ extension APIClient {
         let email: String
         let phone: String?
         let confirmedFirstDueSync: Bool
+    }
+
+    struct CreateCommandMessageRequest: Encodable {
+        let title: String
+        let body: String?
+        let audience: String
+        let priority: String
+        let type: String
+        let actionType: String
     }
 }
 

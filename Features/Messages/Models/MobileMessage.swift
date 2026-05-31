@@ -12,6 +12,12 @@ struct MarkMessageReadResponse: Decodable {
     let message: MobileMessage
 }
 
+struct CreateCommandMessageResponse: Decodable {
+    let success: Bool
+    let message: MobileMessage
+    let error: String?
+}
+
 struct MobileMessage: Identifiable, Decodable, Equatable {
     let id: String
     let title: String
