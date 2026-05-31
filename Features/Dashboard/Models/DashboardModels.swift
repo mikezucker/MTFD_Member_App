@@ -66,6 +66,7 @@ struct DashboardState {
     let quickActions: [DashboardQuickAction]
     let progressItems: [DashboardProgressItem]
     let assignedTrainingPreview: [DashboardTrainingPreviewItem]
+    let pendingDocumentSignatures: Int
 
     // Legacy headline values, keep for compatibility
     var stationCallTotal: Int? = nil
@@ -91,6 +92,7 @@ struct DashboardState {
             quickActions: [],
             progressItems: [],
             assignedTrainingPreview: [],
+            pendingDocumentSignatures: 0,
             stationCallTotal: nil,
             departmentCallTotal: nil,
             dashboardDepartment: nil,
