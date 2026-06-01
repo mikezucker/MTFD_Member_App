@@ -54,6 +54,13 @@ struct RecentDepartmentCall: Identifiable, Hashable {
     let timestamp: String
 }
 
+struct DashboardApparatusWorkOrder: Identifiable, Hashable {
+    let id: String
+    let apparatusName: String
+    let title: String
+    let status: String?
+}
+
 struct DashboardState {
     let greeting: String
     let role: UserRole
@@ -78,6 +85,8 @@ struct DashboardState {
     var lastUpdated: String? = nil
 
     var recentDepartmentCalls: [RecentDepartmentCall] = []
+    var apparatusWorkOrders: [DashboardApparatusWorkOrder] = []
+    var apparatusWorkOrdersMessage: String? = nil
     var isLoading: Bool = false
     var errorMessage: String? = nil
 
@@ -99,6 +108,8 @@ struct DashboardState {
             dashboardStation: nil,
             lastUpdated: nil,
             recentDepartmentCalls: [],
+            apparatusWorkOrders: [],
+            apparatusWorkOrdersMessage: nil,
             isLoading: false,
             errorMessage: nil
         )

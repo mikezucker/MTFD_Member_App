@@ -79,14 +79,20 @@ final class DashboardViewModel: ObservableObject {
             dashboardStation: state.dashboardStation,
             lastUpdated: state.lastUpdated,
             recentDepartmentCalls: state.recentDepartmentCalls,
+            apparatusWorkOrders: state.apparatusWorkOrders,
+            apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
             isLoading: true,
             errorMessage: nil
         )
 
         do {
-            let dashboard = try await APIClient.shared.fetchDashboard()
+            async let dashboardResponse = APIClient.shared.fetchDashboard()
+            async let dispatchHistoryResponse = APIClient.shared.fetchDispatchHistory(window: "24h")
 
-            activeDispatches = dashboard.activeDispatches ?? []
+            let dashboard = try await dashboardResponse
+            let dispatchHistory = try await dispatchHistoryResponse
+
+            activeDispatches = dashboard.activeDispatches ?? dispatchHistory.activeDispatches
 
             let departmentYtd = dashboard.department?.totalYtd
             let stationYtd = dashboard.station?.totalYtd
@@ -107,7 +113,9 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: dashboard.department,
                 dashboardStation: dashboard.station,
                 lastUpdated: dashboard.lastUpdated,
-                recentDepartmentCalls: [],
+                recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
+                apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
+                apparatusWorkOrdersMessage: dashboard.apparatusWorkOrdersMessage,
                 isLoading: false,
                 errorMessage: nil
             )
@@ -134,6 +142,8 @@ final class DashboardViewModel: ObservableObject {
                 dashboardStation: nil,
                 lastUpdated: nil,
                 recentDepartmentCalls: [],
+                apparatusWorkOrders: [],
+                apparatusWorkOrdersMessage: nil,
                 isLoading: false,
                 errorMessage: error.localizedDescription
             )
@@ -181,6 +191,53 @@ final class DashboardViewModel: ObservableObject {
                 destination: normalized.contains("training")
                     ? .trainingAssigned
                     : .messageCenter
+            )
+        }
+    }
+
+    private func mapApparatusWorkOrders(
+        from workOrders: [APIClient.ApparatusWorkOrder]
+    ) -> [DashboardApparatusWorkOrder] {
+        workOrders.prefix(3).map { workOrder in
+            DashboardApparatusWorkOrder(
+                id: workOrder.id,
+                apparatusName: workOrder.apparatusName,
+                title: workOrder.title,
+                status: workOrder.status
+            )
+        }
+    }
+
+    private func mapRecentCalls(
+        from dispatches: [APIClient.DispatchHistoryItem]
+    ) -> [RecentDepartmentCall] {
+        dispatches.prefix(3).map { dispatch in
+            let location = [
+                dispatch.placeName,
+                dispatch.address,
+                dispatch.city
+            ]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .first ?? "Location unavailable"
+
+            let timestamp: String
+            if let dispatchedAt = dispatch.dispatchedAt {
+                timestamp = dispatchedAt.formatted(date: .abbreviated, time: .shortened)
+            } else if let lastActivityAt = dispatch.lastActivityAt {
+                timestamp = lastActivityAt.formatted(date: .abbreviated, time: .shortened)
+            } else {
+                timestamp = "Time unavailable"
+            }
+
+            return RecentDepartmentCall(
+                id: dispatch.id,
+                incidentNumber: dispatch.stableId,
+                title: dispatch.callType,
+                address: location,
+                timestamp: timestamp
             )
         }
     }

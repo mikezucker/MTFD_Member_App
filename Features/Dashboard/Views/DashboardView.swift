@@ -16,6 +16,7 @@ struct DashboardView: View {
     @State private var hasLoadedDispatchUnits = false
     @State private var showMessageModal = false
     @State private var showMessageCenter = false
+    @State private var showDashboardLayoutEditor = false
     @State private var selectedDispatch: DispatchNotificationPayload?
 
     @State private var latestDispatch: DispatchNotificationPayload?
@@ -98,6 +99,8 @@ struct DashboardView: View {
                                 station: viewModel.state.dashboardStation,
                                 isLoading: viewModel.state.isLoading
                             )
+
+                            dashboardEditHeader
 
                             ForEach(visibleDashboardCards, id: \.rawValue) { card in
                                 dashboardCard(card)
@@ -234,6 +237,11 @@ struct DashboardView: View {
             .navigationDestination(isPresented: $showMessageCenter) {
                 MessageCenterView()
             }
+            .sheet(isPresented: $showDashboardLayoutEditor) {
+                NavigationStack {
+                    DashboardLayoutView()
+                }
+            }
         }
     }
 
@@ -287,8 +295,8 @@ struct DashboardView: View {
             return viewModel.state.pendingDocumentSignatures > 0
         case .recentCalls:
             return !viewModel.state.recentDepartmentCalls.isEmpty
-        case .stationWorkOrders:
-            return false
+        case .apparatusWorkOrders:
+            return !viewModel.state.apparatusWorkOrders.isEmpty
         case .scheduleEvents:
             return false
         }
@@ -395,15 +403,23 @@ struct DashboardView: View {
                 handleNavigation(to: .documents)
             }
 
-        case .stationWorkOrders:
-            sectionTitle("Station Work Orders")
+        case .apparatusWorkOrders:
+            sectionTitle("Apparatus Work Orders")
 
-            DashboardSmallStatusCard(
-                title: "Station Work Orders",
-                subtitle: "No open work orders for your station.",
-                systemImage: "wrench.and.screwdriver.fill"
-            ) {
-                handleNavigation(to: .messageCenter)
+            if viewModel.state.apparatusWorkOrders.isEmpty {
+                DashboardSmallStatusCard(
+                    title: "Apparatus Work Orders",
+                    subtitle: viewModel.state.apparatusWorkOrdersMessage ?? "No open apparatus work orders.",
+                    systemImage: "wrench.and.screwdriver.fill"
+                ) {
+                    handleNavigation(to: .messageCenter)
+                }
+            } else {
+                DashboardApparatusWorkOrdersCard(
+                    workOrders: viewModel.state.apparatusWorkOrders
+                ) {
+                    handleNavigation(to: .messageCenter)
+                }
             }
 
         case .scheduleEvents:
@@ -420,14 +436,46 @@ struct DashboardView: View {
         case .recentCalls:
             sectionTitle("Recent Calls")
 
-            DashboardSmallStatusCard(
-                title: "Recent Calls",
-                subtitle: "No recent calls available.",
-                systemImage: "clock.arrow.circlepath"
-            ) {
-                handleNavigation(to: .messageCenter)
+            if viewModel.state.recentDepartmentCalls.isEmpty {
+                DashboardSmallStatusCard(
+                    title: "Recent Calls",
+                    subtitle: "No recent calls available.",
+                    systemImage: "clock.arrow.circlepath"
+                ) {
+                    handleNavigation(to: .messageCenter)
+                }
+            } else {
+                DashboardRecentCallsCard(
+                    calls: viewModel.state.recentDepartmentCalls
+                ) {
+                    handleNavigation(to: .messageCenter)
+                }
             }
         }
+    }
+
+    private var dashboardEditHeader: some View {
+        HStack {
+            Text("Your Dashboard")
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            Spacer()
+
+            Button {
+                showDashboardLayoutEditor = true
+            } label: {
+                Label("Edit", systemImage: "slider.horizontal.3")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.gold)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 2)
     }
 
     @ViewBuilder
@@ -538,6 +586,151 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 2)
         }
+    }
+}
+
+private struct DashboardApparatusWorkOrdersCard: View {
+    let workOrders: [DashboardApparatusWorkOrder]
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "wrench.and.screwdriver.fill")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppTheme.gold)
+
+                    Text("Open apparatus issues")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Spacer()
+
+                    Text("View")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold.opacity(0.9))
+                }
+
+                VStack(spacing: 10) {
+                    ForEach(workOrders.prefix(3)) { workOrder in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(workOrder.apparatusName)
+                                    .font(.caption.bold())
+                                    .foregroundStyle(AppTheme.gold)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                if let status = workOrder.status, !status.isEmpty {
+                                    Text(status)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.white.opacity(0.55))
+                                        .lineLimit(1)
+                                }
+                            }
+
+                            Text(workOrder.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(2)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.09))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct DashboardRecentCallsCard: View {
+    let calls: [RecentDepartmentCall]
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppTheme.gold)
+
+                    Text("Latest dispatches")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Spacer()
+
+                    Text("View")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold.opacity(0.9))
+                }
+
+                VStack(spacing: 10) {
+                    ForEach(calls.prefix(3)) { call in
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(alignment: .top, spacing: 8) {
+                                Text(call.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(2)
+
+                                Spacer()
+
+                                Text(call.timestamp)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.52))
+                                    .lineLimit(1)
+                            }
+
+                            Text(call.address)
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.66))
+                                .lineLimit(1)
+
+                            if let incidentNumber = call.incidentNumber,
+                               !incidentNumber.isEmpty {
+                                Text(incidentNumber)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.42))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(Color.white.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                }
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.09))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

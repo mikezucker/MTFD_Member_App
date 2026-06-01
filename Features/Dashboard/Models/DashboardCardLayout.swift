@@ -3,7 +3,7 @@ import Foundation
 enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
     case messages
     case assignedTraining
-    case stationWorkOrders
+    case apparatusWorkOrders
     case documents
     case scheduleEvents
     case recentCalls
@@ -17,7 +17,7 @@ enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .messages: return "Messages"
         case .assignedTraining: return "Assigned Training"
-        case .stationWorkOrders: return "Station Work Orders"
+        case .apparatusWorkOrders: return "Apparatus Work Orders"
         case .documents: return "Documents / SOPs"
         case .scheduleEvents: return "Schedule / Events"
         case .recentCalls: return "Recent Calls"
@@ -31,7 +31,7 @@ enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .messages: return "text.bubble.fill"
         case .assignedTraining: return "graduationcap.fill"
-        case .stationWorkOrders: return "wrench.and.screwdriver.fill"
+        case .apparatusWorkOrders: return "wrench.and.screwdriver.fill"
         case .documents: return "doc.text.fill"
         case .scheduleEvents: return "calendar.badge.clock"
         case .recentCalls: return "clock.arrow.circlepath"
@@ -51,17 +51,17 @@ enum DashboardCardLayoutDefaults {
 
         switch role {
         case "ADMIN", "CHIEF":
-            return [.messages, .needsAttention, .assignedTraining, .departmentUpdates, .stationWorkOrders, .scheduleEvents, .documents, .recentCalls, .stationUpdates]
+            return [.messages, .needsAttention, .assignedTraining, .departmentUpdates, .apparatusWorkOrders, .scheduleEvents, .documents, .recentCalls, .stationUpdates]
         case "OFFICER_CAREER":
-            return [.messages, .scheduleEvents, .stationWorkOrders, .assignedTraining, .needsAttention, .stationUpdates, .documents, .recentCalls, .departmentUpdates]
+            return [.messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .needsAttention, .stationUpdates, .documents, .recentCalls, .departmentUpdates]
         case "OFFICER_VOLUNTEER":
-            return [.messages, .assignedTraining, .stationWorkOrders, .scheduleEvents, .needsAttention, .stationUpdates, .documents, .recentCalls, .departmentUpdates]
+            return [.messages, .assignedTraining, .apparatusWorkOrders, .scheduleEvents, .needsAttention, .stationUpdates, .documents, .recentCalls, .departmentUpdates]
         case "MEMBER_CAREER":
-            return [.messages, .scheduleEvents, .stationWorkOrders, .assignedTraining, .documents, .departmentUpdates, .recentCalls, .stationUpdates, .needsAttention]
+            return [.messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .recentCalls, .stationUpdates, .needsAttention]
         case "MEMBER_VOLUNTEER":
-            return [.messages, .assignedTraining, .scheduleEvents, .stationWorkOrders, .documents, .departmentUpdates, .recentCalls, .stationUpdates, .needsAttention]
+            return [.messages, .assignedTraining, .scheduleEvents, .apparatusWorkOrders, .documents, .departmentUpdates, .recentCalls, .stationUpdates, .needsAttention]
         default:
-            return [.messages, .assignedTraining, .documents, .scheduleEvents, .departmentUpdates, .stationUpdates, .needsAttention, .recentCalls, .stationWorkOrders]
+            return [.messages, .assignedTraining, .documents, .scheduleEvents, .departmentUpdates, .stationUpdates, .needsAttention, .recentCalls, .apparatusWorkOrders]
         }
     }
 

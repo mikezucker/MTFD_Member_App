@@ -717,9 +717,19 @@ extension APIClient {
         let statsMessage: String?
         let stationUpdates: [DashboardUpdate]?
         let departmentUpdates: [DashboardUpdate]?
+        let apparatusWorkOrders: [ApparatusWorkOrder]?
+        let apparatusWorkOrdersMessage: String?
         let notesConfigured: Bool?
         let notesMessage: String?
         let error: String?
+    }
+
+    struct ApparatusWorkOrder: Decodable, Identifiable {
+        let id: String
+        let apparatusApiId: String?
+        let apparatusName: String
+        let title: String
+        let status: String?
     }
 
     struct ActiveDispatch: Decodable, Identifiable {

@@ -6,5 +6,20 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.StartCPR.MTFD-Member-App</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mtfdmember</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

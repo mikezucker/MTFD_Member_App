@@ -15,6 +15,8 @@
 		404C364C2FB207F80088997E /* ActiveDispatchStackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */; };
 		404C36502FB208DD0088997E /* DashboardHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364F2FB208D40088997E /* DashboardHeaderView.swift */; };
 		404C36532FB2401B0088997E /* AppBadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C36522FB2400C0088997E /* AppBadgeManager.swift */; };
+		40549EC82FCE2495008276CF /* DispatchLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40549EC52FCE2495008276CF /* DispatchLiveActivityAttributes.swift */; };
+		40549EC92FCE2495008276CF /* DispatchLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40549EC62FCE2495008276CF /* DispatchLiveActivityManager.swift */; };
 		406310CA2F92DC2D001078AF /* DepartmentStationStatsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 406310C92F92DC2B001078AF /* DepartmentStationStatsSection.swift */; };
 		406310CC2F92E8D5001078AF /* DashboardCallSummarySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 406310CB2F92E8D3001078AF /* DashboardCallSummarySection.swift */; };
 		408691792FBF7AB700A40828 /* MobileTrainingResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408691782FBF7AB100A40828 /* MobileTrainingResponse.swift */; };
@@ -76,12 +78,58 @@
 		40B22B7F2F9FE19E00808F42 /* UnitCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B22B7E2F9FE19300808F42 /* UnitCatalog.swift */; };
 		40B22B812F9FE1C600808F42 /* DispatchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B22B802F9FE1B900808F42 /* DispatchService.swift */; };
 		40B22B832F9FE49300808F42 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B22B822F9FE49100808F42 /* SettingsView.swift */; };
+		40CAABAC2FCE2C99008C33D9 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CAABAB2FCE2C99008C33D9 /* WidgetKit.framework */; };
+		40CAABAE2FCE2C99008C33D9 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CAABAD2FCE2C99008C33D9 /* SwiftUI.framework */; };
+		40CAABBF2FCE2C9A008C33D9 /* MTFDLiveActivitiesExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 40CAABA92FCE2C99008C33D9 /* MTFDLiveActivitiesExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		40CAABD32FCE342F008C33D9 /* MTFD Watch App Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 40CAABC92FCE342E008C33D9 /* MTFD Watch App Watch App.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		40D1211C2FB13CA3003B3E41 /* MobileMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211B2FB13CA1003B3E41 /* MobileMessage.swift */; };
 		40D1211E2FB13E1F003B3E41 /* MessageCenterViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211D2FB13E16003B3E41 /* MessageCenterViewModel.swift */; };
 		40D121202FB13E36003B3E41 /* MessageCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211F2FB13E34003B3E41 /* MessageCenterView.swift */; };
 		40F2EEB12FCDF44C00140AC5 /* DashboardLayoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */; };
 		40F2EEB32FCDF4AE00140AC5 /* DashboardCardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		40CAABBD2FCE2C9A008C33D9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 407DBFBC2F8D41C7006B3DAF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 40CAABA82FCE2C99008C33D9;
+			remoteInfo = MTFDLiveActivitiesExtension;
+		};
+		40CAABD12FCE342F008C33D9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 407DBFBC2F8D41C7006B3DAF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 40CAABC82FCE342E008C33D9;
+			remoteInfo = "MTFD Watch App Watch App";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		40CAABC02FCE2C9A008C33D9 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				40CAABBF2FCE2C9A008C33D9 /* MTFDLiveActivitiesExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		40CAABD72FCE342F008C33D9 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				40CAABD32FCE342F008C33D9 /* MTFD Watch App Watch App.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		4001D01B2FAD676D007A8D45 /* DispatchDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchDetailViewModel.swift; sourceTree = "<group>"; };
@@ -92,6 +140,8 @@
 		404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveDispatchStackView.swift; sourceTree = "<group>"; };
 		404C364F2FB208D40088997E /* DashboardHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHeaderView.swift; sourceTree = "<group>"; };
 		404C36522FB2400C0088997E /* AppBadgeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBadgeManager.swift; sourceTree = "<group>"; };
+		40549EC52FCE2495008276CF /* DispatchLiveActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchLiveActivityAttributes.swift; sourceTree = "<group>"; };
+		40549EC62FCE2495008276CF /* DispatchLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchLiveActivityManager.swift; sourceTree = "<group>"; };
 		406310C92F92DC2B001078AF /* DepartmentStationStatsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DepartmentStationStatsSection.swift; sourceTree = "<group>"; };
 		406310CB2F92E8D3001078AF /* DashboardCallSummarySection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCallSummarySection.swift; sourceTree = "<group>"; };
 		407DBFC42F8D41C7006B3DAF /* MTFD Member App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MTFD Member App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -155,6 +205,10 @@
 		40B22B7E2F9FE19300808F42 /* UnitCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitCatalog.swift; sourceTree = "<group>"; };
 		40B22B802F9FE1B900808F42 /* DispatchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchService.swift; sourceTree = "<group>"; };
 		40B22B822F9FE49100808F42 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		40CAABA92FCE2C99008C33D9 /* MTFDLiveActivitiesExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MTFDLiveActivitiesExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		40CAABAB2FCE2C99008C33D9 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		40CAABAD2FCE2C99008C33D9 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		40CAABC92FCE342E008C33D9 /* MTFD Watch App Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MTFD Watch App Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		40D1211B2FB13CA1003B3E41 /* MobileMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileMessage.swift; sourceTree = "<group>"; };
 		40D1211D2FB13E16003B3E41 /* MessageCenterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCenterViewModel.swift; sourceTree = "<group>"; };
 		40D1211F2FB13E34003B3E41 /* MessageCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCenterView.swift; sourceTree = "<group>"; };
@@ -162,8 +216,50 @@
 		40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCardLayout.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		40CAABC32FCE2C9A008C33D9 /* Exceptions for "MTFDLiveActivities" folder in "MTFDLiveActivitiesExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				40CAABC32FCE2C9A008C33D9 /* Exceptions for "MTFDLiveActivities" folder in "MTFDLiveActivitiesExtension" target */,
+			);
+			path = MTFDLiveActivities;
+			sourceTree = "<group>";
+		};
+		40CAABCA2FCE342E008C33D9 /* MTFD Watch App Watch App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "MTFD Watch App Watch App";
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
 		407DBFC12F8D41C7006B3DAF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		40CAABA62FCE2C99008C33D9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				40CAABAE2FCE2C99008C33D9 /* SwiftUI.framework in Frameworks */,
+				40CAABAC2FCE2C99008C33D9 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		40CAABC62FCE342E008C33D9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -229,6 +325,15 @@
 			path = "App Badge Manager";
 			sourceTree = "<group>";
 		};
+		40549EC72FCE2495008276CF /* LiveActivities */ = {
+			isa = PBXGroup;
+			children = (
+				40549EC52FCE2495008276CF /* DispatchLiveActivityAttributes.swift */,
+				40549EC62FCE2495008276CF /* DispatchLiveActivityManager.swift */,
+			);
+			path = LiveActivities;
+			sourceTree = "<group>";
+		};
 		407DBFBB2F8D41C7006B3DAF = {
 			isa = PBXGroup;
 			children = (
@@ -241,6 +346,9 @@
 				408910A42F8FECC70035C355 /* Models */,
 				408910A32F8FECBC0035C355 /* Core */,
 				408910A22F8FECA40035C355 /* App */,
+				40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */,
+				40CAABCA2FCE342E008C33D9 /* MTFD Watch App Watch App */,
+				40CAABAA2FCE2C99008C33D9 /* Frameworks */,
 				407DBFC52F8D41C7006B3DAF /* Products */,
 				408910A52F8FECD00035C355 /* Services */,
 				408910D82F8FED410035C355 /* MTFD Member App */,
@@ -251,6 +359,8 @@
 			isa = PBXGroup;
 			children = (
 				407DBFC42F8D41C7006B3DAF /* MTFD Member App.app */,
+				40CAABA92FCE2C99008C33D9 /* MTFDLiveActivitiesExtension.appex */,
+				40CAABC92FCE342E008C33D9 /* MTFD Watch App Watch App.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -277,6 +387,7 @@
 				408911082F8FEDD80035C355 /* Haptics */,
 				408911072F8FEDCF0035C355 /* Motion */,
 				408911062F8FEDC40035C355 /* Theme */,
+				40549EC72FCE2495008276CF /* LiveActivities */,
 			);
 			path = Core;
 			sourceTree = "<group>";
@@ -845,6 +956,15 @@
 			path = Dispatch;
 			sourceTree = "<group>";
 		};
+		40CAABAA2FCE2C99008C33D9 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				40CAABAB2FCE2C99008C33D9 /* WidgetKit.framework */,
+				40CAABAD2FCE2C99008C33D9 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		40D121172FB13C57003B3E41 /* Messages */ = {
 			isa = PBXGroup;
 			children = (
@@ -889,16 +1009,64 @@
 				407DBFC02F8D41C7006B3DAF /* Sources */,
 				407DBFC12F8D41C7006B3DAF /* Frameworks */,
 				407DBFC22F8D41C7006B3DAF /* Resources */,
+				40CAABC02FCE2C9A008C33D9 /* Embed Foundation Extensions */,
+				40CAABD72FCE342F008C33D9 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				40CAABBE2FCE2C9A008C33D9 /* PBXTargetDependency */,
+				40CAABD22FCE342F008C33D9 /* PBXTargetDependency */,
 			);
 			name = "MTFD Member App";
 			packageProductDependencies = (
 			);
 			productName = "MTFD Member App";
 			productReference = 407DBFC42F8D41C7006B3DAF /* MTFD Member App.app */;
+			productType = "com.apple.product-type.application";
+		};
+		40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 40CAABC42FCE2C9A008C33D9 /* Build configuration list for PBXNativeTarget "MTFDLiveActivitiesExtension" */;
+			buildPhases = (
+				40CAABA52FCE2C99008C33D9 /* Sources */,
+				40CAABA62FCE2C99008C33D9 /* Frameworks */,
+				40CAABA72FCE2C99008C33D9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */,
+			);
+			name = MTFDLiveActivitiesExtension;
+			packageProductDependencies = (
+			);
+			productName = MTFDLiveActivitiesExtension;
+			productReference = 40CAABA92FCE2C99008C33D9 /* MTFDLiveActivitiesExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		40CAABC82FCE342E008C33D9 /* MTFD Watch App Watch App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 40CAABD42FCE342F008C33D9 /* Build configuration list for PBXNativeTarget "MTFD Watch App Watch App" */;
+			buildPhases = (
+				40CAABC52FCE342E008C33D9 /* Sources */,
+				40CAABC62FCE342E008C33D9 /* Frameworks */,
+				40CAABC72FCE342E008C33D9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				40CAABCA2FCE342E008C33D9 /* MTFD Watch App Watch App */,
+			);
+			name = "MTFD Watch App Watch App";
+			packageProductDependencies = (
+			);
+			productName = "MTFD Watch App Watch App";
+			productReference = 40CAABC92FCE342E008C33D9 /* MTFD Watch App Watch App.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -908,11 +1076,17 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2640;
+				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					407DBFC32F8D41C7006B3DAF = {
 						CreatedOnToolsVersion = 26.4;
+					};
+					40CAABA82FCE2C99008C33D9 = {
+						CreatedOnToolsVersion = 26.5;
+					};
+					40CAABC82FCE342E008C33D9 = {
+						CreatedOnToolsVersion = 26.5;
 					};
 				};
 			};
@@ -931,6 +1105,8 @@
 			projectRoot = "";
 			targets = (
 				407DBFC32F8D41C7006B3DAF /* MTFD Member App */,
+				40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */,
+				40CAABC82FCE342E008C33D9 /* MTFD Watch App Watch App */,
 			);
 		};
 /* End PBXProject section */
@@ -941,6 +1117,20 @@
 			buildActionMask = 2147483647;
 			files = (
 				408911042F8FED410035C355 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		40CAABA72FCE2C99008C33D9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		40CAABC72FCE342E008C33D9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1024,10 +1214,39 @@
 				408911022F8FED410035C355 /* TrainingView.swift in Sources */,
 				4086917B2FBF7B1700A40828 /* TrainingViewModel.swift in Sources */,
 				408911032F8FED410035C355 /* UniformsView.swift in Sources */,
+				40549EC82FCE2495008276CF /* DispatchLiveActivityAttributes.swift in Sources */,
+				40549EC92FCE2495008276CF /* DispatchLiveActivityManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		40CAABA52FCE2C99008C33D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		40CAABC52FCE342E008C33D9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		40CAABBE2FCE2C9A008C33D9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */;
+			targetProxy = 40CAABBD2FCE2C9A008C33D9 /* PBXContainerItemProxy */;
+		};
+		40CAABD22FCE342F008C33D9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 40CAABC82FCE342E008C33D9 /* MTFD Watch App Watch App */;
+			targetProxy = 40CAABD12FCE342F008C33D9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		407DBFD62F8D41C9006B3DAF /* Debug */ = {
@@ -1227,6 +1446,138 @@
 			};
 			name = Release;
 		};
+		40CAABC12FCE2C9A008C33D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 48J5KADD5V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MTFDLiveActivities/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MTFDLiveActivities;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.MTFDLiveActivities";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		40CAABC22FCE2C9A008C33D9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 48J5KADD5V;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MTFDLiveActivities/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MTFDLiveActivities;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.MTFDLiveActivities";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		40CAABD52FCE342F008C33D9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 48J5KADD5V;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "MTFD Watch App";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.StartCPR.MTFD-Member-App";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		40CAABD62FCE342F008C33D9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 48J5KADD5V;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "MTFD Watch App";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = "com.StartCPR.MTFD-Member-App";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.watchkitapp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1244,6 +1595,24 @@
 			buildConfigurations = (
 				407DBFD62F8D41C9006B3DAF /* Debug */,
 				407DBFD72F8D41C9006B3DAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		40CAABC42FCE2C9A008C33D9 /* Build configuration list for PBXNativeTarget "MTFDLiveActivitiesExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				40CAABC12FCE2C9A008C33D9 /* Debug */,
+				40CAABC22FCE2C9A008C33D9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		40CAABD42FCE342F008C33D9 /* Build configuration list for PBXNativeTarget "MTFD Watch App Watch App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				40CAABD52FCE342F008C33D9 /* Debug */,
+				40CAABD62FCE342F008C33D9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

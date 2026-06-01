@@ -104,6 +104,39 @@ struct MainTabView: View {
         }) { payload in
             DispatchDetailView(dispatch: payload)
         }
+        .onOpenURL { url in
+            handleDeepLink(url)
+        }
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "mtfdmember" else { return }
+
+        if url.host == "dispatch" {
+            let dispatchId = url.pathComponents.dropFirst().first ?? ""
+
+            guard !dispatchId.isEmpty else {
+                router.selectedTab = .home
+                return
+            }
+
+            let payload = AppNotificationPayload(
+                type: .dispatch,
+                id: dispatchId,
+                title: "Dispatch Alert",
+                body: nil,
+                callType: nil,
+                address: nil,
+                units: [],
+                isWorkingFire: false,
+                stationId: nil,
+                messageId: nil,
+                trainingId: nil,
+                documentId: nil
+            )
+
+            router.route(from: payload)
+        }
     }
 
     private var canUseCommandTab: Bool {
@@ -376,6 +409,9 @@ private struct CommandWorkspaceView: View {
             }
 
             await messageViewModel.loadMessagesIfNeeded()
+        }
+        .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
+            syncLiveActivityWithActiveDispatches()
         }
         .sheet(item: $selectedDispatch) { dispatch in
             DispatchDetailView(dispatch: dispatch)
@@ -900,9 +936,35 @@ private struct CommandWorkspaceView: View {
                 .foregroundStyle(.white)
 
             ActiveDispatchStackView(dispatches: dashboardViewModel.activeDispatches) { activeDispatch in
-                selectedDispatch = makeDispatchPayload(from: activeDispatch)
+                let payload = makeDispatchPayload(from: activeDispatch)
+                DispatchLiveActivityManager.shared.startOrUpdate(from: payload)
+                selectedDispatch = payload
             }
         }
+    }
+
+    private var activeDispatchLiveActivitySignature: String {
+        dashboardViewModel.activeDispatches
+            .map { dispatch in
+                let priority = dispatch.priority ?? ""
+                let callType = dispatch.callType
+                let address = dispatch.address ?? ""
+                let message = dispatch.message ?? ""
+                let isWorkingFire = dispatch.isWorkingFire ?? false
+
+                return "\(dispatch.id)|\(priority)|\(callType)|\(address)|\(message)|\(isWorkingFire)"
+            }
+            .joined(separator: "||")
+    }
+
+    private func syncLiveActivityWithActiveDispatches() {
+        guard let newestDispatch = dashboardViewModel.activeDispatches.first else {
+            DispatchLiveActivityManager.shared.endAll()
+            return
+        }
+
+        let payload = makeDispatchPayload(from: newestDispatch)
+        DispatchLiveActivityManager.shared.startOrUpdate(from: payload)
     }
 
     private var mappedCommandUserRole: UserRole {
