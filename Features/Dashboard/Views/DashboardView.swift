@@ -61,18 +61,6 @@ struct DashboardView: View {
 
                     ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 18) {
-                            DashboardCallSummarySection(
-                                selectedWindowRawValue: $selectedWindowRawValue,
-                                department: viewModel.state.dashboardDepartment,
-                                station: viewModel.state.dashboardStation,
-                                isLoading: viewModel.state.isLoading
-                            )
-                            DashboardMessageCenterCard {
-                                dispatchNotificationCount = 0
-                                isDispatchBellRinging = false
-                                showMessageCenter = true
-                            }
-
                             if let primaryActiveDispatch {
                                 sectionTitle("Current Dispatch")
 
@@ -104,44 +92,15 @@ struct DashboardView: View {
                                 }
                             }
 
-                            if !viewModel.state.assignedTrainingPreview.isEmpty {
-                                sectionTitle("Assigned Training")
+                            DashboardCallSummarySection(
+                                selectedWindowRawValue: $selectedWindowRawValue,
+                                department: viewModel.state.dashboardDepartment,
+                                station: viewModel.state.dashboardStation,
+                                isLoading: viewModel.state.isLoading
+                            )
 
-                                DashboardAssignedTrainingPreviewCard(
-                                    items: viewModel.state.assignedTrainingPreview
-                                ) {
-                                    handleNavigation(to: .trainingAssigned)
-                                }
-                            }
-
-                            if !viewModel.state.stationUpdates.isEmpty {
-                                sectionTitle("Station Update")
-
-                                VStack(spacing: 10) {
-                                    ForEach(viewModel.state.stationUpdates) { update in
-                                        DashboardUpdateBlock(update: update)
-                                    }
-                                }
-                            }
-
-                            if !viewModel.state.departmentUpdates.isEmpty {
-                                sectionTitle("Dept. Update")
-
-                                VStack(spacing: 10) {
-                                    ForEach(viewModel.state.departmentUpdates) { update in
-                                        DashboardUpdateBlock(update: update)
-                                    }
-                                }
-                            }
-
-                            if !viewModel.state.attentionItems.isEmpty {
-                                sectionTitle("Needs Attention")
-
-                                ForEach(viewModel.state.attentionItems) { item in
-                                    DashboardAttentionCard(item: item) {
-                                        handleNavigation(to: item.destination)
-                                    }
-                                }
+                            ForEach(visibleDashboardCards, id: \.rawValue) { card in
+                                dashboardCard(card)
                             }
 
                             if let errorMessage = viewModel.state.errorMessage,
@@ -300,6 +259,177 @@ struct DashboardView: View {
         false
     }
 
+    private var visibleDashboardCards: [DashboardCardID] {
+        let hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
+        let enabledCards = DashboardCardLayoutDefaults
+            .savedOrder(for: session.currentUser?.role)
+            .filter { !hiddenCards.contains($0) }
+
+        let cardsWithData = enabledCards.filter { dashboardCardHasData($0) }
+        let emptyCards = enabledCards.filter { !dashboardCardHasData($0) }
+
+        return cardsWithData + emptyCards
+    }
+
+    private func dashboardCardHasData(_ card: DashboardCardID) -> Bool {
+        switch card {
+        case .messages:
+            return true
+        case .assignedTraining:
+            return !viewModel.state.assignedTrainingPreview.isEmpty
+        case .departmentUpdates:
+            return !viewModel.state.departmentUpdates.isEmpty
+        case .stationUpdates:
+            return !viewModel.state.stationUpdates.isEmpty
+        case .needsAttention:
+            return !viewModel.state.attentionItems.isEmpty
+        case .documents:
+            return viewModel.state.pendingDocumentSignatures > 0
+        case .recentCalls:
+            return !viewModel.state.recentDepartmentCalls.isEmpty
+        case .stationWorkOrders:
+            return false
+        case .scheduleEvents:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardCard(_ card: DashboardCardID) -> some View {
+        switch card {
+        case .messages:
+            DashboardMessageCenterCard {
+                dispatchNotificationCount = 0
+                isDispatchBellRinging = false
+                showMessageCenter = true
+            }
+
+        case .assignedTraining:
+            sectionTitle("Assigned Training")
+
+            if viewModel.state.assignedTrainingPreview.isEmpty {
+                DashboardSmallStatusCard(
+                    title: "Assigned Training",
+                    subtitle: "No assigned training right now.",
+                    systemImage: "graduationcap.fill"
+                ) {
+                    handleNavigation(to: .trainingAssigned)
+                }
+            } else {
+                DashboardAssignedTrainingPreviewCard(
+                    items: viewModel.state.assignedTrainingPreview
+                ) {
+                    handleNavigation(to: .trainingAssigned)
+                }
+            }
+
+        case .departmentUpdates:
+            sectionTitle("Dept. Update")
+
+            if viewModel.state.departmentUpdates.isEmpty {
+                DashboardSmallStatusCard(
+                    title: "Department Updates",
+                    subtitle: "No department updates posted.",
+                    systemImage: "megaphone.fill"
+                ) {
+                    handleNavigation(to: .messageCenter)
+                }
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(viewModel.state.departmentUpdates) { update in
+                        DashboardUpdateBlock(update: update)
+                    }
+                }
+            }
+
+        case .stationUpdates:
+            sectionTitle("Station Update")
+
+            if viewModel.state.stationUpdates.isEmpty {
+                DashboardSmallStatusCard(
+                    title: "Station Updates",
+                    subtitle: "No station updates posted.",
+                    systemImage: "building.2.fill"
+                ) {
+                    handleNavigation(to: .messageCenter)
+                }
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(viewModel.state.stationUpdates) { update in
+                        DashboardUpdateBlock(update: update)
+                    }
+                }
+            }
+
+        case .needsAttention:
+            sectionTitle("Needs Attention")
+
+            if viewModel.state.attentionItems.isEmpty {
+                DashboardSmallStatusCard(
+                    title: "Needs Attention",
+                    subtitle: "Nothing needs your attention right now.",
+                    systemImage: "checkmark.seal.fill"
+                ) {
+                    handleNavigation(to: .messageCenter)
+                }
+            } else {
+                ForEach(viewModel.state.attentionItems) { item in
+                    DashboardAttentionCard(item: item) {
+                        handleNavigation(to: item.destination)
+                    }
+                }
+            }
+
+        case .documents:
+            sectionTitle("Documents / SOPs")
+
+            let pendingCount = viewModel.state.pendingDocumentSignatures
+
+            DashboardSmallStatusCard(
+                title: "Documents / SOPs",
+                subtitle: pendingCount > 0
+                    ? "\(pendingCount) item\(pendingCount == 1 ? "" : "s") need acknowledgement."
+                    : "No documents need acknowledgement.",
+                systemImage: "doc.text.fill"
+            ) {
+                handleNavigation(to: .documents)
+            }
+
+        case .stationWorkOrders:
+            sectionTitle("Station Work Orders")
+
+            DashboardSmallStatusCard(
+                title: "Station Work Orders",
+                subtitle: "No open work orders for your station.",
+                systemImage: "wrench.and.screwdriver.fill"
+            ) {
+                handleNavigation(to: .messageCenter)
+            }
+
+        case .scheduleEvents:
+            sectionTitle("Schedule / Events")
+
+            DashboardSmallStatusCard(
+                title: "Schedule / Events",
+                subtitle: "No upcoming schedule items.",
+                systemImage: "calendar.badge.clock"
+            ) {
+                handleNavigation(to: .messageCenter)
+            }
+
+        case .recentCalls:
+            sectionTitle("Recent Calls")
+
+            DashboardSmallStatusCard(
+                title: "Recent Calls",
+                subtitle: "No recent calls available.",
+                systemImage: "clock.arrow.circlepath"
+            ) {
+                handleNavigation(to: .messageCenter)
+            }
+        }
+    }
+
     @ViewBuilder
     private func sectionTitle(_ text: String) -> some View {
         Text(text)
@@ -396,6 +526,54 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 2)
         }
+    }
+}
+
+private struct DashboardSmallStatusCard: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(alignment: .center, spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(AppTheme.gold.opacity(0.18))
+                        .frame(width: 40, height: 40)
+
+                    Image(systemName: systemImage)
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(AppTheme.gold)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.66))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.gold.opacity(0.9))
+            }
+            .padding(16)
+            .background(Color.white.opacity(0.09))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 
