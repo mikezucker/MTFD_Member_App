@@ -485,6 +485,23 @@ final class APIClient {
         }
     }
 
+    func requestPasswordReset(email: String) async throws -> MemberAccessRequestResponse {
+        let payload = MemberAccessRequest(
+            email: email,
+            type: "RESET"
+        )
+
+        let request = try makeRequest(
+            path: "/api/members/access/request",
+            method: "POST",
+            body: try encode(payload),
+            requiresAuth: false
+        )
+
+        let data = try await performRequest(request)
+        return try decode(MemberAccessRequestResponse.self, from: data)
+    }
+
     // MARK: - Dispatch
 
     func fetchDispatchStats() async throws -> DispatchStatsResponse {
@@ -619,11 +636,22 @@ extension APIClient {
         let type: String
         let actionType: String
     }
+
+    struct MemberAccessRequest: Encodable {
+        let email: String
+        let type: String
+    }
 }
 
 // MARK: - Response Models
 
 extension APIClient {
+    struct MemberAccessRequestResponse: Decodable {
+        let ok: Bool
+        let error: String?
+        let devLink: String?
+    }
+
     struct LoginResponse: Decodable {
         let success: Bool
         let token: String?
