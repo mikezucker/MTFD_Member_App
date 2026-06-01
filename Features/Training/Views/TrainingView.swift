@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrainingView: View {
     @StateObject private var viewModel = TrainingViewModel()
+    @State private var selectedTool: TrainingToolDestination?
 
     var body: some View {
         NavigationStack {
@@ -49,6 +50,14 @@ struct TrainingView: View {
                     }
                 }
             }
+        }
+        .navigationDestination(item: $selectedTool) { destination in
+            TrainingToolDestinationView(
+                destination: destination,
+                summary: viewModel.summary,
+                pendingEvaluations: viewModel.pendingEvaluations,
+                managedMembers: viewModel.managedMembers
+            )
         }
         .task {
             await viewModel.load()
@@ -246,7 +255,9 @@ struct TrainingView: View {
                             title: "Create",
                             subtitle: "Build courses",
                             systemImage: "plus.rectangle.on.folder.fill"
-                        )
+                        ) {
+                            selectedTool = .create
+                        }
                     }
 
                     if capabilities.canAssignTraining {
@@ -254,7 +265,9 @@ struct TrainingView: View {
                             title: "Assign",
                             subtitle: "Send training",
                             systemImage: "paperplane.fill"
-                        )
+                        ) {
+                            selectedTool = .assign
+                        }
                     }
 
                     if capabilities.canEvaluateTraining {
@@ -262,7 +275,9 @@ struct TrainingView: View {
                             title: "Evaluate",
                             subtitle: "JPR reviews",
                             systemImage: "checklist.checked"
-                        )
+                        ) {
+                            selectedTool = .evaluate
+                        }
                     }
 
                     if capabilities.canViewManagedProgress {
@@ -270,7 +285,9 @@ struct TrainingView: View {
                             title: "Progress",
                             subtitle: "Crew status",
                             systemImage: "chart.bar.fill"
-                        )
+                        ) {
+                            selectedTool = .progress
+                        }
                     }
 
                     if capabilities.canViewDepartmentProgress {
@@ -278,7 +295,9 @@ struct TrainingView: View {
                             title: "Department",
                             subtitle: "Compliance",
                             systemImage: "building.2.crop.circle.fill"
-                        )
+                        ) {
+                            selectedTool = .department
+                        }
                     }
                 }
             }
@@ -428,6 +447,249 @@ struct TrainingView: View {
         default:
             return "My Training"
         }
+    }
+}
+
+private enum TrainingToolDestination: String, Identifiable {
+    case create
+    case assign
+    case evaluate
+    case progress
+    case department
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .create:
+            return "Create Training"
+        case .assign:
+            return "Assign Training"
+        case .evaluate:
+            return "Evaluate JPRs"
+        case .progress:
+            return "Crew Progress"
+        case .department:
+            return "Department Compliance"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .create:
+            return "plus.rectangle.on.folder.fill"
+        case .assign:
+            return "paperplane.fill"
+        case .evaluate:
+            return "checklist.checked"
+        case .progress:
+            return "chart.bar.fill"
+        case .department:
+            return "building.2.crop.circle.fill"
+        }
+    }
+}
+
+private struct TrainingToolDestinationView: View {
+    let destination: TrainingToolDestination
+    let summary: TrainingSummary?
+    let pendingEvaluations: [PendingTrainingEvaluation]
+    let managedMembers: [ManagedTrainingMember]
+
+    var body: some View {
+        AppScreen(title: destination.title) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+
+                    switch destination {
+                    case .create:
+                        comingSoonCard(
+                            title: "Course builder coming soon",
+                            message: "This will allow authorized users to build courses, modules, lessons, objectives, and JPR skills from the app."
+                        )
+
+                    case .assign:
+                        comingSoonCard(
+                            title: "Assignment tools coming soon",
+                            message: "This will allow officers and training staff to assign courses to members, crews, companies, or the department."
+                        )
+
+                    case .evaluate:
+                        evaluationsContent
+
+                    case .progress:
+                        managedMembersContent
+
+                    case .department:
+                        departmentContent
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(AppTheme.gold.opacity(0.18))
+                    .frame(width: 48, height: 48)
+
+                Image(systemName: destination.systemImage)
+                    .font(.system(size: 21, weight: .bold))
+                    .foregroundStyle(AppTheme.gold)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(destination.title)
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+
+                Text("Training tools use the shared backend and will expand as the training/JPR system grows.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var evaluationsContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Pending Evaluations")
+
+            if pendingEvaluations.isEmpty {
+                emptyStatusCard(
+                    title: "No pending evaluations",
+                    message: "JPR reviews and skill checkoffs waiting for evaluation will appear here."
+                )
+            } else {
+                ForEach(pendingEvaluations) { evaluation in
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(evaluation.title)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Text(evaluation.courseTitle)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.68))
+
+                        Text(evaluation.outcome.replacingOccurrences(of: "_", with: " ").capitalized)
+                            .font(.caption2.bold())
+                            .foregroundStyle(AppTheme.gold)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private var managedMembersContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Managed Members")
+
+            if managedMembers.isEmpty {
+                emptyStatusCard(
+                    title: "No managed members",
+                    message: "Members assigned to your supervision or training scope will appear here."
+                )
+            } else {
+                ForEach(managedMembers) { member in
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(AppTheme.gold.opacity(0.18))
+                            .frame(width: 38, height: 38)
+                            .overlay {
+                                Image(systemName: "person.fill")
+                                    .foregroundStyle(AppTheme.gold)
+                            }
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(member.name ?? member.email)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white)
+
+                            Text(member.role.replacingOccurrences(of: "_", with: " ").capitalized)
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.68))
+                        }
+
+                        Spacer()
+                    }
+                    .padding(13)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+            }
+        }
+    }
+
+    private var departmentContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Training Summary")
+
+            HStack(spacing: 10) {
+                SummaryMetricCard(
+                    value: "\(summary?.assignedCount ?? 0)",
+                    label: "Assigned",
+                    systemImage: "tray.full.fill"
+                )
+
+                SummaryMetricCard(
+                    value: "\(summary?.completedCount ?? 0)",
+                    label: "Done",
+                    systemImage: "checkmark.seal.fill"
+                )
+
+                SummaryMetricCard(
+                    value: "\(summary?.overdueCount ?? 0)",
+                    label: "Overdue",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+            }
+
+            emptyStatusCard(
+                title: "Compliance detail coming soon",
+                message: "Department and station-level training compliance breakdowns will appear here as the training command tools are expanded."
+            )
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(.white)
+    }
+
+    private func comingSoonCard(title: String, message: String) -> some View {
+        emptyStatusCard(title: title, message: message)
+    }
+
+    private func emptyStatusCard(title: String, message: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
 
@@ -629,25 +891,37 @@ private struct TrainingToolTile: View {
     let title: String
     let subtitle: String
     let systemImage: String
+    let onTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(AppTheme.gold)
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(AppTheme.gold)
 
-            Text(title)
-                .font(.subheadline.bold())
-                .foregroundStyle(.white)
+                    Spacer()
 
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.68))
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+
+                Text(title)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(.white)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.68))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .buttonStyle(.plain)
     }
 }
 
