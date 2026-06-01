@@ -501,7 +501,19 @@ struct DashboardView: View {
     }
 
     private func handleNavigation(to destination: AppDestination) {
-        print("Navigate to: \(destination)")
+        switch destination {
+        case .trainingAssigned:
+            router.selectedTab = .training
+
+        case .messageCenter:
+            showMessageCenter = true
+
+        case .documents:
+            router.selectedTab = .documents
+
+        default:
+            print("Navigate to: \(destination)")
+        }
     }
 
     private struct DashboardUpdateBlock: View {
