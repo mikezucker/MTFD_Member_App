@@ -972,6 +972,14 @@ private struct CommandWorkspaceView: View {
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.white.opacity(0.42))
+                    } else {
+                        Text("Coming soon")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white.opacity(0.58))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(Capsule())
                     }
                 }
 
