@@ -48,6 +48,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Dashboard") {
+                NavigationLink {
+                    DashboardLayoutView()
+                } label: {
+                    Label("Dashboard Layout", systemImage: "rectangle.grid.2x2.fill")
+                }
+            }
+
             Section("Alerts") {
                 NavigationLink {
                     NotificationPreferencesView()

@@ -79,6 +79,8 @@
 		40D1211C2FB13CA3003B3E41 /* MobileMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211B2FB13CA1003B3E41 /* MobileMessage.swift */; };
 		40D1211E2FB13E1F003B3E41 /* MessageCenterViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211D2FB13E16003B3E41 /* MessageCenterViewModel.swift */; };
 		40D121202FB13E36003B3E41 /* MessageCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211F2FB13E34003B3E41 /* MessageCenterView.swift */; };
+		40F2EEB12FCDF44C00140AC5 /* DashboardLayoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */; };
+		40F2EEB32FCDF4AE00140AC5 /* DashboardCardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -156,6 +158,8 @@
 		40D1211B2FB13CA1003B3E41 /* MobileMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileMessage.swift; sourceTree = "<group>"; };
 		40D1211D2FB13E16003B3E41 /* MessageCenterViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCenterViewModel.swift; sourceTree = "<group>"; };
 		40D1211F2FB13E34003B3E41 /* MessageCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCenterView.swift; sourceTree = "<group>"; };
+		40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardLayoutView.swift; sourceTree = "<group>"; };
+		40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCardLayout.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -730,6 +734,7 @@
 		408911312F90161F0035C355 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */,
 				408910BC2F8FED410035C355 /* DashboardModels.swift */,
 			);
 			path = Models;
@@ -824,6 +829,7 @@
 		40B22B742F9FDD8000808F42 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */,
 				40B22B822F9FE49100808F42 /* SettingsView.swift */,
 				40B22B792F9FDDBC00808F42 /* NotificationPreferencesView.swift */,
 			);
@@ -958,6 +964,7 @@
 				408910E02F8FED410035C355 /* APIClient.swift in Sources */,
 				408910E12F8FED410035C355 /* AppAlert.swift in Sources */,
 				408911492F9033CE0035C355 /* DashboardResponse.swift in Sources */,
+				40F2EEB12FCDF44C00140AC5 /* DashboardLayoutView.swift in Sources */,
 				406310CC2F92E8D5001078AF /* DashboardCallSummarySection.swift in Sources */,
 				408691792FBF7AB700A40828 /* MobileTrainingResponse.swift in Sources */,
 				408910E22F8FED410035C355 /* AppScreen.swift in Sources */,
@@ -975,6 +982,7 @@
 				408910EB2F8FED410035C355 /* DashboardView.swift in Sources */,
 				408911382F90239D0035C355 /* Motion.swift in Sources */,
 				408910EC2F8FED410035C355 /* DocumentsView.swift in Sources */,
+				40F2EEB32FCDF4AE00140AC5 /* DashboardCardLayout.swift in Sources */,
 				408910ED2F8FED410035C355 /* HapticsManager.swift in Sources */,
 				408910EF2F8FED410035C355 /* JPR.swift in Sources */,
 				40A5322D2F993DBF0031965E /* AppDelegate.swift in Sources */,
