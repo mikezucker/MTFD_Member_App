@@ -108,6 +108,35 @@ struct TrainingJPRStepDetail: Decodable, Identifiable {
     let id: String
     let text: String
     let order: Int
+    let description: String?
+    let required: Bool?
+    let safetyCritical: Bool?
+    let autoFailOnFail: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case text
+        case title
+        case description
+        case order
+        case required
+        case safetyCritical
+        case autoFailOnFail
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(String.self, forKey: .id)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+            ?? container.decodeIfPresent(String.self, forKey: .title)
+            ?? "Step"
+        order = try container.decodeIfPresent(Int.self, forKey: .order) ?? 0
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        required = try container.decodeIfPresent(Bool.self, forKey: .required)
+        safetyCritical = try container.decodeIfPresent(Bool.self, forKey: .safetyCritical)
+        autoFailOnFail = try container.decodeIfPresent(Bool.self, forKey: .autoFailOnFail)
+    }
 }
 
 extension MobileTrainingCourseDetail {
