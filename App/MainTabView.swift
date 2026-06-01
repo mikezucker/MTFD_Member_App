@@ -399,7 +399,10 @@ private struct CommandWorkspaceView: View {
                 CommandMessagesDetailView(
                     title: mappedCommandUserRole == .chief ? "Department Messages" : "Station Messages",
                     messages: commandPreviewAllMessages,
-                    unreadCount: messageViewModel.unreadCount
+                    unreadCount: messageViewModel.unreadCount,
+                    onMessageCreated: {
+                        await messageViewModel.refresh()
+                    }
                 )
             }
         }
@@ -1501,6 +1504,19 @@ private struct CommandMessagesDetailView: View {
     let title: String
     let messages: [MobileMessage]
     let unreadCount: Int
+    let onMessageCreated: (() async -> Void)?
+
+    init(
+        title: String,
+        messages: [MobileMessage],
+        unreadCount: Int,
+        onMessageCreated: (() async -> Void)? = nil
+    ) {
+        self.title = title
+        self.messages = messages
+        self.unreadCount = unreadCount
+        self.onMessageCreated = onMessageCreated
+    }
 
     @State private var showCreateMessage = false
     @State private var createdMessage: MobileMessage?
@@ -1596,6 +1612,12 @@ private struct CommandMessagesDetailView: View {
                 CommandCreateMessageView { message in
                     createdMessage = message
                     showCreateMessage = false
+
+                    if let onMessageCreated {
+                        Task {
+                            await onMessageCreated()
+                        }
+                    }
                 }
             }
         }
