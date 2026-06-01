@@ -17,7 +17,7 @@ struct DashboardLayoutView: View {
                 ForEach(cards) { card in
                     HStack(spacing: 12) {
                         Image(systemName: card.systemImage)
-                            .foregroundStyle(AppTheme.gold)
+                            .foregroundStyle(Color.accentColor)
                             .frame(width: 24)
 
                         Text(card.title)
@@ -70,7 +70,7 @@ struct DashboardLayoutView: View {
     private func pinnedRow(title: String, systemImage: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .foregroundStyle(AppTheme.gold)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 24)
 
             Text(title)
