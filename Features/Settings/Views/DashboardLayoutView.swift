@@ -17,7 +17,7 @@ struct DashboardLayoutView: View {
                 ForEach(cards) { card in
                     HStack(spacing: 12) {
                         Image(systemName: card.systemImage)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(.blue)
                             .frame(width: 24)
 
                         Text(card.title)
@@ -40,6 +40,7 @@ struct DashboardLayoutView: View {
                             )
                         )
                         .labelsHidden()
+                        .tint(.blue)
                     }
                 }
                 .onMove(perform: moveCards)
@@ -70,7 +71,7 @@ struct DashboardLayoutView: View {
     private func pinnedRow(title: String, systemImage: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(.blue)
                 .frame(width: 24)
 
             Text(title)

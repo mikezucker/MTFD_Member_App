@@ -8,21 +8,6 @@ import WidgetKit
 import SwiftUI
 import Foundation
 
-struct DispatchLiveActivityAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
-        var callType: String
-        var address: String
-        var units: [String]
-        var statusText: String
-        var isCritical: Bool
-        var isWorkingFire: Bool
-        var lastUpdated: Date
-    }
-
-    var dispatchId: String
-    var startedAt: Date
-}
-
 struct MTFDLiveActivitiesLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DispatchLiveActivityAttributes.self) { context in

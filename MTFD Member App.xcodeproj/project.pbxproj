@@ -19,6 +19,7 @@
 		40549EC92FCE2495008276CF /* DispatchLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40549EC62FCE2495008276CF /* DispatchLiveActivityManager.swift */; };
 		406310CA2F92DC2D001078AF /* DepartmentStationStatsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 406310C92F92DC2B001078AF /* DepartmentStationStatsSection.swift */; };
 		406310CC2F92E8D5001078AF /* DashboardCallSummarySection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 406310CB2F92E8D3001078AF /* DashboardCallSummarySection.swift */; };
+		4084F75A2FCEDDCA003330D3 /* DispatchLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40549EC52FCE2495008276CF /* DispatchLiveActivityAttributes.swift */; };
 		408691792FBF7AB700A40828 /* MobileTrainingResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408691782FBF7AB100A40828 /* MobileTrainingResponse.swift */; };
 		4086917B2FBF7B1700A40828 /* TrainingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4086917A2FBF7B1300A40828 /* TrainingViewModel.swift */; };
 		4086917E2FBF831000A40828 /* MobileTrainingCourseDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4086917D2FBF830E00A40828 /* MobileTrainingCourseDetail.swift */; };
@@ -87,6 +88,7 @@
 		40D121202FB13E36003B3E41 /* MessageCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211F2FB13E34003B3E41 /* MessageCenterView.swift */; };
 		40F2EEB12FCDF44C00140AC5 /* DashboardLayoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */; };
 		40F2EEB32FCDF4AE00140AC5 /* DashboardCardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */; };
+		29EA0E981267FDFE63EC108A /* LiveActivitiesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A85CC8AAC42424969824CE0E /* LiveActivitiesSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -214,6 +216,7 @@
 		40D1211F2FB13E34003B3E41 /* MessageCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCenterView.swift; sourceTree = "<group>"; };
 		40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardLayoutView.swift; sourceTree = "<group>"; };
 		40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCardLayout.swift; sourceTree = "<group>"; };
+		A85CC8AAC42424969824CE0E /* LiveActivitiesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitiesSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -941,6 +944,7 @@
 			isa = PBXGroup;
 			children = (
 				40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */,
+				A85CC8AAC42424969824CE0E /* LiveActivitiesSettingsView.swift */,
 				40B22B822F9FE49100808F42 /* SettingsView.swift */,
 				40B22B792F9FDDBC00808F42 /* NotificationPreferencesView.swift */,
 			);
@@ -1155,6 +1159,7 @@
 				408910E12F8FED410035C355 /* AppAlert.swift in Sources */,
 				408911492F9033CE0035C355 /* DashboardResponse.swift in Sources */,
 				40F2EEB12FCDF44C00140AC5 /* DashboardLayoutView.swift in Sources */,
+				29EA0E981267FDFE63EC108A /* LiveActivitiesSettingsView.swift in Sources */,
 				406310CC2F92E8D5001078AF /* DashboardCallSummarySection.swift in Sources */,
 				408691792FBF7AB700A40828 /* MobileTrainingResponse.swift in Sources */,
 				408910E22F8FED410035C355 /* AppScreen.swift in Sources */,
@@ -1223,6 +1228,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4084F75A2FCEDDCA003330D3 /* DispatchLiveActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

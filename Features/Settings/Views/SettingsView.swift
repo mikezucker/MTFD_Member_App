@@ -25,6 +25,7 @@ struct SettingsView: View {
                 } label: {
                     HStack {
                         Label("Send Password Reset Link", systemImage: "key.fill")
+                            .foregroundStyle(.blue)
 
                         Spacer()
 
@@ -53,14 +54,23 @@ struct SettingsView: View {
                     DashboardLayoutView()
                 } label: {
                     Label("Dashboard Layout", systemImage: "rectangle.grid.2x2.fill")
+                        .foregroundStyle(.blue)
                 }
             }
 
             Section("Alerts") {
                 NavigationLink {
+                    LiveActivitiesSettingsView()
+                } label: {
+                    Label("Live Activities", systemImage: "rectangle.on.rectangle")
+                        .foregroundStyle(.blue)
+                }
+
+                NavigationLink {
                     NotificationPreferencesView()
                 } label: {
                     Label("Notifications", systemImage: "bell.badge")
+                        .foregroundStyle(.blue)
                 }
             }
         }

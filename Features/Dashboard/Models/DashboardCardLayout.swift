@@ -1,5 +1,10 @@
 import Foundation
 
+extension Notification.Name {
+    static let dashboardLayoutDidChange = Notification.Name("dashboardLayoutDidChange")
+}
+
+
 enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
     case messages
     case assignedTraining
@@ -20,7 +25,7 @@ enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
         case .apparatusWorkOrders: return "Apparatus Work Orders"
         case .documents: return "Documents / SOPs"
         case .scheduleEvents: return "Schedule / Events"
-        case .recentCalls: return "Recent Calls"
+        case .recentCalls: return "Latest Dispatches"
         case .departmentUpdates: return "Department Updates"
         case .stationUpdates: return "Station Updates"
         case .needsAttention: return "Needs Attention"
@@ -80,6 +85,7 @@ enum DashboardCardLayoutDefaults {
         let rawValues = cards.map(\.rawValue)
         if let data = try? JSONEncoder().encode(rawValues) {
             UserDefaults.standard.set(data, forKey: orderKey)
+            NotificationCenter.default.post(name: .dashboardLayoutDidChange, object: nil)
         }
     }
 
@@ -92,10 +98,12 @@ enum DashboardCardLayoutDefaults {
 
     static func saveHiddenCards(_ cards: Set<DashboardCardID>) {
         UserDefaults.standard.set(cards.map(\.rawValue), forKey: hiddenCardsKey)
+        NotificationCenter.default.post(name: .dashboardLayoutDidChange, object: nil)
     }
 
     static func reset() {
         UserDefaults.standard.removeObject(forKey: orderKey)
         UserDefaults.standard.removeObject(forKey: hiddenCardsKey)
+        NotificationCenter.default.post(name: .dashboardLayoutDidChange, object: nil)
     }
 }

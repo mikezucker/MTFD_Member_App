@@ -52,15 +52,35 @@ final class DashboardViewModel: ObservableObject {
         activeDispatches.insert(activeDispatch, at: 0)
     }
 
+    private func timedDashboardRequest<T>(_ label: String, operation: () async throws -> T) async throws -> T {
+        let startedAt = Date()
+        print("⏱️ Dashboard request started: \(label)")
+
+        do {
+            let result = try await operation()
+            print("✅ Dashboard request finished: \(label) in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s")
+            return result
+        } catch {
+            print("🧨 Dashboard request failed: \(label) in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s - \(error.localizedDescription)")
+            throw error
+        }
+    }
+
     private func loadDashboard(role: UserRole, force: Bool) async {
         guard !isLoadingDashboard else { return }
+
+        let dashboardLoadStartedAt = Date()
+        print("⏱️ Dashboard load started. force=\(force), role=\(role.rawValue)")
 
         if !force, hasLoaded {
             return
         }
 
         isLoadingDashboard = true
-        defer { isLoadingDashboard = false }
+        defer {
+            isLoadingDashboard = false
+            print("⏱️ Dashboard load finished in \(String(format: "%.2f", Date().timeIntervalSince(dashboardLoadStartedAt)))s")
+        }
 
         state = DashboardState(
             greeting: state.greeting,
@@ -81,16 +101,33 @@ final class DashboardViewModel: ObservableObject {
             recentDepartmentCalls: state.recentDepartmentCalls,
             apparatusWorkOrders: state.apparatusWorkOrders,
             apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
+            upcomingSchedule: state.upcomingSchedule,
             isLoading: true,
             errorMessage: nil
         )
 
         do {
-            async let dashboardResponse = APIClient.shared.fetchDashboard()
-            async let dispatchHistoryResponse = APIClient.shared.fetchDispatchHistory(window: "24h")
+            async let dashboardResponse = timedDashboardRequest("mobile dashboard") {
+                try await APIClient.shared.fetchDashboard()
+            }
+            async let dispatchHistoryResponse = timedDashboardRequest("dispatch history 24h") {
+                try await APIClient.shared.fetchDispatchHistory(window: "24h")
+            }
+            async let upcomingScheduleResponse = timedDashboardRequest("upcoming schedule") {
+                try await APIClient.shared.fetchMobileUpcomingSchedule()
+            }
 
             let dashboard = try await dashboardResponse
             let dispatchHistory = try await dispatchHistoryResponse
+
+            let upcomingSchedule: APIClient.MobileUpcomingScheduleResponse?
+            do {
+                upcomingSchedule = try await upcomingScheduleResponse
+                print("🗓️ Upcoming schedule:", upcomingSchedule as Any)
+            } catch {
+                upcomingSchedule = nil
+                print("🧨 Upcoming schedule failed:", error.localizedDescription)
+            }
 
             activeDispatches = dashboard.activeDispatches ?? dispatchHistory.activeDispatches
 
@@ -116,12 +153,17 @@ final class DashboardViewModel: ObservableObject {
                 recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
                 apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
                 apparatusWorkOrdersMessage: dashboard.apparatusWorkOrdersMessage,
+                upcomingSchedule: upcomingSchedule,
                 isLoading: false,
                 errorMessage: nil
             )
 
             hasLoaded = true
             lastLoadedAt = Date()
+
+            Task {
+                await loadDispatchStats()
+            }
         } catch {
             activeDispatches = []
 
@@ -144,11 +186,49 @@ final class DashboardViewModel: ObservableObject {
                 recentDepartmentCalls: [],
                 apparatusWorkOrders: [],
                 apparatusWorkOrdersMessage: nil,
+                upcomingSchedule: nil,
                 isLoading: false,
                 errorMessage: error.localizedDescription
             )
 
             print("Dashboard load failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadDispatchStats() async {
+        let startedAt = Date()
+        print("⏱️ Dashboard separate stats load started")
+
+        do {
+            let statsResponse = try await APIClient.shared.fetchDispatchStats()
+
+            state = DashboardState(
+                greeting: state.greeting,
+                role: state.role,
+                alerts: state.alerts,
+                stationUpdates: state.stationUpdates,
+                departmentUpdates: state.departmentUpdates,
+                attentionItems: state.attentionItems,
+                quickActions: state.quickActions,
+                progressItems: state.progressItems,
+                assignedTrainingPreview: state.assignedTrainingPreview,
+                pendingDocumentSignatures: state.pendingDocumentSignatures,
+                stationCallTotal: statsResponse.stats?.stationYtd,
+                departmentCallTotal: statsResponse.stats?.departmentYtd,
+                dashboardDepartment: statsResponse.department,
+                dashboardStation: statsResponse.station,
+                lastUpdated: statsResponse.lastUpdated,
+                recentDepartmentCalls: state.recentDepartmentCalls,
+                apparatusWorkOrders: state.apparatusWorkOrders,
+                apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
+                upcomingSchedule: state.upcomingSchedule,
+                isLoading: state.isLoading,
+                errorMessage: state.errorMessage
+            )
+
+            print("✅ Dashboard separate stats load finished in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s")
+        } catch {
+            print("🧨 Dashboard separate stats load failed in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s: \(error.localizedDescription)")
         }
     }
 

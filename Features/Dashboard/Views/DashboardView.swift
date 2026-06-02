@@ -16,6 +16,8 @@ struct DashboardView: View {
     @State private var hasLoadedDispatchUnits = false
     @State private var showMessageModal = false
     @State private var showMessageCenter = false
+    @State private var messageCenterMode: MessageCenterView.Mode = .combined
+    @State private var dashboardLayoutRefreshID = UUID()
     @State private var showDashboardLayoutEditor = false
     @State private var selectedDispatch: DispatchNotificationPayload?
 
@@ -235,7 +237,10 @@ struct DashboardView: View {
                 }
             }
             .navigationDestination(isPresented: $showMessageCenter) {
-                MessageCenterView()
+                MessageCenterView(mode: messageCenterMode)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .dashboardLayoutDidChange)) { _ in
+                dashboardLayoutRefreshID = UUID()
             }
             .sheet(isPresented: $showDashboardLayoutEditor) {
                 NavigationStack {
@@ -268,6 +273,8 @@ struct DashboardView: View {
     }
 
     private var visibleDashboardCards: [DashboardCardID] {
+        _ = dashboardLayoutRefreshID
+
         let hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
         let enabledCards = DashboardCardLayoutDefaults
             .savedOrder(for: session.currentUser?.role)
@@ -298,7 +305,7 @@ struct DashboardView: View {
         case .apparatusWorkOrders:
             return !viewModel.state.apparatusWorkOrders.isEmpty
         case .scheduleEvents:
-            return false
+            return true
         }
     }
 
@@ -306,20 +313,34 @@ struct DashboardView: View {
     private func dashboardCard(_ card: DashboardCardID) -> some View {
         switch card {
         case .messages:
-            DashboardMessageCenterCard {
-                dispatchNotificationCount = 0
-                isDispatchBellRinging = false
-                showMessageCenter = true
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Messages",
+                    subtitle: "Loading messages...",
+                    systemImage: "envelope.fill"
+                )
+            } else {
+                DashboardMessageCenterCard {
+                    dispatchNotificationCount = 0
+                    isDispatchBellRinging = false
+                    openMessageCenter(mode: .messagesOnly)
+                }
             }
 
         case .assignedTraining:
             sectionTitle("Assigned Training")
 
-            if viewModel.state.assignedTrainingPreview.isEmpty {
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Assigned Training",
+                    subtitle: "Loading assignments...",
+                    systemImage: "graduationcap.fill"
+                )
+            } else if viewModel.state.assignedTrainingPreview.isEmpty {
                 DashboardSmallStatusCard(
                     title: "Assigned Training",
                     subtitle: "No assigned training right now.",
-                    systemImage: "graduationcap.fill"
+                    systemImage: "graduationcap.fill",
                 ) {
                     handleNavigation(to: .trainingAssigned)
                 }
@@ -334,11 +355,17 @@ struct DashboardView: View {
         case .departmentUpdates:
             sectionTitle("Dept. Update")
 
-            if viewModel.state.departmentUpdates.isEmpty {
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Department Updates",
+                    subtitle: "Loading updates...",
+                    systemImage: "megaphone.fill"
+                )
+            } else if viewModel.state.departmentUpdates.isEmpty {
                 DashboardSmallStatusCard(
                     title: "Department Updates",
                     subtitle: "No department updates posted.",
-                    systemImage: "megaphone.fill"
+                    systemImage: "megaphone.fill",
                 ) {
                     handleNavigation(to: .messageCenter)
                 }
@@ -353,11 +380,17 @@ struct DashboardView: View {
         case .stationUpdates:
             sectionTitle("Station Update")
 
-            if viewModel.state.stationUpdates.isEmpty {
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Station Updates",
+                    subtitle: "Loading station updates...",
+                    systemImage: "building.2.fill"
+                )
+            } else if viewModel.state.stationUpdates.isEmpty {
                 DashboardSmallStatusCard(
                     title: "Station Updates",
                     subtitle: "No station updates posted.",
-                    systemImage: "building.2.fill"
+                    systemImage: "building.2.fill",
                 ) {
                     handleNavigation(to: .messageCenter)
                 }
@@ -372,11 +405,17 @@ struct DashboardView: View {
         case .needsAttention:
             sectionTitle("Needs Attention")
 
-            if viewModel.state.attentionItems.isEmpty {
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Needs Attention",
+                    subtitle: "Checking items...",
+                    systemImage: "checkmark.seal.fill"
+                )
+            } else if viewModel.state.attentionItems.isEmpty {
                 DashboardSmallStatusCard(
                     title: "Needs Attention",
                     subtitle: "Nothing needs your attention right now.",
-                    systemImage: "checkmark.seal.fill"
+                    systemImage: "checkmark.seal.fill",
                 ) {
                     handleNavigation(to: .messageCenter)
                 }
@@ -393,24 +432,38 @@ struct DashboardView: View {
 
             let pendingCount = viewModel.state.pendingDocumentSignatures
 
-            DashboardSmallStatusCard(
-                title: "Documents / SOPs",
-                subtitle: pendingCount > 0
-                    ? "\(pendingCount) item\(pendingCount == 1 ? "" : "s") need acknowledgement."
-                    : "No documents need acknowledgement.",
-                systemImage: "doc.text.fill"
-            ) {
-                handleNavigation(to: .documents)
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Documents / SOPs",
+                    subtitle: "Checking documents...",
+                    systemImage: "doc.text.fill"
+                )
+            } else {
+                DashboardSmallStatusCard(
+                    title: "Documents / SOPs",
+                    subtitle: pendingCount > 0
+                        ? "\(pendingCount) item\(pendingCount == 1 ? "" : "s") need acknowledgement."
+                        : "No documents need acknowledgement.",
+                    systemImage: "doc.text.fill"
+                ) {
+                    handleNavigation(to: .documents)
+                }
             }
 
         case .apparatusWorkOrders:
             sectionTitle("Apparatus Work Orders")
 
-            if viewModel.state.apparatusWorkOrders.isEmpty {
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Apparatus Work Orders",
+                    subtitle: "Loading apparatus issues...",
+                    systemImage: "wrench.and.screwdriver.fill"
+                )
+            } else if viewModel.state.apparatusWorkOrders.isEmpty {
                 DashboardSmallStatusCard(
                     title: "Apparatus Work Orders",
                     subtitle: viewModel.state.apparatusWorkOrdersMessage ?? "No open apparatus work orders.",
-                    systemImage: "wrench.and.screwdriver.fill"
+                    systemImage: "wrench.and.screwdriver.fill",
                 ) {
                     handleNavigation(to: .messageCenter)
                 }
@@ -423,32 +476,55 @@ struct DashboardView: View {
             }
 
         case .scheduleEvents:
-            sectionTitle("Schedule / Events")
+            sectionTitle(viewModel.state.upcomingSchedule?.isWorkingNow == true ? "Working Now" : "Next Shift")
 
-            DashboardSmallStatusCard(
-                title: "Schedule / Events",
-                subtitle: "No upcoming schedule items.",
-                systemImage: "calendar.badge.clock"
-            ) {
-                handleNavigation(to: .messageCenter)
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Schedule",
+                    subtitle: "Loading schedule...",
+                    systemImage: "calendar.badge.clock"
+                )
+            } else if let upcomingSchedule = viewModel.state.upcomingSchedule,
+               let nextShift = upcomingSchedule.nextShift {
+                DashboardUpcomingScheduleCard(
+                    schedule: upcomingSchedule,
+                    shift: nextShift
+                ) {
+                    router.selectedTab = .schedule
+                }
+            } else {
+                DashboardSmallStatusCard(
+                    title: "Schedule",
+                    subtitle: viewModel.state.upcomingSchedule?.error
+                        ?? "Schedule status unavailable or no upcoming shift found.",
+                    systemImage: "calendar.badge.clock",
+                ) {
+                    router.selectedTab = .schedule
+                }
             }
 
         case .recentCalls:
-            sectionTitle("Recent Calls")
+            sectionTitle("Latest Dispatches")
 
-            if viewModel.state.recentDepartmentCalls.isEmpty {
-                DashboardSmallStatusCard(
-                    title: "Recent Calls",
-                    subtitle: "No recent calls available.",
+            if viewModel.state.isLoading {
+                DashboardLoadingCard(
+                    title: "Latest Dispatches",
+                    subtitle: "Loading dispatch history...",
                     systemImage: "clock.arrow.circlepath"
+                )
+            } else if viewModel.state.recentDepartmentCalls.isEmpty {
+                DashboardSmallStatusCard(
+                    title: "Latest Dispatches",
+                    subtitle: "No recent dispatches available.",
+                    systemImage: "clock.arrow.circlepath",
                 ) {
-                    handleNavigation(to: .messageCenter)
+                    openMessageCenter(mode: .dispatchesOnly)
                 }
             } else {
                 DashboardRecentCallsCard(
                     calls: viewModel.state.recentDepartmentCalls
                 ) {
-                    handleNavigation(to: .messageCenter)
+                    openMessageCenter(mode: .dispatchesOnly)
                 }
             }
         }
@@ -548,13 +624,18 @@ struct DashboardView: View {
         }
     }
 
+    private func openMessageCenter(mode: MessageCenterView.Mode) {
+        messageCenterMode = mode
+        showMessageCenter = true
+    }
+
     private func handleNavigation(to destination: AppDestination) {
         switch destination {
         case .trainingAssigned:
             router.selectedTab = .training
 
         case .messageCenter:
-            showMessageCenter = true
+            openMessageCenter(mode: .messagesOnly)
 
         case .documents:
             router.selectedTab = .documents
@@ -597,9 +678,7 @@ private struct DashboardApparatusWorkOrdersCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    Image(systemName: "wrench.and.screwdriver.fill")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppTheme.gold)
+                    DashboardColorIcon(systemImage: "wrench.and.screwdriver.fill")
 
                     Text("Open apparatus issues")
                         .font(.headline.weight(.semibold))
@@ -667,9 +746,7 @@ private struct DashboardRecentCallsCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppTheme.gold)
+                    DashboardColorIcon(systemImage: "clock.arrow.circlepath")
 
                     Text("Latest dispatches")
                         .font(.headline.weight(.semibold))
@@ -734,24 +811,95 @@ private struct DashboardRecentCallsCard: View {
     }
 }
 
+private struct DashboardColorIcon: View {
+    let systemImage: String
+
+    private var emoji: String {
+        switch systemImage {
+        case "envelope.fill", "text.bubble.fill":
+            return "📨"
+        case "graduationcap.fill":
+            return "🎓"
+        case "checkmark.seal.fill":
+            return "✅"
+        case "doc.text.fill":
+            return "📄"
+        case "wrench.and.screwdriver.fill":
+            return "🛠️"
+        case "calendar.badge.clock":
+            return "🗓️"
+        case "person.fill.checkmark":
+            return "👤"
+        case "clock.arrow.circlepath":
+            return "🚨"
+        case "megaphone.fill":
+            return "📣"
+        case "building.2.fill":
+            return "🏢"
+        case "flame.fill":
+            return "🔥"
+        case "bell.and.waves.left.and.right.fill":
+            return "🚨"
+        default:
+            return "📌"
+        }
+    }
+
+    var body: some View {
+        Text(emoji)
+            .font(.system(size: 30))
+            .frame(width: 42, height: 42)
+            .minimumScaleFactor(0.8)
+            .accessibilityLabel(Text(systemImage))
+    }
+}
+
+private struct DashboardLoadingCard: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            DashboardColorIcon(systemImage: systemImage)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            ProgressView()
+                .tint(.white.opacity(0.85))
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+    }
+}
+
 private struct DashboardSmallStatusCard: View {
     let title: String
     let subtitle: String
     let systemImage: String
     let onTap: () -> Void
 
+
     var body: some View {
         Button(action: onTap) {
             HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.gold.opacity(0.18))
-                        .frame(width: 40, height: 40)
-
-                    Image(systemName: systemImage)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(AppTheme.gold)
-                }
+                DashboardColorIcon(systemImage: systemImage)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -788,15 +936,7 @@ private struct DashboardMessageCenterCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(alignment: .center, spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.gold.opacity(0.18))
-                        .frame(width: 40, height: 40)
-
-                    Image(systemName: "text.bubble.fill")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(AppTheme.gold)
-                }
+                DashboardColorIcon(systemImage: "envelope.fill")
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Messages")
@@ -873,15 +1013,7 @@ private struct DashboardAssignedTrainingPreviewCard: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(spacing: 10) {
-                ZStack {
-                    Circle()
-                        .fill(AppTheme.gold.opacity(0.18))
-                        .frame(width: 36, height: 36)
-
-                    Image(systemName: "graduationcap.fill")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(AppTheme.gold)
-                }
+                DashboardColorIcon(systemImage: "graduationcap.fill")
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Assigned Training")
@@ -1070,15 +1202,7 @@ private struct NewDispatchBanner: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.red.opacity(0.18))
-                        .frame(width: 42, height: 42)
-
-                    Image(systemName: "bell.and.waves.left.and.right.fill")
-                        .foregroundStyle(.red)
-                        .font(.system(size: 20, weight: .bold))
-                }
+                DashboardColorIcon(systemImage: "bell.and.waves.left.and.right.fill")
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("NEW DISPATCH")
@@ -1128,8 +1252,9 @@ private struct DashboardDispatchPreviewCard: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "bell.and.waves.left.and.right.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(.red)
+                        .font(.system(size: 23, weight: .bold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.red, .orange)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(callType)
@@ -1246,5 +1371,102 @@ private struct DispatchMapPreview: View {
         } catch {
             print("❌ Dispatch map preview failed:", error.localizedDescription)
         }
+    }
+}
+
+private struct DashboardUpcomingScheduleCard: View {
+    let schedule: APIClient.MobileUpcomingScheduleResponse
+    let shift: APIClient.MobileUpcomingShift
+    let onTap: () -> Void
+
+    private var statusText: String {
+        schedule.isWorkingNow ? "Working now" : "Next scheduled shift"
+    }
+
+    private var stationLine: String {
+        [shift.station, shift.assignment]
+            .compactMap { value in
+                let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+            .joined(separator: " • ")
+    }
+
+    private var detailLine: String {
+        if !stationLine.isEmpty {
+            return stationLine
+        }
+
+        return shift.title
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .center, spacing: 10) {
+                    DashboardColorIcon(systemImage: schedule.isWorkingNow ? "person.fill.checkmark" : "calendar.badge.clock")
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(statusText.uppercased())
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(AppTheme.gold)
+                            .tracking(0.6)
+
+                        Text(shift.title)
+                            .font(.headline.weight(.bold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    if schedule.isWorkingNow {
+                        HStack(spacing: 6) {
+                            Image(systemName: "circle.fill")
+                                .font(.system(size: 7, weight: .bold))
+
+                            Text("Currently working")
+                                .font(.caption2.weight(.black))
+                                .tracking(0.4)
+                        }
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Color.red.opacity(0.14))
+                        .clipShape(Capsule())
+                    }
+
+                    Text(shift.timeRange)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text(detailLine)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(2)
+
+                    if let date = shift.date, !date.isEmpty {
+                        Text(date)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.52))
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(schedule.isWorkingNow ? Color.green.opacity(0.75) : AppTheme.gold.opacity(0.45), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }

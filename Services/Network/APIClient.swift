@@ -551,6 +551,16 @@ final class APIClient {
         let data = try await performRequest(request)
         return try decode(MobileScheduleResponse.self, from: data)
     }
+
+    func fetchMobileUpcomingSchedule() async throws -> MobileUpcomingScheduleResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/schedule/me/upcoming",
+            requiresAuth: true
+        )
+
+        let data = try await performRequest(request)
+        return try decode(MobileUpcomingScheduleResponse.self, from: data)
+    }
 }
 
 
@@ -870,6 +880,26 @@ extension APIClient {
         let isClosed: Bool?
     }
     
+    struct MobileUpcomingScheduleResponse: Decodable {
+        let success: Bool
+        let isScheduleTrackedUser: Bool
+        let isWorkingNow: Bool
+        let nextShift: MobileUpcomingShift?
+        let error: String?
+    }
+
+    struct MobileUpcomingShift: Decodable {
+        let date: String?
+        let title: String
+        let station: String?
+        let timeRange: String
+        let assignment: String?
+        let name: String?
+        let startAt: String?
+        let endAt: String?
+        let source: String
+    }
+
     struct MobileScheduleResponse: Decodable {
         let success: Bool
         let message: String?

@@ -2,12 +2,31 @@ import SwiftUI
 import MapKit
 
 struct MessageCenterView: View {
+    enum Mode {
+        case combined
+        case dispatchesOnly
+        case messagesOnly
+    }
+
+    let mode: Mode
+
     @StateObject private var viewModel = MessageCenterViewModel()
 
     @State private var selectedMessage: MobileMessage?
     @State private var selectedDispatch: DispatchNotificationPayload?
     @State private var highlightedDispatchId: String?
-    @State private var selectedTab: MessageCenterTab = .dispatches
+    @State private var selectedTab: MessageCenterTab
+
+    init(mode: Mode = .combined) {
+        self.mode = mode
+
+        switch mode {
+        case .combined, .dispatchesOnly:
+            _selectedTab = State(initialValue: .dispatches)
+        case .messagesOnly:
+            _selectedTab = State(initialValue: .department)
+        }
+    }
 
     private enum MessageCenterTab: String, CaseIterable {
         case dispatches = "Dispatches"
@@ -44,12 +63,48 @@ struct MessageCenterView: View {
         viewModel.unreadDispatchCount
     }
 
+    private var screenTitle: String {
+        switch mode {
+        case .combined:
+            return "Message Center"
+        case .dispatchesOnly:
+            return "Latest Dispatches"
+        case .messagesOnly:
+            return "Messages"
+        }
+    }
+
+    private var introText: String {
+        switch mode {
+        case .combined:
+            return "Dispatches, training reminders, uniform updates, and department messages."
+        case .dispatchesOnly:
+            return "Recent dispatch history and active incidents."
+        case .messagesOnly:
+            return "Training reminders, uniform updates, and department messages."
+        }
+    }
+
+    private var introUnreadCount: Int {
+        switch mode {
+        case .combined:
+            return viewModel.unreadCount
+        case .dispatchesOnly:
+            return dispatchBadgeCount
+        case .messagesOnly:
+            return unreadDepartmentMessageCount
+        }
+    }
+
     var body: some View {
-        AppScreen(title: "Message Center") {
+        AppScreen(title: screenTitle) {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 18) {
                     introHeader
-                    tabSelector
+
+                    if mode == .combined {
+                        tabSelector
+                    }
 
                     if viewModel.isLoading && viewModel.messages.isEmpty {
                         loadingView
@@ -97,22 +152,22 @@ struct MessageCenterView: View {
 
     private var introHeader: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text("Dispatches, training reminders, uniform updates, and department messages.")
+            Text(introText)
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.68))
                 .fixedSize(horizontal: false, vertical: true)
 
             Spacer()
 
-            if viewModel.unreadCount > 0 {
-                Text("\(viewModel.unreadCount)")
+            if introUnreadCount > 0 {
+                Text("\(introUnreadCount)")
                     .font(.caption.bold())
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(Color.red)
                     .clipShape(Capsule())
-                    .accessibilityLabel("\(viewModel.unreadCount) unread messages")
+                    .accessibilityLabel("\(introUnreadCount) unread")
             }
         }
         .padding(.top, 0)

@@ -87,6 +87,7 @@ struct DashboardState {
     var recentDepartmentCalls: [RecentDepartmentCall] = []
     var apparatusWorkOrders: [DashboardApparatusWorkOrder] = []
     var apparatusWorkOrdersMessage: String? = nil
+    var upcomingSchedule: APIClient.MobileUpcomingScheduleResponse? = nil
     var isLoading: Bool = false
     var errorMessage: String? = nil
 
