@@ -9,6 +9,7 @@ struct DashboardView: View {
     @StateObject private var viewModel = DashboardViewModel()
     @StateObject private var unitCatalog = UnitCatalog()
     @StateObject private var router = NavigationRouter.shared
+    @StateObject private var scheduleViewModel = ScheduleViewModel()
 
     @State private var dispatchNotificationCount = 0
     @State private var isDispatchBellRinging = false
@@ -26,6 +27,7 @@ struct DashboardView: View {
     @State private var highlightedDispatchId: String?
 
     @AppStorage("dashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
+    @State private var selectedChiefScheduleDayId: String?
 
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
         viewModel.activeDispatches.first
@@ -53,13 +55,9 @@ struct DashboardView: View {
                         firstName: firstName,
                         roleTitle: memberRoleDisplayName(from: session.currentUser?.role),
                         stationTitle: stationDisplayName,
-                        unreadCount: dispatchNotificationCount,
+                        alertMode: headerAlertMode,
                         isBellRinging: isDispatchBellRinging,
-                        onTapMessages: {
-                            dispatchNotificationCount = 0
-                            isDispatchBellRinging = false
-                            showMessageCenter = true
-                        }
+                        onTapAlert: handleHeaderAlertTap
                     )
 
                     ScrollView(showsIndicators: false) {
@@ -95,12 +93,17 @@ struct DashboardView: View {
                                 }
                             }
 
-                            DashboardCallSummarySection(
-                                selectedWindowRawValue: $selectedWindowRawValue,
-                                department: viewModel.state.dashboardDepartment,
-                                station: viewModel.state.dashboardStation,
-                                isLoading: viewModel.state.isLoading
-                            )
+                            if isChiefRole {
+                                chiefCallSummarySection
+                                chiefScheduleOutlookSection
+                            } else {
+                                DashboardCallSummarySection(
+                                    selectedWindowRawValue: $selectedWindowRawValue,
+                                    department: viewModel.state.dashboardDepartment,
+                                    station: viewModel.state.dashboardStation,
+                                    isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats
+                                )
+                            }
 
                             dashboardEditHeader
 
@@ -125,6 +128,16 @@ struct DashboardView: View {
                     }
                     .refreshable {
                         viewModel.refresh(role: mappedUserRole(from: session.currentUser?.role))
+
+                        if isChiefRole {
+                            await scheduleViewModel.loadOutlookDays(count: 4)
+
+                            if selectedChiefScheduleDayId == nil {
+                                selectedChiefScheduleDayId = scheduleViewModel.outlookDays.first?.id
+                            }
+                        }
+
+                        scheduleLiveActivitySync()
                     }
                 }
 
@@ -146,6 +159,20 @@ struct DashboardView: View {
             .onAppear {
                 showContent = true
                 viewModel.loadIfNeeded(role: mappedUserRole(from: session.currentUser?.role))
+                scheduleLiveActivitySync()
+
+                if isChiefRole && scheduleViewModel.outlookDays.isEmpty {
+                    Task {
+                        await scheduleViewModel.loadOutlookDays(count: 4)
+
+                        if selectedChiefScheduleDayId == nil {
+                            selectedChiefScheduleDayId = scheduleViewModel.outlookDays.first?.id
+                        }
+
+                        print("🗓️ Chief dashboard schedule outlook days:", scheduleViewModel.outlookDays.count)
+                        print("🗓️ Chief dashboard schedule error:", scheduleViewModel.errorMessage ?? "none")
+                    }
+                }
 
                 if !hasLoadedDispatchUnits {
                     hasLoadedDispatchUnits = true
@@ -161,10 +188,14 @@ struct DashboardView: View {
                     showMessageModal = true
                 }
             }
+            .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
+                syncLiveActivityWithDashboardActiveDispatches()
+            }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
 
                 viewModel.refreshIfStale(role: mappedUserRole(from: session.currentUser?.role))
+                scheduleLiveActivitySync()
             }
             .onReceive(NotificationCenter.default.publisher(for: .didReceiveDispatchNotification)) { notification in
                 guard let dispatch = notification.object as? DispatchNotificationPayload else {
@@ -251,6 +282,12 @@ struct DashboardView: View {
     }
 
     private var firstName: String {
+        let role = session.currentUser?.role.uppercased() ?? ""
+
+        if role == "CHIEF" {
+            return "Chief"
+        }
+
         let fullName = session.currentUser?.name ?? ""
 
         if fullName.isEmpty {
@@ -272,6 +309,355 @@ struct DashboardView: View {
         false
     }
 
+    private var headerAlertMode: DashboardHeaderAlertMode {
+        if !viewModel.activeDispatches.isEmpty {
+            return .activeDispatch(messageCount: viewModel.state.unreadNonDispatchMessageCount)
+        }
+
+        if viewModel.state.unreadNonDispatchMessageCount > 0 {
+            return .unreadMessages(count: viewModel.state.unreadNonDispatchMessageCount)
+        }
+
+        return .latestDispatches
+    }
+
+    private func handleHeaderAlertTap() {
+        isDispatchBellRinging = false
+
+        if let activeDispatch = viewModel.activeDispatches.first {
+            let dispatch = makeDispatchPayload(from: activeDispatch)
+            latestDispatch = dispatch
+            highlightedDispatchId = dispatch.id
+
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                selectedDispatch = dispatch
+            }
+            return
+        }
+
+        if viewModel.state.unreadNonDispatchMessageCount > 0 {
+            openMessageCenter(mode: .messagesOnly)
+        } else {
+            openMessageCenter(mode: .dispatchesOnly)
+        }
+    }
+
+    private var isCommandRole: Bool {
+        let role = session.currentUser?.role.uppercased() ?? ""
+        return role == "ADMIN" ||
+            role == "CHIEF" ||
+            role == "OFFICER_CAREER" ||
+            role == "OFFICER_VOLUNTEER"
+    }
+
+    private var isChiefRole: Bool {
+        let role = session.currentUser?.role.uppercased() ?? ""
+        return role == "ADMIN" || role == "CHIEF"
+    }
+
+    private var chiefScheduleOutlookSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                sectionTitle("Schedule Outlook")
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    ForEach(scheduleViewModel.outlookDays) { day in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedChiefScheduleDayId = day.id
+                            }
+                        } label: {
+                            let isSelected = selectedChiefScheduleDayId == day.id || (selectedChiefScheduleDayId == nil && day.id == scheduleViewModel.outlookDays.first?.id)
+
+                            Text(day.label)
+                                .font(.caption.bold())
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
+                                .frame(minWidth: isSelected ? 66 : 46, minHeight: 34)
+                                .padding(.horizontal, isSelected ? 10 : 8)
+                                .background(
+                                    Capsule()
+                                        .fill(isSelected ? AppTheme.gold : Color.white.opacity(0.10))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            let entries = chiefScheduleEntriesForSelectedWindow
+            let displayEntries = entries.filter { entry in
+                entry.staffingDetails.contains { !$0.isVacant }
+            }
+            let totalVacancies = entries.reduce(0) { total, entry in
+                total + entry.staffingDetails.filter { $0.isVacant }.count
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                if displayEntries.isEmpty {
+                    Text("\(DashboardEmoji.schedule) No staffing returned for \(selectedChiefScheduleDay?.label ?? "this day").")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text("If staffing is posted in FirstDue, it will appear here. Full details remain available in Schedule.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.66))
+                } else {
+                    ScrollView(showsIndicators: true) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(displayEntries) { entry in
+                                chiefScheduleEntryRow(entry)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 150)
+
+                    Text("Full staffing details available in Schedule.")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.52))
+                }
+
+                if totalVacancies > 0 {
+                    Text("\(DashboardEmoji.warning) \(totalVacancies) vacanc\(totalVacancies == 1 ? "y" : "ies"). View full Schedule for open positions.")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.orange)
+                        .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+    }
+
+    private var selectedChiefScheduleDay: ScheduleOutlookDay? {
+        if let selectedChiefScheduleDayId,
+           let selectedDay = scheduleViewModel.outlookDays.first(where: { $0.id == selectedChiefScheduleDayId }) {
+            return selectedDay
+        }
+
+        return scheduleViewModel.outlookDays.first
+    }
+
+    private var chiefScheduleEntriesForSelectedWindow: [APIClient.MobileScheduleEntry] {
+        selectedChiefScheduleDay?.entries ?? []
+    }
+
+    private func chiefScheduleEntryRow(_ entry: APIClient.MobileScheduleEntry) -> some View {
+        let filledNames = entry.staffingDetails
+            .filter { !$0.isVacant }
+            .compactMap { detail -> String? in
+                let name = detail.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                guard !name.isEmpty else { return nil }
+
+                let qualifier = detail.qualifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return qualifier.isEmpty ? name : "\(name) (\(qualifier))"
+            }
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(entry.title)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                if let station = entry.station, !station.isEmpty {
+                    Text(station)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(AppTheme.gold)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+
+                Text(entry.timeRange)
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.56))
+                    .lineLimit(1)
+            }
+
+            Text(filledNames.joined(separator: " • "))
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(3)
+        }
+        .padding(.vertical, 2)
+    }
+
+
+    private enum ChiefCallTotalKind {
+        case department
+        case fire
+        case ems
+    }
+
+    private var selectedChiefTotalsWindow: DashboardTotalsWindow {
+        DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
+    }
+
+    private var chiefCallSummarySection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                sectionTitle("Call Totals")
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedWindowRawValue = window.rawValue
+                            }
+                        } label: {
+                            Text(window.rawValue)
+                                .font(.caption.bold())
+                                .foregroundStyle(selectedChiefTotalsWindow == window ? AppTheme.navy : .white.opacity(0.72))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(selectedChiefTotalsWindow == window ? AppTheme.gold : Color.white.opacity(0.10))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(alignment: .center, spacing: 0) {
+                chiefInlineTotal(
+                    value: chiefCallTotalValue(.department),
+                    label: "Department"
+                )
+
+                Divider()
+                    .frame(height: 48)
+                    .background(Color.white.opacity(0.18))
+
+                chiefInlineTotal(
+                    value: chiefCallTotalValue(.fire),
+                    label: "🔥 Fire"
+                )
+
+                Divider()
+                    .frame(height: 48)
+                    .background(Color.white.opacity(0.18))
+
+                chiefInlineTotal(
+                    value: chiefCallTotalValue(.ems),
+                    label: "🚑 EMS"
+                )
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+    }
+
+    private func chiefInlineTotal(value: Int, label: String) -> some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func chiefCallTotalValue(_ kind: ChiefCallTotalKind) -> Int {
+        let department = viewModel.state.dashboardDepartment
+
+        switch (selectedChiefTotalsWindow, kind) {
+        case (.last24h, .department):
+            return department?.total24h ?? 0
+        case (.last24h, .fire):
+            return department?.fire24h ?? 0
+        case (.last24h, .ems):
+            return department?.ems24h ?? 0
+
+        case (.last7d, .department):
+            return department?.total7d ?? 0
+        case (.last7d, .fire):
+            return department?.fire7d ?? 0
+        case (.last7d, .ems):
+            return department?.ems7d ?? 0
+
+        case (.last30d, .department):
+            return department?.total30d ?? 0
+        case (.last30d, .fire):
+            return department?.fire30d ?? 0
+        case (.last30d, .ems):
+            return department?.ems30d ?? 0
+
+        case (.ytd, .department):
+            return department?.totalYtd ?? 0
+        case (.ytd, .fire):
+            return department?.fireYtd ?? 0
+        case (.ytd, .ems):
+            return department?.emsYtd ?? 0
+        }
+    }
+
+    private var activeDispatchLiveActivitySignature: String {
+        viewModel.activeDispatches
+            .map { dispatch in
+                let priority = dispatch.priority ?? ""
+                let callType = dispatch.callType
+                let address = dispatch.address ?? ""
+                let message = dispatch.message ?? ""
+                let isWorkingFire = dispatch.isWorkingFire ?? false
+
+                return "\(dispatch.id)|\(priority)|\(callType)|\(address)|\(message)|\(isWorkingFire)"
+            }
+            .joined(separator: "||")
+    }
+
+    private func syncLiveActivityWithDashboardActiveDispatches() {
+        print("🟣 Dashboard LiveActivity sync. activeDispatches:", viewModel.activeDispatches.count)
+
+        guard let newestDispatch = viewModel.activeDispatches.first else {
+            print("🟣 Dashboard LiveActivity no active dispatches. Ending all.")
+            DispatchLiveActivityManager.shared.endAll()
+            return
+        }
+
+        let payload = makeDispatchPayload(
+            from: newestDispatch,
+            activeCallCount: viewModel.activeDispatches.count
+        )
+        print("🟣 Dashboard LiveActivity newest dispatch:", payload.id, payload.title)
+
+        DispatchLiveActivityManager.shared.startOrUpdate(from: payload)
+    }
+
+    private func scheduleLiveActivitySync() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            syncLiveActivityWithDashboardActiveDispatches()
+        }
+    }
+
     private var visibleDashboardCards: [DashboardCardID] {
         _ = dashboardLayoutRefreshID
 
@@ -288,6 +674,9 @@ struct DashboardView: View {
 
     private func dashboardCardHasData(_ card: DashboardCardID) -> Bool {
         switch card {
+        case .commandOverview:
+            return false
+
         case .messages:
             return true
         case .assignedTraining:
@@ -312,6 +701,19 @@ struct DashboardView: View {
     @ViewBuilder
     private func dashboardCard(_ card: DashboardCardID) -> some View {
         switch card {
+        case .commandOverview:
+            sectionTitle(isChiefRole ? "Chief Command" : "Officer Command")
+
+            DashboardSmallStatusCard(
+                title: isChiefRole ? "Command Overview" : "Officer Overview",
+                subtitle: isChiefRole
+                    ? "Department staffing, command messages, training compliance, and operational readiness."
+                    : "Station staffing, assigned members, training progress, and apparatus readiness.",
+                systemImage: "shield.lefthalf.filled"
+            ) {
+                router.selectedTab = .command
+            }
+
         case .messages:
             if viewModel.state.isLoading {
                 DashboardLoadingCard(
@@ -584,16 +986,26 @@ struct DashboardView: View {
         return UserDefaults.standard.bool(forKey: "notification_haptics_enabled")
     }
 
-    private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {
-        DispatchNotificationPayload(
+    private func makeDispatchPayload(
+        from activeDispatch: APIClient.ActiveDispatch,
+        activeCallCount: Int = 1
+    ) -> DispatchNotificationPayload {
+        let baseBody = activeDispatch.address ?? activeDispatch.message ?? "Dispatch details available"
+
+        let liveActivityBody = activeCallCount > 1
+            ? "\(baseBody) • \(activeCallCount) active calls"
+            : baseBody
+
+        return DispatchNotificationPayload(
             type: activeDispatch.priority == "CRITICAL" ? .dispatchCritical : .dispatch,
             id: activeDispatch.id,
             title: activeDispatch.callType,
-            body: activeDispatch.message ?? activeDispatch.address,
+            body: liveActivityBody,
             callType: activeDispatch.callType,
             address: activeDispatch.address,
             units: activeDispatch.units,
             isWorkingFire: activeDispatch.isWorkingFire ?? false,
+            activeCallCount: activeCallCount,
             stationId: nil,
             messageId: nil,
             trainingId: nil,
@@ -670,7 +1082,7 @@ struct DashboardView: View {
     }
 }
 
-private struct DashboardApparatusWorkOrdersCard: View {
+struct DashboardApparatusWorkOrdersCard: View {
     let workOrders: [DashboardApparatusWorkOrder]
     let onTap: () -> Void
 
@@ -840,6 +1252,8 @@ private struct DashboardColorIcon: View {
             return "🔥"
         case "bell.and.waves.left.and.right.fill":
             return "🚨"
+        case "shield.lefthalf.filled":
+            return "🛡️"
         default:
             return "📌"
         }
