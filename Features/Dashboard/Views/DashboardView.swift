@@ -436,6 +436,13 @@ struct DashboardView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
             }
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                horizontalDashboardSwipeGesture(
+                    onPrevious: selectPreviousChiefScheduleDay,
+                    onNext: selectNextChiefScheduleDay
+                )
+            )
         }
     }
 
@@ -450,6 +457,53 @@ struct DashboardView: View {
 
     private var chiefScheduleEntriesForSelectedWindow: [APIClient.MobileScheduleEntry] {
         selectedChiefScheduleDay?.entries ?? []
+    }
+
+    private func horizontalDashboardSwipeGesture(
+        onPrevious: @escaping () -> Void,
+        onNext: @escaping () -> Void
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 24)
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+
+                guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else {
+                    return
+                }
+
+                if horizontal < 0 {
+                    onNext()
+                } else {
+                    onPrevious()
+                }
+            }
+    }
+
+    private func selectNextChiefScheduleDay() {
+        let days = scheduleViewModel.outlookDays
+        guard !days.isEmpty else { return }
+
+        let currentId = selectedChiefScheduleDay?.id ?? days.first?.id
+        let currentIndex = days.firstIndex { $0.id == currentId } ?? 0
+        let nextIndex = min(currentIndex + 1, days.count - 1)
+
+        withAnimation(.easeInOut(duration: 0.22)) {
+            selectedChiefScheduleDayId = days[nextIndex].id
+        }
+    }
+
+    private func selectPreviousChiefScheduleDay() {
+        let days = scheduleViewModel.outlookDays
+        guard !days.isEmpty else { return }
+
+        let currentId = selectedChiefScheduleDay?.id ?? days.first?.id
+        let currentIndex = days.firstIndex { $0.id == currentId } ?? 0
+        let previousIndex = max(currentIndex - 1, 0)
+
+        withAnimation(.easeInOut(duration: 0.22)) {
+            selectedChiefScheduleDayId = days[previousIndex].id
+        }
     }
 
     private func chiefScheduleEntryRow(_ entry: APIClient.MobileScheduleEntry) -> some View {
@@ -566,6 +620,35 @@ struct DashboardView: View {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
             }
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                horizontalDashboardSwipeGesture(
+                    onPrevious: selectPreviousChiefTotalsWindow,
+                    onNext: selectNextChiefTotalsWindow
+                )
+            )
+        }
+    }
+
+    private func selectNextChiefTotalsWindow() {
+        let windows = DashboardTotalsWindow.allCases
+        guard let currentIndex = windows.firstIndex(of: selectedChiefTotalsWindow) else { return }
+
+        let nextIndex = min(currentIndex + 1, windows.count - 1)
+
+        withAnimation(.easeInOut(duration: 0.22)) {
+            selectedWindowRawValue = windows[nextIndex].rawValue
+        }
+    }
+
+    private func selectPreviousChiefTotalsWindow() {
+        let windows = DashboardTotalsWindow.allCases
+        guard let currentIndex = windows.firstIndex(of: selectedChiefTotalsWindow) else { return }
+
+        let previousIndex = max(currentIndex - 1, 0)
+
+        withAnimation(.easeInOut(duration: 0.22)) {
+            selectedWindowRawValue = windows[previousIndex].rawValue
         }
     }
 
