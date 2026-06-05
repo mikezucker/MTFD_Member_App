@@ -140,35 +140,45 @@ struct DispatchDetailView: View {
     }
 
     private var locationCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("Location", icon: "location.fill")
+        Button {
+            openMaps()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("Location", icon: "location.fill")
 
-            if let placeName, !placeName.isEmpty {
-                Text(placeName)
-                    .font(.headline)
-                    .foregroundStyle(.white)
+                if let placeName, !placeName.isEmpty {
+                    Text(placeName)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                }
+
+                Text(address)
+                    .font(.title3.bold())
+                    .foregroundStyle(.white.opacity(0.9))
+
+                if let city = liveDispatch?.city {
+                    Text([city, liveDispatch?.state].compactMap { $0 }.joined(separator: ", "))
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+
+                if let coordinatesText {
+                    Text(coordinatesText)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.white.opacity(0.5))
+                }
+
+                Label("Tap to navigate", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.gold)
+                    .padding(.top, 2)
             }
-
-            Text(address)
-                .font(.title3.bold())
-                .foregroundStyle(.white.opacity(0.9))
-
-            if let city = liveDispatch?.city {
-                Text([city, liveDispatch?.state].compactMap { $0 }.joined(separator: ", "))
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.65))
-            }
-
-            if let coordinatesText {
-                Text(coordinatesText)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.white.opacity(0.5))
-            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 22))
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .buttonStyle(.plain)
     }
 
     private var unitsCard: some View {
@@ -331,7 +341,28 @@ struct DispatchDetailView: View {
         Task {
             do {
                 let request = MKLocalSearch.Request()
-                request.naturalLanguageQuery = address
+
+                let city = liveDispatch?.city?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let state = liveDispatch?.state?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let searchAddress: String
+                if let city, !city.isEmpty {
+                    searchAddress = [
+                        address,
+                        city,
+                        state?.isEmpty == false ? state : "NJ"
+                    ]
+                    .compactMap { $0 }
+                    .joined(separator: ", ")
+                } else {
+                    searchAddress = "\(address), Morris Township, NJ"
+                }
+
+                request.naturalLanguageQuery = searchAddress
+                request.region = MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
+                    span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+                )
 
                 let search = MKLocalSearch(request: request)
                 let response = try await search.start()

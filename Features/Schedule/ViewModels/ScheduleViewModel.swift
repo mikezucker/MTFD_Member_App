@@ -40,6 +40,7 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     func loadOutlookDays(count: Int = 4) async {
+        print("🧪 loadOutlookDays START")
         isLoading = true
         errorMessage = nil
 
@@ -110,6 +111,7 @@ final class ScheduleViewModel: ObservableObject {
             }
         }
 
+        print("🧪 assigning outlookDays =", days.count)
         outlookDays = days
         print("🗓️ Schedule outlook days loaded:", outlookDays.map { "\($0.label)=\($0.entries.count)" }.joined(separator: ", "))
     }

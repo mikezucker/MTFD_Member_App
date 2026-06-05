@@ -779,7 +779,12 @@ extension APIClient {
         let id: String
         let callType: String
         let address: String?
+        var address2: String? = nil
         let placeName: String?
+        var city: String? = nil
+        var state: String? = nil
+        var latitude: Double? = nil
+        var longitude: Double? = nil
         let message: String?
         let units: [String]
         let dispatchedAt: Date?

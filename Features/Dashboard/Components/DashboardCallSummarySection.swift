@@ -117,12 +117,6 @@ struct DashboardCallSummarySection: View {
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
             }
             .contentShape(Rectangle())
-            .highPriorityGesture(
-                horizontalSwipeGesture(
-                    onPrevious: selectPreviousWindow,
-                    onNext: selectNextWindow
-                )
-            )
         }
         .padding(.vertical, 4)
     }

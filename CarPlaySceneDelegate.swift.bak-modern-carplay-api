@@ -1,0 +1,523 @@
+//
+//  CarPlaySceneDelegate.swift
+//  MTFD Member App
+//
+//  Created by Michael Zucker on 6/5/26.
+//
+
+import CarPlay
+import Foundation
+import MapKit
+import UIKit
+
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+    private weak var interfaceController: CPInterfaceController?
+
+    private var refreshTimer: Timer?
+    private var activeDispatches: [APIClient.ActiveDispatch] = []
+    private var recentDispatches: [APIClient.DispatchHistoryItem] = []
+    private var isLoading = false
+
+    private enum CarPlayScreen {
+        case root
+        case active
+        case recent
+        case detail
+    }
+
+    private var currentScreen: CarPlayScreen = .root
+
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didConnect interfaceController: CPInterfaceController
+    ) {
+        self.interfaceController = interfaceController
+        currentScreen = .root
+
+        interfaceController.setRootTemplate(makeRootTemplate(isLoading: true), animated: true)
+
+        startRefreshTimer()
+        refreshDispatches(updateVisibleScreen: true)
+    }
+
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didDisconnect interfaceController: CPInterfaceController
+    ) {
+        stopRefreshTimer()
+        self.interfaceController = nil
+        currentScreen = .root
+        activeDispatches = []
+        recentDispatches = []
+    }
+
+    // MARK: - Refresh
+
+    private func startRefreshTimer() {
+        stopRefreshTimer()
+
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            self?.refreshDispatches(updateVisibleScreen: true)
+        }
+    }
+
+    private func stopRefreshTimer() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    private func refreshDispatches(updateVisibleScreen: Bool) {
+        guard !isLoading else { return }
+
+        isLoading = true
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let response = try await APIClient.shared.fetchDispatchHistory(window: "24h")
+
+                await MainActor.run {
+                    self.activeDispatches = response.activeDispatches
+                    self.recentDispatches = Array(response.historicalDispatches.prefix(10))
+                    self.isLoading = false
+
+                    guard updateVisibleScreen else { return }
+
+                    switch self.currentScreen {
+                    case .root:
+                        self.interfaceController?.setRootTemplate(self.makeRootTemplate(isLoading: false), animated: false)
+                    case .active:
+                        self.replaceTopTemplate(with: self.makeActiveDispatchesTemplate())
+                    case .recent:
+                        self.replaceTopTemplate(with: self.makeRecentDispatchesTemplate())
+                    case .detail:
+                        break
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+
+                    guard updateVisibleScreen else { return }
+
+                    switch self.currentScreen {
+                    case .root:
+                        self.interfaceController?.setRootTemplate(self.makeRootTemplate(isLoading: false, errorMessage: error.localizedDescription), animated: false)
+                    case .active:
+                        self.replaceTopTemplate(with: self.makeErrorTemplate(title: "Active Dispatches", message: error.localizedDescription))
+                    case .recent:
+                        self.replaceTopTemplate(with: self.makeErrorTemplate(title: "Recent Dispatches", message: error.localizedDescription))
+                    case .detail:
+                        break
+                    }
+                }
+            }
+        }
+    }
+
+    private func replaceTopTemplate(with template: CPTemplate) {
+        guard let interfaceController else { return }
+
+        if interfaceController.templates.count > 1 {
+            interfaceController.popTemplate(animated: false)
+            interfaceController.pushTemplate(template, animated: false)
+        } else {
+            interfaceController.setRootTemplate(template, animated: false)
+        }
+    }
+
+    // MARK: - Root
+
+    private func makeRootTemplate(isLoading: Bool, errorMessage: String? = nil) -> CPListTemplate {
+        let activeCount = activeDispatches.count
+        let recentCount = recentDispatches.count
+
+        let activeItem = CPListItem(
+            text: "Active Dispatches",
+            detailText: activeCount == 0 ? "No active dispatches" : "\(activeCount) active"
+        )
+
+        activeItem.handler = { [weak self] _, completion in
+            guard let self else {
+                completion()
+                return
+            }
+
+            self.currentScreen = .active
+            self.interfaceController?.pushTemplate(self.makeActiveDispatchesTemplate(), animated: true)
+            completion()
+        }
+
+        let recentItem = CPListItem(
+            text: "Recent Dispatches",
+            detailText: recentCount == 0 ? "Last 24 hours" : "Last \(recentCount) calls"
+        )
+
+        recentItem.handler = { [weak self] _, completion in
+            guard let self else {
+                completion()
+                return
+            }
+
+            self.currentScreen = .recent
+            self.interfaceController?.pushTemplate(self.makeRecentDispatchesTemplate(), animated: true)
+            completion()
+        }
+
+        let refreshItem = CPListItem(
+            text: isLoading ? "Refreshing…" : "Refresh",
+            detailText: isLoading ? "Checking dispatch feed" : "Update dispatch lists"
+        )
+
+        refreshItem.handler = { [weak self] _, completion in
+            self?.refreshDispatches(updateVisibleScreen: true)
+            completion()
+        }
+
+        var items: [CPListItem] = [
+            activeItem,
+            recentItem,
+            refreshItem
+        ]
+
+        if let errorMessage {
+            items.append(
+                CPListItem(
+                    text: "Unable to Refresh",
+                    detailText: errorMessage
+                )
+            )
+        }
+
+        return CPListTemplate(
+            title: "MTFD",
+            sections: [CPListSection(items: items)]
+        )
+    }
+
+    // MARK: - Active Dispatches
+
+    private func makeActiveDispatchesTemplate() -> CPListTemplate {
+        let items: [CPListItem]
+
+        if activeDispatches.isEmpty {
+            items = [
+                CPListItem(
+                    text: "No active dispatches",
+                    detailText: "You are clear at this time"
+                ),
+                makeRefreshListItem()
+            ]
+        } else {
+            items = activeDispatches.map { dispatch in
+                let item = CPListItem(
+                    text: dispatch.callType,
+                    detailText: activeDispatchSubtitle(dispatch)
+                )
+
+                item.handler = { [weak self] _, completion in
+                    guard let self else {
+                        completion()
+                        return
+                    }
+
+                    self.currentScreen = .detail
+                    self.interfaceController?.pushTemplate(
+                        self.makeActiveDispatchDetailTemplate(dispatch),
+                        animated: true
+                    )
+                    completion()
+                }
+
+                return item
+            } + [makeRefreshListItem()]
+        }
+
+        return CPListTemplate(
+            title: "Active Dispatches",
+            sections: [CPListSection(items: items)]
+        )
+    }
+
+    private func makeActiveDispatchDetailTemplate(_ dispatch: APIClient.ActiveDispatch) -> CPListTemplate {
+        var items: [CPListItem] = []
+
+        items.append(
+            CPListItem(
+                text: "Address",
+                detailText: safeText(dispatch.address ?? dispatch.placeName ?? dispatch.message)
+            )
+        )
+
+        if !dispatch.units.isEmpty {
+            items.append(
+                CPListItem(
+                    text: "Units",
+                    detailText: dispatch.units.joined(separator: ", ")
+                )
+            )
+        }
+
+        if let dispatchedAt = dispatch.dispatchedAt {
+            items.append(
+                CPListItem(
+                    text: "Dispatched",
+                    detailText: Self.relativeFormatter.localizedString(for: dispatchedAt, relativeTo: Date())
+                )
+            )
+        }
+
+        if let message = dispatch.message, !message.isEmpty {
+            items.append(
+                CPListItem(
+                    text: "Notes",
+                    detailText: trimmed(message, maxLength: 80)
+                )
+            )
+        }
+
+        let navigateItem = CPListItem(
+            text: "Navigate",
+            detailText: safeText(dispatch.address ?? dispatch.placeName)
+        )
+
+        navigateItem.handler = { _, completion in
+            Self.openMaps(address: dispatch.address ?? dispatch.placeName ?? dispatch.message)
+            completion()
+        }
+
+        items.append(navigateItem)
+
+        return CPListTemplate(
+            title: dispatch.callType,
+            sections: [CPListSection(items: items)]
+        )
+    }
+
+    // MARK: - Recent Dispatches
+
+    private func makeRecentDispatchesTemplate() -> CPListTemplate {
+        let items: [CPListItem]
+
+        if recentDispatches.isEmpty {
+            items = [
+                CPListItem(
+                    text: "No recent dispatches",
+                    detailText: "No calls found in the last 24 hours"
+                ),
+                makeRefreshListItem()
+            ]
+        } else {
+            items = recentDispatches.map { dispatch in
+                let item = CPListItem(
+                    text: dispatch.callType,
+                    detailText: recentDispatchSubtitle(dispatch)
+                )
+
+                item.handler = { [weak self] _, completion in
+                    guard let self else {
+                        completion()
+                        return
+                    }
+
+                    self.currentScreen = .detail
+                    self.interfaceController?.pushTemplate(
+                        self.makeRecentDispatchDetailTemplate(dispatch),
+                        animated: true
+                    )
+                    completion()
+                }
+
+                return item
+            } + [makeRefreshListItem()]
+        }
+
+        return CPListTemplate(
+            title: "Recent Dispatches",
+            sections: [CPListSection(items: items)]
+        )
+    }
+
+    private func makeRecentDispatchDetailTemplate(_ dispatch: APIClient.DispatchHistoryItem) -> CPListTemplate {
+        var items: [CPListItem] = []
+
+        items.append(
+            CPListItem(
+                text: "Address",
+                detailText: safeText(dispatch.address ?? dispatch.placeName ?? dispatch.message)
+            )
+        )
+
+        if !dispatch.units.isEmpty {
+            items.append(
+                CPListItem(
+                    text: "Units",
+                    detailText: dispatch.units.joined(separator: ", ")
+                )
+            )
+        }
+
+        if let dispatchedAt = dispatch.dispatchedAt {
+            items.append(
+                CPListItem(
+                    text: "Dispatched",
+                    detailText: Self.relativeFormatter.localizedString(for: dispatchedAt, relativeTo: Date())
+                )
+            )
+        }
+
+        if let status = dispatch.status, !status.isEmpty {
+            items.append(
+                CPListItem(
+                    text: "Status",
+                    detailText: status
+                )
+            )
+        }
+
+        if let message = dispatch.message, !message.isEmpty {
+            items.append(
+                CPListItem(
+                    text: "Notes",
+                    detailText: trimmed(message, maxLength: 80)
+                )
+            )
+        }
+
+        let navigateItem = CPListItem(
+            text: "Navigate",
+            detailText: safeText(dispatch.address ?? dispatch.placeName)
+        )
+
+        navigateItem.handler = { _, completion in
+            Self.openMaps(
+                latitude: dispatch.latitude,
+                longitude: dispatch.longitude,
+                address: dispatch.address ?? dispatch.placeName ?? dispatch.message
+            )
+            completion()
+        }
+
+        items.append(navigateItem)
+
+        return CPListTemplate(
+            title: dispatch.callType,
+            sections: [CPListSection(items: items)]
+        )
+    }
+
+    // MARK: - Shared Items
+
+    private func makeRefreshListItem() -> CPListItem {
+        let item = CPListItem(
+            text: "Refresh",
+            detailText: "Update dispatch list"
+        )
+
+        item.handler = { [weak self] _, completion in
+            self?.refreshDispatches(updateVisibleScreen: true)
+            completion()
+        }
+
+        return item
+    }
+
+    private func makeErrorTemplate(title: String, message: String) -> CPListTemplate {
+        CPListTemplate(
+            title: title,
+            sections: [
+                CPListSection(
+                    items: [
+                        CPListItem(text: "Unable to Refresh", detailText: message),
+                        makeRefreshListItem()
+                    ]
+                )
+            ]
+        )
+    }
+
+    private func activeDispatchSubtitle(_ dispatch: APIClient.ActiveDispatch) -> String {
+        let address = dispatch.address ?? dispatch.placeName ?? "Address unavailable"
+        let time = dispatch.dispatchedAt.map {
+            Self.relativeFormatter.localizedString(for: $0, relativeTo: Date())
+        }
+
+        if let time {
+            return "\(time) · \(address)"
+        }
+
+        return address
+    }
+
+    private func recentDispatchSubtitle(_ dispatch: APIClient.DispatchHistoryItem) -> String {
+        let address = dispatch.address ?? dispatch.placeName ?? "Address unavailable"
+        let time = dispatch.dispatchedAt.map {
+            Self.relativeFormatter.localizedString(for: $0, relativeTo: Date())
+        }
+
+        if let time {
+            return "\(time) · \(address)"
+        }
+
+        return address
+    }
+
+    private func safeText(_ text: String?) -> String {
+        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "Unavailable"
+        }
+
+        return trimmed(text, maxLength: 96)
+    }
+
+    private func trimmed(_ text: String, maxLength: Int) -> String {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard clean.count > maxLength else {
+            return clean
+        }
+
+        return String(clean.prefix(maxLength - 1)) + "…"
+    }
+
+    // MARK: - Maps
+
+    private static func openMaps(latitude: Double? = nil, longitude: Double? = nil, address: String?) {
+        if let latitude, let longitude {
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            let placemark = MKPlacemark(coordinate: coordinate)
+            let mapItem = MKMapItem(placemark: placemark)
+            mapItem.name = address
+
+            mapItem.openInMaps(launchOptions: [
+                MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+            ])
+
+            return
+        }
+
+        guard
+            let address,
+            !address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return
+        }
+
+        let encodedAddress = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? address
+
+        guard let url = URL(string: "http://maps.apple.com/?daddr=\(encodedAddress)&dirflg=d") else {
+            return
+        }
+
+        UIApplication.shared.open(url)
+    }
+
+    // MARK: - Formatters
+
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+}

@@ -1,0 +1,152 @@
+//
+//  CarPlaySceneDelegate.swift
+//  MTFD Member App
+//
+//  Created by Michael Zucker on 6/5/26.
+//
+
+import CarPlay
+import UIKit
+
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+    private weak var interfaceController: CPInterfaceController?
+    private var hasConfiguredRootTemplate = false
+
+    // MARK: - Modern CarPlay scene connection
+
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didConnect interfaceController: CPInterfaceController,
+        to window: CPWindow
+    ) {
+        configureCarPlay(interfaceController: interfaceController)
+    }
+
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didDisconnect interfaceController: CPInterfaceController,
+        from window: CPWindow
+    ) {
+        tearDownCarPlay(interfaceController: interfaceController)
+    }
+
+    // MARK: - Compatibility CarPlay scene connection
+
+    @available(iOS, introduced: 12.0, deprecated: 14.0)
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didConnect interfaceController: CPInterfaceController
+    ) {
+        configureCarPlay(interfaceController: interfaceController)
+    }
+
+    @available(iOS, introduced: 12.0, deprecated: 14.0)
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didDisconnect interfaceController: CPInterfaceController
+    ) {
+        tearDownCarPlay(interfaceController: interfaceController)
+    }
+
+    // MARK: - Setup
+
+    private func configureCarPlay(interfaceController: CPInterfaceController) {
+        self.interfaceController = interfaceController
+
+        guard !hasConfiguredRootTemplate else {
+            return
+        }
+
+        hasConfiguredRootTemplate = true
+
+        let activeItem = CPListItem(
+            text: "Active Dispatches",
+            detailText: "No active dispatches"
+        )
+
+        activeItem.handler = { [weak self] _, completion in
+            self?.showActiveDispatches()
+            completion()
+        }
+
+        let recentItem = CPListItem(
+            text: "Recent Dispatches",
+            detailText: "Recent calls"
+        )
+
+        recentItem.handler = { [weak self] _, completion in
+            self?.showRecentDispatches()
+            completion()
+        }
+
+        let template = CPListTemplate(
+            title: "MTFD",
+            sections: [
+                CPListSection(items: [
+                    activeItem,
+                    recentItem
+                ])
+            ]
+        )
+
+        if #available(iOS 14.0, *) {
+            interfaceController.setRootTemplate(template, animated: true, completion: nil)
+        } else {
+            interfaceController.setRootTemplate(template, animated: true)
+        }
+    }
+
+    private func tearDownCarPlay(interfaceController: CPInterfaceController) {
+        if self.interfaceController === interfaceController {
+            self.interfaceController = nil
+        }
+
+        hasConfiguredRootTemplate = false
+    }
+
+    // MARK: - Screens
+
+    private func showActiveDispatches() {
+        let item = CPListItem(
+            text: "No active dispatches",
+            detailText: "You are clear at this time"
+        )
+
+        let template = CPListTemplate(
+            title: "Active Dispatches",
+            sections: [
+                CPListSection(items: [item])
+            ]
+        )
+
+        push(template)
+    }
+
+    private func showRecentDispatches() {
+        let item = CPListItem(
+            text: "Dispatch feed not loaded yet",
+            detailText: "CarPlay connection is working"
+        )
+
+        let template = CPListTemplate(
+            title: "Recent Dispatches",
+            sections: [
+                CPListSection(items: [item])
+            ]
+        )
+
+        push(template)
+    }
+
+    private func push(_ template: CPTemplate) {
+        guard let interfaceController else {
+            return
+        }
+
+        if #available(iOS 14.0, *) {
+            interfaceController.pushTemplate(template, animated: true, completion: nil)
+        } else {
+            interfaceController.pushTemplate(template, animated: true)
+        }
+    }
+}

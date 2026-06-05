@@ -18,6 +18,26 @@
 		403298E02FD2F2EB004D53EE /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CAABAB2FCE2C99008C33D9 /* WidgetKit.framework */; };
 		403298E12FD2F2EB004D53EE /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CAABAD2FCE2C99008C33D9 /* SwiftUI.framework */; };
 		403298EE2FD2F2ED004D53EE /* MTFDControlWidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 403298DF2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		403298FD2FD31636004D53EE /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403298FA2FD31636004D53EE /* ContentView.swift */; };
+		403298FE2FD31636004D53EE /* MTFD_Watch_AppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403298FB2FD31636004D53EE /* MTFD_Watch_AppApp.swift */; };
+		403298FF2FD31636004D53EE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 403298F92FD31636004D53EE /* Assets.xcassets */; };
+		403299082FD31636004D53EE /* AppIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299002FD31636004D53EE /* AppIntent.swift */; };
+		403299092FD31636004D53EE /* MTFDLiveActivities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299032FD31636004D53EE /* MTFDLiveActivities.swift */; };
+		4032990A2FD31636004D53EE /* MTFDLiveActivitiesBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299042FD31636004D53EE /* MTFDLiveActivitiesBundle.swift */; };
+		4032990C2FD31636004D53EE /* MTFDLiveActivitiesLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299062FD31636004D53EE /* MTFDLiveActivitiesLiveActivity.swift */; };
+		4032990D2FD31636004D53EE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 403299012FD31636004D53EE /* Assets.xcassets */; };
+		4032990F2FD31636004D53EE /* MTFDLiveActivitiesControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299052FD31636004D53EE /* MTFDLiveActivitiesControl.swift */; };
+		403299162FD31636004D53EE /* AppIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299102FD31636004D53EE /* AppIntent.swift */; };
+		403299172FD31636004D53EE /* MTFDControlWidgetExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299132FD31636004D53EE /* MTFDControlWidgetExtension.swift */; };
+		403299182FD31636004D53EE /* MTFDControlWidgetExtensionBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299142FD31636004D53EE /* MTFDControlWidgetExtensionBundle.swift */; };
+		403299192FD31636004D53EE /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 403299112FD31636004D53EE /* Assets.xcassets */; };
+		4032991C2FD365DE004D53EE /* DashboardRole.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4032991B2FD365DE004D53EE /* DashboardRole.swift */; };
+		403299232FD3662A004D53EE /* CareerOfficerDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4032991F2FD3662A004D53EE /* CareerOfficerDashboardView.swift */; };
+		403299242FD3662A004D53EE /* ChiefDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299202FD3662A004D53EE /* ChiefDashboardView.swift */; };
+		403299252FD3662A004D53EE /* VolunteerMemberDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299212FD3662A004D53EE /* VolunteerMemberDashboardView.swift */; };
+		403299262FD3662A004D53EE /* AdminDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4032991D2FD3662A004D53EE /* AdminDashboardView.swift */; };
+		403299272FD3662A004D53EE /* CareerMemberDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4032991E2FD3662A004D53EE /* CareerMemberDashboardView.swift */; };
+		403299282FD3662A004D53EE /* VolunteerOfficerDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299222FD3662A004D53EE /* VolunteerOfficerDashboardView.swift */; };
 		404C364C2FB207F80088997E /* ActiveDispatchStackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */; };
 		404C36502FB208DD0088997E /* DashboardHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364F2FB208D40088997E /* DashboardHeaderView.swift */; };
 		404C36532FB2401B0088997E /* AppBadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C36522FB2400C0088997E /* AppBadgeManager.swift */; };
@@ -155,6 +175,28 @@
 		402487EC2FC79E6C00475348 /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
 		403298D82FD2E06A004D53EE /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		403298DF2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MTFDControlWidgetExtensionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		403298F92FD31636004D53EE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		403298FA2FD31636004D53EE /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		403298FB2FD31636004D53EE /* MTFD_Watch_AppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTFD_Watch_AppApp.swift; sourceTree = "<group>"; };
+		403299002FD31636004D53EE /* AppIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntent.swift; sourceTree = "<group>"; };
+		403299012FD31636004D53EE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		403299022FD31636004D53EE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		403299032FD31636004D53EE /* MTFDLiveActivities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTFDLiveActivities.swift; sourceTree = "<group>"; };
+		403299042FD31636004D53EE /* MTFDLiveActivitiesBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTFDLiveActivitiesBundle.swift; sourceTree = "<group>"; };
+		403299052FD31636004D53EE /* MTFDLiveActivitiesControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTFDLiveActivitiesControl.swift; sourceTree = "<group>"; };
+		403299062FD31636004D53EE /* MTFDLiveActivitiesLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTFDLiveActivitiesLiveActivity.swift; sourceTree = "<group>"; };
+		403299102FD31636004D53EE /* AppIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntent.swift; sourceTree = "<group>"; };
+		403299112FD31636004D53EE /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		403299122FD31636004D53EE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		403299132FD31636004D53EE /* MTFDControlWidgetExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTFDControlWidgetExtension.swift; sourceTree = "<group>"; };
+		403299142FD31636004D53EE /* MTFDControlWidgetExtensionBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTFDControlWidgetExtensionBundle.swift; sourceTree = "<group>"; };
+		4032991B2FD365DE004D53EE /* DashboardRole.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardRole.swift; sourceTree = "<group>"; };
+		4032991D2FD3662A004D53EE /* AdminDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminDashboardView.swift; sourceTree = "<group>"; };
+		4032991E2FD3662A004D53EE /* CareerMemberDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CareerMemberDashboardView.swift; sourceTree = "<group>"; };
+		4032991F2FD3662A004D53EE /* CareerOfficerDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CareerOfficerDashboardView.swift; sourceTree = "<group>"; };
+		403299202FD3662A004D53EE /* ChiefDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChiefDashboardView.swift; sourceTree = "<group>"; };
+		403299212FD3662A004D53EE /* VolunteerMemberDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolunteerMemberDashboardView.swift; sourceTree = "<group>"; };
+		403299222FD3662A004D53EE /* VolunteerOfficerDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolunteerOfficerDashboardView.swift; sourceTree = "<group>"; };
 		404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveDispatchStackView.swift; sourceTree = "<group>"; };
 		404C364F2FB208D40088997E /* DashboardHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHeaderView.swift; sourceTree = "<group>"; };
 		404C36522FB2400C0088997E /* AppBadgeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBadgeManager.swift; sourceTree = "<group>"; };
@@ -234,56 +276,6 @@
 		40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardCardLayout.swift; sourceTree = "<group>"; };
 		A85CC8AAC42424969824CE0E /* LiveActivitiesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivitiesSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		403298EF2FD2F2ED004D53EE /* Exceptions for "MTFDControlWidgetExtension" folder in "MTFDControlWidgetExtensionExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 403298DE2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension */;
-		};
-		403298F42FD2F437004D53EE /* Exceptions for "MTFDLiveActivities" folder in "MTFDControlWidgetExtensionExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				MTFDLiveActivitiesControl.swift,
-			);
-			target = 403298DE2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension */;
-		};
-		40CAABC32FCE2C9A008C33D9 /* Exceptions for "MTFDLiveActivities" folder in "MTFDLiveActivitiesExtension" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-				MTFDLiveActivitiesControl.swift,
-			);
-			target = 40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		403298E22FD2F2EB004D53EE /* MTFDControlWidgetExtension */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				403298EF2FD2F2ED004D53EE /* Exceptions for "MTFDControlWidgetExtension" folder in "MTFDControlWidgetExtensionExtension" target */,
-			);
-			path = MTFDControlWidgetExtension;
-			sourceTree = "<group>";
-		};
-		40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				40CAABC32FCE2C9A008C33D9 /* Exceptions for "MTFDLiveActivities" folder in "MTFDLiveActivitiesExtension" target */,
-				403298F42FD2F437004D53EE /* Exceptions for "MTFDLiveActivities" folder in "MTFDControlWidgetExtensionExtension" target */,
-			);
-			path = MTFDLiveActivities;
-			sourceTree = "<group>";
-		};
-		40CAABCA2FCE342E008C33D9 /* MTFD Watch App Watch App */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "MTFD Watch App Watch App";
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		403298DC2FD2F2EB004D53EE /* Frameworks */ = {
@@ -369,6 +361,42 @@
 			path = Schedule;
 			sourceTree = "<group>";
 		};
+		403298FC2FD31636004D53EE /* MTFD Watch App Watch App */ = {
+			isa = PBXGroup;
+			children = (
+				403298F92FD31636004D53EE /* Assets.xcassets */,
+				403298FA2FD31636004D53EE /* ContentView.swift */,
+				403298FB2FD31636004D53EE /* MTFD_Watch_AppApp.swift */,
+			);
+			path = "MTFD Watch App Watch App";
+			sourceTree = "<group>";
+		};
+		403299072FD31636004D53EE /* MTFDLiveActivities */ = {
+			isa = PBXGroup;
+			children = (
+				403299002FD31636004D53EE /* AppIntent.swift */,
+				403299012FD31636004D53EE /* Assets.xcassets */,
+				403299022FD31636004D53EE /* Info.plist */,
+				403299032FD31636004D53EE /* MTFDLiveActivities.swift */,
+				403299042FD31636004D53EE /* MTFDLiveActivitiesBundle.swift */,
+				403299052FD31636004D53EE /* MTFDLiveActivitiesControl.swift */,
+				403299062FD31636004D53EE /* MTFDLiveActivitiesLiveActivity.swift */,
+			);
+			path = MTFDLiveActivities;
+			sourceTree = "<group>";
+		};
+		403299152FD31636004D53EE /* MTFDControlWidgetExtension */ = {
+			isa = PBXGroup;
+			children = (
+				403299102FD31636004D53EE /* AppIntent.swift */,
+				403299112FD31636004D53EE /* Assets.xcassets */,
+				403299122FD31636004D53EE /* Info.plist */,
+				403299132FD31636004D53EE /* MTFDControlWidgetExtension.swift */,
+				403299142FD31636004D53EE /* MTFDControlWidgetExtensionBundle.swift */,
+			);
+			path = MTFDControlWidgetExtension;
+			sourceTree = "<group>";
+		};
 		404C36512FB23FFC0088997E /* App Badge Manager */ = {
 			isa = PBXGroup;
 			children = (
@@ -399,9 +427,9 @@
 				408910A42F8FECC70035C355 /* Models */,
 				408910A32F8FECBC0035C355 /* Core */,
 				408910A22F8FECA40035C355 /* App */,
-				40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */,
-				40CAABCA2FCE342E008C33D9 /* MTFD Watch App Watch App */,
-				403298E22FD2F2EB004D53EE /* MTFDControlWidgetExtension */,
+				403299072FD31636004D53EE /* MTFDLiveActivities */,
+				403298FC2FD31636004D53EE /* MTFD Watch App Watch App */,
+				403299152FD31636004D53EE /* MTFDControlWidgetExtension */,
 				40CAABAA2FCE2C99008C33D9 /* Frameworks */,
 				407DBFC52F8D41C7006B3DAF /* Products */,
 				408910A52F8FECD00035C355 /* Services */,
@@ -881,6 +909,12 @@
 		4089112F2F90160A0035C355 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4032991D2FD3662A004D53EE /* AdminDashboardView.swift */,
+				4032991E2FD3662A004D53EE /* CareerMemberDashboardView.swift */,
+				4032991F2FD3662A004D53EE /* CareerOfficerDashboardView.swift */,
+				403299202FD3662A004D53EE /* ChiefDashboardView.swift */,
+				403299212FD3662A004D53EE /* VolunteerMemberDashboardView.swift */,
+				403299222FD3662A004D53EE /* VolunteerOfficerDashboardView.swift */,
 				4008A35B2FD21A4F0030BAC9 /* ApparatusWorkOrdersView.swift */,
 				404C364F2FB208D40088997E /* DashboardHeaderView.swift */,
 				404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */,
@@ -901,6 +935,7 @@
 		408911312F90161F0035C355 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				4032991B2FD365DE004D53EE /* DashboardRole.swift */,
 				40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */,
 				408910BC2F8FED410035C355 /* DashboardModels.swift */,
 			);
@@ -1071,9 +1106,6 @@
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				403298E22FD2F2EB004D53EE /* MTFDControlWidgetExtension */,
-			);
 			name = MTFDControlWidgetExtensionExtension;
 			packageProductDependencies = (
 			);
@@ -1117,9 +1149,6 @@
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */,
-			);
 			name = MTFDLiveActivitiesExtension;
 			packageProductDependencies = (
 			);
@@ -1138,9 +1167,6 @@
 			buildRules = (
 			);
 			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				40CAABCA2FCE342E008C33D9 /* MTFD Watch App Watch App */,
 			);
 			name = "MTFD Watch App Watch App";
 			packageProductDependencies = (
@@ -1200,6 +1226,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				403299192FD31636004D53EE /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1215,6 +1242,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4032990D2FD31636004D53EE /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1222,6 +1250,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				403298FF2FD31636004D53EE /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1232,6 +1261,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4032990F2FD31636004D53EE /* MTFDLiveActivitiesControl.swift in Sources */,
+				403299162FD31636004D53EE /* AppIntent.swift in Sources */,
+				403299172FD31636004D53EE /* MTFDControlWidgetExtension.swift in Sources */,
+				403299182FD31636004D53EE /* MTFDControlWidgetExtensionBundle.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1241,6 +1274,7 @@
 			files = (
 				40B22B482F9F9C9A00808F42 /* Notification+Extensions.swift.swift in Sources */,
 				408910DA2F8FED410035C355 /*  MemberCardView.swift in Sources */,
+				4032991C2FD365DE004D53EE /* DashboardRole.swift in Sources */,
 				408910DB2F8FED410035C355 /* AlertCard.swift in Sources */,
 				408910DC2F8FED410035C355 /* AlertManager.swift in Sources */,
 				404C364C2FB207F80088997E /* ActiveDispatchStackView.swift in Sources */,
@@ -1300,6 +1334,12 @@
 				408910FD2F8FED410035C355 /* ProfileView.swift in Sources */,
 				40D121202FB13E36003B3E41 /* MessageCenterView.swift in Sources */,
 				40B22B6E2F9FDD5A00808F42 /* DispatchNotificationPayload.swift in Sources */,
+				403299232FD3662A004D53EE /* CareerOfficerDashboardView.swift in Sources */,
+				403299242FD3662A004D53EE /* ChiefDashboardView.swift in Sources */,
+				403299252FD3662A004D53EE /* VolunteerMemberDashboardView.swift in Sources */,
+				403299262FD3662A004D53EE /* AdminDashboardView.swift in Sources */,
+				403299272FD3662A004D53EE /* CareerMemberDashboardView.swift in Sources */,
+				403299282FD3662A004D53EE /* VolunteerOfficerDashboardView.swift in Sources */,
 				40B22B832F9FE49300808F42 /* SettingsView.swift in Sources */,
 				40B22B782F9FDDB000808F42 /* NotificationPreferencesViewModel.swift in Sources */,
 				40B22B6F2F9FDD5A00808F42 /* DispatchDetailView.swift in Sources */,
@@ -1324,6 +1364,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				403299082FD31636004D53EE /* AppIntent.swift in Sources */,
+				403299092FD31636004D53EE /* MTFDLiveActivities.swift in Sources */,
+				4032990A2FD31636004D53EE /* MTFDLiveActivitiesBundle.swift in Sources */,
+				4032990C2FD31636004D53EE /* MTFDLiveActivitiesLiveActivity.swift in Sources */,
 				4084F75A2FCEDDCA003330D3 /* DispatchLiveActivityAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1332,6 +1376,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				403298FD2FD31636004D53EE /* ContentView.swift in Sources */,
+				403298FE2FD31636004D53EE /* MTFD_Watch_AppApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

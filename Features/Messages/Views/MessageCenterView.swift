@@ -913,7 +913,14 @@ private struct MessageDispatchMapPreview: View {
 
         do {
             let request = MKLocalSearch.Request()
-            request.naturalLanguageQuery = address
+            let searchAddress = address.localizedCaseInsensitiveContains("NJ")
+                ? address
+                : "\(address), Morristown, NJ"
+            request.naturalLanguageQuery = searchAddress
+            request.region = MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
+                span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
+            )
 
             let search = MKLocalSearch(request: request)
             let response = try await search.start()

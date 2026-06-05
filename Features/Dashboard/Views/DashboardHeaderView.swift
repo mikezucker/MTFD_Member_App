@@ -262,12 +262,7 @@ struct DashboardHeaderView: View {
                         .clipShape(Circle())
                         .rotationEffect(.degrees(effectiveShouldAnimate ? -10 : 0))
                         .scaleEffect(effectiveShouldAnimate ? 1.08 : 1.0)
-                        .animation(
-                            effectiveShouldAnimate
-                                ? .easeInOut(duration: 0.16).repeatCount(6, autoreverses: true)
-                                : .easeOut(duration: 0.2),
-                            value: effectiveShouldAnimate
-                        )
+                        
 
                     if alertMode.badgeCount > 0 {
                         Text(alertMode.badgeCount > 99 ? "99+" : "\(alertMode.badgeCount)")

@@ -30,11 +30,6 @@ struct DashboardView: View {
     @AppStorage("dashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
     @State private var selectedChiefScheduleDayId: String?
 
-    private var dashboardRole: DashboardRole {
-        DashboardRole.from(session.currentUser?.role)
-    }
-
-
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
         viewModel.activeDispatches.first
     }
@@ -67,29 +62,7 @@ struct DashboardView: View {
                     )
 
                     ScrollView(showsIndicators: false) {
-
-                        switch dashboardRole {
-
-                        case .admin:
-                            AdminDashboardView()
-
-                        case .chief:
-                            ChiefDashboardView()
-
-                        case .officerCareer:
-                            CareerOfficerDashboardView()
-
-                        case .officerVolunteer:
-                            VolunteerOfficerDashboardView()
-
-                        case .memberCareer:
-                            CareerMemberDashboardView()
-
-                        case .memberVolunteer:
-                            VolunteerMemberDashboardView()
-                        }
-
-                        /*
+                        VStack(alignment: .leading, spacing: 18) {
                             if let primaryActiveDispatch {
                                 sectionTitle("Current Dispatch")
 
@@ -154,8 +127,6 @@ struct DashboardView: View {
                         .padding(.top, 12)
                         .padding(.bottom, 120)
                         .opacity(1)
-
-                        */
                     }
 
                 }

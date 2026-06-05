@@ -8,14 +8,14 @@ enum DashboardTotalsWindow: String, CaseIterable {
 }
 
 struct DashboardQuickAction: Identifiable, Hashable {
-    let id = UUID()
+    var id: String { "\(title)-\(systemImage)-\(destination)" }
     let title: String
     let systemImage: String
     let destination: AppDestination
 }
 
 struct DashboardProgressItem: Identifiable, Hashable {
-    let id = UUID()
+    var id: String { "\(title)-\(subtitle)-\(destination)" }
     let title: String
     let progress: Double
     let subtitle: String
@@ -32,7 +32,7 @@ struct DashboardTrainingPreviewItem: Identifiable, Hashable {
 }
 
 struct DashboardAttentionItem: Identifiable, Hashable {
-    let id = UUID()
+    var id: String { "\(title)-\(subtitle)-\(actionLabel ?? "")-\(destination)" }
     let title: String
     let subtitle: String
     let actionLabel: String?

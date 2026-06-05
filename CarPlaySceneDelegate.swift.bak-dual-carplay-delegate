@@ -1,0 +1,93 @@
+//
+//  CarPlaySceneDelegate.swift
+//  MTFD Member App
+//
+//  Created by Michael Zucker on 6/5/26.
+//
+
+import CarPlay
+import UIKit
+
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+    private weak var interfaceController: CPInterfaceController?
+
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didConnect interfaceController: CPInterfaceController,
+        to window: CPWindow
+    ) {
+        self.interfaceController = interfaceController
+
+        let activeItem = CPListItem(
+            text: "Active Dispatches",
+            detailText: "No active dispatches"
+        )
+
+        activeItem.handler = { [weak self] _, completion in
+            self?.showActiveDispatches()
+            completion()
+        }
+
+        let recentItem = CPListItem(
+            text: "Recent Dispatches",
+            detailText: "Recent calls"
+        )
+
+        recentItem.handler = { [weak self] _, completion in
+            self?.showRecentDispatches()
+            completion()
+        }
+
+        let template = CPListTemplate(
+            title: "MTFD",
+            sections: [
+                CPListSection(items: [
+                    activeItem,
+                    recentItem
+                ])
+            ]
+        )
+
+        interfaceController.setRootTemplate(template, animated: true, completion: nil)
+    }
+
+    func templateApplicationScene(
+        _ templateApplicationScene: CPTemplateApplicationScene,
+        didDisconnect interfaceController: CPInterfaceController,
+        from window: CPWindow
+    ) {
+        self.interfaceController = nil
+    }
+
+    private func showActiveDispatches() {
+        let item = CPListItem(
+            text: "No active dispatches",
+            detailText: "You are clear at this time"
+        )
+
+        let template = CPListTemplate(
+            title: "Active Dispatches",
+            sections: [
+                CPListSection(items: [item])
+            ]
+        )
+
+        interfaceController?.pushTemplate(template, animated: true, completion: nil)
+    }
+
+    private func showRecentDispatches() {
+        let item = CPListItem(
+            text: "Dispatch feed not loaded yet",
+            detailText: "CarPlay connection is working"
+        )
+
+        let template = CPListTemplate(
+            title: "Recent Dispatches",
+            sections: [
+                CPListSection(items: [item])
+            ]
+        )
+
+        interfaceController?.pushTemplate(template, animated: true, completion: nil)
+    }
+}

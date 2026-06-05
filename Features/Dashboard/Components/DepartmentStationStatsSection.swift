@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DepartmentStatItem: Identifiable {
-    let id = UUID()
+    var id: String { "\(title)-\(subtitle)-\(systemImage)" }
     let title: String
     let value: String
     let subtitle: String
