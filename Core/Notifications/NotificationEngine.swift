@@ -78,12 +78,20 @@ struct NotificationEngine {
         isCurrentlyWorking: Bool
     ) -> Bool {
 
+        let isCriticalDispatch =
+            payload.type == .dispatchCritical ||
+            (
+                payload.type == .dispatch &&
+                preferences.criticalDispatchAlerts &&
+                preferences.criticalDispatchAlertMode == .allDispatches
+            )
+
         guard preferences.dispatchAlertsEnabled else {
             print("🔕 Suppressed: dispatch alerts disabled")
             return false
         }
 
-        if payload.type == .dispatchCritical && !preferences.criticalDispatchAlerts {
+        if isCriticalDispatch && !preferences.criticalDispatchAlerts {
             print("🔕 Suppressed: critical dispatch alerts disabled")
             return false
         }
@@ -103,7 +111,7 @@ struct NotificationEngine {
             }
         }
 
-        let scheduleMode = payload.type == .dispatchCritical
+        let scheduleMode = isCriticalDispatch
             ? preferences.criticalAlertScheduleMode
             : preferences.normalAlertScheduleMode
 
@@ -158,7 +166,7 @@ struct NotificationEngine {
             }
         }
 
-        if payload.type == .dispatchCritical && preferences.criticalDispatchAlerts {
+        if isCriticalDispatch && preferences.criticalDispatchAlerts {
             print("✅ Critical dispatch allowed")
             return true
         }
@@ -207,7 +215,10 @@ struct NotificationEngine {
         let comps = Calendar.current.dateComponents([.hour, .minute], from: date)
         return (comps.hour ?? 0) * 60 + (comps.minute ?? 0)
     }
-}
+    }
+
+
+
 //  NotificationEngine.swift
 //  MTFD Member App
 //

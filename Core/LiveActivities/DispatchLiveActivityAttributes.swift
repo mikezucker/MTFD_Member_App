@@ -19,6 +19,8 @@ struct DispatchLiveActivityAttributes: ActivityAttributes {
 
         var isWorkingFire: Bool
 
+        var activeCallCount: Int
+
         var lastUpdated: Date
 
     }

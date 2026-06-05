@@ -29,6 +29,7 @@ struct AppNotificationPayload: Identifiable {
     let address: String?
     let units: [String]
     let isWorkingFire: Bool
+    let activeCallCount: Int
 
     // Optional routing/context fields
     let stationId: String?
@@ -81,6 +82,20 @@ struct AppNotificationPayload: Identifiable {
             return false
         }()
 
+        let activeCallCount: Int = {
+            if let n = userInfo["activeCallCount"] as? Int {
+                return max(1, n)
+            }
+            if let n = userInfo["activeCallCount"] as? NSNumber {
+                return max(1, n.intValue)
+            }
+            if let s = userInfo["activeCallCount"] as? String,
+               let n = Int(s.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                return max(1, n)
+            }
+            return 1
+        }()
+
         return AppNotificationPayload(
             type: type,
             id: id,
@@ -90,6 +105,7 @@ struct AppNotificationPayload: Identifiable {
             address: address,
             units: units,
             isWorkingFire: isWorkingFire,
+            activeCallCount: activeCallCount,
             stationId: userInfo["stationId"] as? String,
             messageId: userInfo["messageId"] as? String,
             trainingId: userInfo["trainingId"] as? String,

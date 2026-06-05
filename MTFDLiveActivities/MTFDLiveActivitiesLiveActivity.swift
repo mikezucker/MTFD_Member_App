@@ -9,6 +9,15 @@ import SwiftUI
 import Foundation
 
 struct MTFDLiveActivitiesLiveActivity: Widget {
+    private func activeCallsText(_ count: Int) -> String? {
+        guard count > 1 else { return nil }
+        return "\(count) active calls"
+    }
+
+    private func compactActiveCallText(_ count: Int) -> String {
+        count > 1 ? "\(count)" : ""
+    }
+
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DispatchLiveActivityAttributes.self) { context in
             lockScreenView(context: context)
@@ -34,9 +43,16 @@ struct MTFDLiveActivitiesLiveActivity: Widget {
                         Image(systemName: context.state.isWorkingFire ? "flame.fill" : "location.fill")
                             .foregroundStyle(context.state.isCritical ? .red : .orange)
 
-                        Text(context.state.lastUpdated, style: .time)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.72))
+                        if let activeCalls = activeCallsText(context.state.activeCallCount) {
+                            Text(activeCalls)
+                                .font(.caption2.weight(.black))
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                        } else {
+                            Text(context.state.lastUpdated, style: .time)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.72))
+                        }
                     }
                 }
 
@@ -56,12 +72,17 @@ struct MTFDLiveActivitiesLiveActivity: Widget {
                     }
                 }
             } compactLeading: {
-                Image(systemName: context.state.isCritical ? "exclamationmark.triangle.fill" : "flame.fill")
-                    .foregroundStyle(context.state.isCritical ? .red : .orange)
+                Text("🔥")
             } compactTrailing: {
-                Text(context.state.units.first ?? "MT")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white)
+                if context.state.activeCallCount > 1 {
+                    Text("\(context.state.activeCallCount)")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.white)
+                } else {
+                    Text(context.state.units.first ?? "MT")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                }
             } minimal: {
                 Image(systemName: "flame.fill")
                     .foregroundStyle(context.state.isCritical ? .red : .orange)
@@ -200,6 +221,7 @@ struct MTFDLiveActivitiesLiveActivity: Widget {
         statusText: "Critical Dispatch",
         isCritical: true,
         isWorkingFire: true,
+        activeCallCount: 2,
         lastUpdated: Date()
     )
 }

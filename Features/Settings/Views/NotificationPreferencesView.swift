@@ -132,6 +132,30 @@ struct NotificationPreferencesView: View {
                             isOn: $vm.preferences.criticalDispatchAlerts
                         )
 
+
+                    if vm.preferences.criticalDispatchAlerts {
+                        Picker("Critical Dispatch Alert Mode", selection: $vm.preferences.criticalDispatchAlertMode) {
+                            ForEach(CriticalDispatchAlertMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Text(vm.preferences.criticalDispatchAlertMode.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Picker("Dispatch Alert Tone", selection: $vm.preferences.dispatchAlertTone) {
+                        ForEach(DispatchAlertTone.allCases) { tone in
+                            Text(tone.title).tag(tone)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(vm.preferences.dispatchAlertTone.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         settingToggle(
                             title: "Working Fires Only",
                             description: "Only receive fire dispatch alerts for working, structure, building, or confirmed fires.",

@@ -7,6 +7,12 @@ struct TrainingView: View {
     var body: some View {
         NavigationStack {
             AppScreen(title: "Training") {
+                AppDetailHeader(
+                    title: "Training",
+                    subtitle: "Assigned courses, JPRs, and progress.",
+                    systemImage: "graduationcap.fill"
+                )
+
                 ZStack {
                     if viewModel.isLoading && !viewModel.hasCachedData {
                         loadingState

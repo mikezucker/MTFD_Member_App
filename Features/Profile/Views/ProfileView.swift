@@ -27,6 +27,12 @@ struct ProfileView: View {
 
     var body: some View {
         AppScreen(title: "Profile") {
+            AppDetailHeader(
+                title: "Profile",
+                subtitle: "Member information and account details.",
+                systemImage: "person.crop.circle.fill"
+            )
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let member {

@@ -10,6 +10,9 @@ struct MTFD_Member_AppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(SessionManager.shared)
+                .onAppear {
+                    DispatchLiveActivityManager.shared.startObservingPushToStartToken()
+                }
         }
     }
 }

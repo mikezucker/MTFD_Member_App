@@ -542,9 +542,42 @@ final class APIClient {
             throw error
         }
     }
-    func fetchMobileSchedule() async throws -> MobileScheduleResponse {
+    func registerLiveActivityPushToStartToken(_ token: String) async throws {
+        struct Body: Encodable {
+            let token: String
+            let activityType: String
+            let platform: String
+        }
+
+        let body = Body(
+            token: token,
+            activityType: "DISPATCH",
+            platform: "IOS"
+        )
+
+        let data = try JSONEncoder().encode(body)
+
         let request = try makeRequest(
-            path: "/api/mobile/schedule",
+            path: "/api/mobile/live-activities/push-to-start/register",
+            method: "POST",
+            body: data,
+            requiresAuth: true
+        )
+
+        _ = try await performRequest(request)
+    }
+
+    func fetchMobileSchedule(date: String? = nil) async throws -> MobileScheduleResponse {
+        let path: String
+
+        if let date, !date.isEmpty {
+            path = "/api/mobile/schedule?date=\(date)"
+        } else {
+            path = "/api/mobile/schedule"
+        }
+
+        let request = try makeRequest(
+            path: path,
             requiresAuth: true
         )
 

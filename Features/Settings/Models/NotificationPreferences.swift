@@ -30,6 +30,58 @@ enum NotificationScheduleMode: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+
+enum CriticalDispatchAlertMode: String, Codable, CaseIterable, Identifiable {
+    case seriousOnly = "SERIOUS_ONLY"
+    case allDispatches = "ALL_DISPATCHES"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .seriousOnly:
+            return "Serious incidents only"
+        case .allDispatches:
+            return "All dispatches"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .seriousOnly:
+            return "Uses the department’s current critical dispatch rules."
+        case .allDispatches:
+            return "Every dispatch you receive may be sent as a Critical Alert."
+        }
+    }
+}
+
+
+enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
+    case systemDefault = "SYSTEM_DEFAULT"
+    case silent = "SILENT"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .systemDefault:
+            return "Default System Sound"
+        case .silent:
+            return "Silent"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .systemDefault:
+            return "Uses the normal iOS notification sound for dispatch alerts."
+        case .silent:
+            return "Dispatch alerts appear visually without a notification sound."
+        }
+    }
+}
+
 struct NotificationPreferencesResponse: Codable {
     var hapticsEnabled: Bool?
     let success: Bool
@@ -43,6 +95,8 @@ struct NotificationPreferences: Codable, Equatable {
     var dispatchAlertsEnabled: Bool = true
     var hapticsEnabled: Bool = true
     var criticalDispatchAlerts: Bool = false
+    var criticalDispatchAlertMode: CriticalDispatchAlertMode = .seriousOnly
+    var dispatchAlertTone: DispatchAlertTone = .systemDefault
     var callTypes: Set<String> = ["FIRE", "EMS", "MVA"]
     var workingOnly: Bool = false
 
@@ -71,6 +125,8 @@ struct NotificationPreferences: Codable, Equatable {
         case dispatchAlertsEnabled
         case hapticsEnabled
         case criticalDispatchAlerts
+        case criticalDispatchAlertMode
+        case dispatchAlertTone
         case callTypes
         case workingOnly
         case normalAlertScheduleMode
@@ -98,6 +154,8 @@ struct NotificationPreferences: Codable, Equatable {
         dispatchAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .dispatchAlertsEnabled) ?? true
         hapticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? true
         criticalDispatchAlerts = try container.decodeIfPresent(Bool.self, forKey: .criticalDispatchAlerts) ?? false
+        criticalDispatchAlertMode = try container.decodeIfPresent(CriticalDispatchAlertMode.self, forKey: .criticalDispatchAlertMode) ?? .seriousOnly
+        dispatchAlertTone = try container.decodeIfPresent(DispatchAlertTone.self, forKey: .dispatchAlertTone) ?? .systemDefault
         callTypes = try container.decodeIfPresent(Set<String>.self, forKey: .callTypes) ?? ["FIRE", "EMS", "MVA"]
         workingOnly = try container.decodeIfPresent(Bool.self, forKey: .workingOnly) ?? false
 
@@ -133,6 +191,8 @@ struct NotificationPreferences: Codable, Equatable {
         try container.encode(dispatchAlertsEnabled, forKey: .dispatchAlertsEnabled)
         try container.encode(hapticsEnabled, forKey: .hapticsEnabled)
         try container.encode(criticalDispatchAlerts, forKey: .criticalDispatchAlerts)
+        try container.encode(criticalDispatchAlertMode, forKey: .criticalDispatchAlertMode)
+        try container.encode(dispatchAlertTone, forKey: .dispatchAlertTone)
         try container.encode(callTypes, forKey: .callTypes)
         try container.encode(workingOnly, forKey: .workingOnly)
 

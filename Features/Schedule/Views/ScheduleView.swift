@@ -5,6 +5,12 @@ struct ScheduleView: View {
 
     var body: some View {
         AppScreen(title: "Schedule") {
+            AppDetailHeader(
+                title: "Schedule",
+                subtitle: "Department staffing and upcoming assignments.",
+                systemImage: "calendar.badge.clock"
+            )
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     header

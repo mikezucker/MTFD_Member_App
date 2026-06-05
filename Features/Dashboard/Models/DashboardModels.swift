@@ -56,6 +56,7 @@ struct RecentDepartmentCall: Identifiable, Hashable {
 
 struct DashboardApparatusWorkOrder: Identifiable, Hashable {
     let id: String
+    let apparatusApiId: String?
     let apparatusName: String
     let title: String
     let status: String?
@@ -88,6 +89,10 @@ struct DashboardState {
     var apparatusWorkOrders: [DashboardApparatusWorkOrder] = []
     var apparatusWorkOrdersMessage: String? = nil
     var upcomingSchedule: APIClient.MobileUpcomingScheduleResponse? = nil
+    var departmentScheduleEntries: [APIClient.MobileScheduleEntry] = []
+    var tomorrowScheduleEntries: [APIClient.MobileScheduleEntry] = []
+    var unreadNonDispatchMessageCount: Int = 0
+    var isLoadingStats: Bool = false
     var isLoading: Bool = false
     var errorMessage: String? = nil
 
@@ -111,6 +116,7 @@ struct DashboardState {
             recentDepartmentCalls: [],
             apparatusWorkOrders: [],
             apparatusWorkOrdersMessage: nil,
+            isLoadingStats: false,
             isLoading: false,
             errorMessage: nil
         )

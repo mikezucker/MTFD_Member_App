@@ -1,12 +1,185 @@
 import SwiftUI
 
+struct AppDashboardIcon: View {
+    let systemImage: String
+    var size: CGFloat = 32
+
+    private var emoji: String {
+        switch systemImage {
+        case "envelope.fill", "text.bubble.fill":
+            return "📨"
+        case "graduationcap.fill":
+            return "🎓"
+        case "checkmark.seal.fill", "exclamationmark.triangle.fill":
+            return "✅"
+        case "doc.text.fill":
+            return "📄"
+        case "wrench.and.screwdriver.fill":
+            return "🛠️"
+        case "calendar.badge.clock":
+            return "🗓️"
+        case "person.fill.checkmark":
+            return "👤"
+        case "clock.arrow.circlepath", "bell.and.waves.left.and.right.fill":
+            return "🚨"
+        case "megaphone.fill":
+            return "📣"
+        case "building.2.fill":
+            return "🏢"
+        case "flame.fill":
+            return "🔥"
+        case "bell.fill":
+            return "🔔"
+        case "person.3.fill":
+            return "👥"
+        case "tshirt.fill":
+            return "👕"
+        case "person.crop.circle.fill":
+            return "👤"
+        case "gearshape.fill":
+            return "⚙️"
+        case "shield.lefthalf.filled":
+            return "🛡️"
+        default:
+            return "📌"
+        }
+    }
+
+    var body: some View {
+        Text(emoji)
+            .font(.system(size: size))
+            .minimumScaleFactor(0.75)
+            .accessibilityLabel(Text(systemImage))
+    }
+}
+
+struct AppDetailHeader: View {
+    let title: String
+    let subtitle: String?
+    let systemImage: String
+
+    init(title: String, subtitle: String? = nil, systemImage: String) {
+        self.title = title
+        self.subtitle = subtitle
+        self.systemImage = systemImage
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            AppDashboardIcon(systemImage: systemImage, size: 34)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+
+                if let subtitle, !subtitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.68))
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+enum DashboardHeaderAlertMode: Equatable {
+    case activeDispatch(messageCount: Int)
+    case unreadMessages(count: Int)
+    case latestDispatches
+
+    var badgeCount: Int {
+        switch self {
+        case .activeDispatch(let messageCount):
+            return messageCount
+        case .unreadMessages(let count):
+            return count
+        case .latestDispatches:
+            return 0
+        }
+    }
+
+    var shouldAnimate: Bool {
+        switch self {
+        case .activeDispatch:
+            return true
+        case .unreadMessages(let count):
+            return count > 0
+        case .latestDispatches:
+            return false
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .activeDispatch:
+            return "bell.and.waves.left.and.right.fill"
+        case .unreadMessages:
+            return "envelope.badge.fill"
+        case .latestDispatches:
+            return "clock.arrow.circlepath"
+        }
+    }
+
+    var iconColor: Color {
+        switch self {
+        case .activeDispatch:
+            return .red
+        case .unreadMessages:
+            return .blue
+        case .latestDispatches:
+            return .white
+        }
+    }
+
+    var backgroundColor: Color {
+        switch self {
+        case .activeDispatch:
+            return .red.opacity(0.20)
+        case .unreadMessages:
+            return .blue.opacity(0.20)
+        case .latestDispatches:
+            return .white.opacity(0.14)
+        }
+    }
+
+    var statusText: String {
+        switch self {
+        case .activeDispatch(let messageCount):
+            if messageCount > 0 {
+                return "Active dispatch • \(messageCount) unread message\(messageCount == 1 ? "" : "s")"
+            }
+
+            return "Active dispatch"
+        case .unreadMessages(let count):
+            return "\(count) unread message\(count == 1 ? "" : "s")"
+        case .latestDispatches:
+            return "Latest dispatches"
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .activeDispatch:
+            return "Open active dispatch"
+        case .unreadMessages:
+            return "Open messages"
+        case .latestDispatches:
+            return "Open latest dispatches"
+        }
+    }
+}
+
 struct DashboardHeaderView: View {
     let firstName: String
     let roleTitle: String
     let stationTitle: String
-    let unreadCount: Int
+    let alertMode: DashboardHeaderAlertMode
     let isBellRinging: Bool
-    let onTapMessages: () -> Void
+    let onTapAlert: () -> Void
 
     private var displayName: String {
         let trimmedName = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,12 +214,8 @@ struct DashboardHeaderView: View {
         return "\(cleanedRole) • \(cleanedStation)"
     }
 
-    private var messageStatusText: String {
-        if unreadCount <= 0 {
-            return "No unread messages"
-        }
-
-        return "\(unreadCount) unread message\(unreadCount == 1 ? "" : "s")"
+    private var effectiveShouldAnimate: Bool {
+        isBellRinging || alertMode.shouldAnimate
     }
 
     var body: some View {
@@ -74,7 +243,7 @@ struct DashboardHeaderView: View {
                         .allowsTightening(true)
                 }
 
-                Text(messageStatusText)
+                Text(alertMode.statusText)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.white.opacity(0.65))
                     .lineLimit(1)
@@ -83,29 +252,37 @@ struct DashboardHeaderView: View {
 
             Spacer(minLength: 4)
 
-            Button(action: onTapMessages) {
+            Button(action: onTapAlert) {
                 ZStack(alignment: .topTrailing) {
-                    Image(systemName: isBellRinging ? "bell.badge.fill" : "bell.fill")
+                    Image(systemName: alertMode.systemImage)
                         .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(alertMode.iconColor)
                         .frame(width: 50, height: 50)
-                        .background(.white.opacity(0.14))
+                        .background(alertMode.backgroundColor)
                         .clipShape(Circle())
+                        .rotationEffect(.degrees(effectiveShouldAnimate ? -10 : 0))
+                        .scaleEffect(effectiveShouldAnimate ? 1.08 : 1.0)
+                        .animation(
+                            effectiveShouldAnimate
+                                ? .easeInOut(duration: 0.16).repeatCount(6, autoreverses: true)
+                                : .easeOut(duration: 0.2),
+                            value: effectiveShouldAnimate
+                        )
 
-                    if unreadCount > 0 {
-                        Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                    if alertMode.badgeCount > 0 {
+                        Text(alertMode.badgeCount > 99 ? "99+" : "\(alertMode.badgeCount)")
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 3)
-                            .background(.red)
+                            .background(alertMode == .activeDispatch(messageCount: alertMode.badgeCount) ? .blue : .red)
                             .clipShape(Capsule())
                             .offset(x: 6, y: -6)
                     }
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open messages")
+            .accessibilityLabel(alertMode.accessibilityLabel)
         }
         .padding(.horizontal, 18)
         .padding(.top, 14)

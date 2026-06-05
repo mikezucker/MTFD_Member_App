@@ -6,6 +6,7 @@ extension Notification.Name {
 
 
 enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
+    case commandOverview
     case messages
     case assignedTraining
     case apparatusWorkOrders
@@ -20,6 +21,7 @@ enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
 
     var title: String {
         switch self {
+        case .commandOverview: return "Command Overview"
         case .messages: return "Messages"
         case .assignedTraining: return "Assigned Training"
         case .apparatusWorkOrders: return "Apparatus Work Orders"
@@ -34,6 +36,7 @@ enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
 
     var systemImage: String {
         switch self {
+        case .commandOverview: return "shield.lefthalf.filled"
         case .messages: return "text.bubble.fill"
         case .assignedTraining: return "graduationcap.fill"
         case .apparatusWorkOrders: return "wrench.and.screwdriver.fill"
@@ -56,11 +59,11 @@ enum DashboardCardLayoutDefaults {
 
         switch role {
         case "ADMIN", "CHIEF":
-            return [.messages, .needsAttention, .assignedTraining, .departmentUpdates, .apparatusWorkOrders, .scheduleEvents, .documents, .recentCalls, .stationUpdates]
+            return [.commandOverview, .needsAttention, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .departmentUpdates, .messages, .documents, .recentCalls, .stationUpdates]
         case "OFFICER_CAREER":
-            return [.messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .needsAttention, .stationUpdates, .documents, .recentCalls, .departmentUpdates]
+            return [.commandOverview, .scheduleEvents, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .needsAttention, .messages, .documents, .recentCalls, .departmentUpdates]
         case "OFFICER_VOLUNTEER":
-            return [.messages, .assignedTraining, .apparatusWorkOrders, .scheduleEvents, .needsAttention, .stationUpdates, .documents, .recentCalls, .departmentUpdates]
+            return [.commandOverview, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .scheduleEvents, .needsAttention, .messages, .documents, .recentCalls, .departmentUpdates]
         case "MEMBER_CAREER":
             return [.messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .recentCalls, .stationUpdates, .needsAttention]
         case "MEMBER_VOLUNTEER":

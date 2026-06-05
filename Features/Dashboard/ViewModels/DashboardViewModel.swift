@@ -102,6 +102,10 @@ final class DashboardViewModel: ObservableObject {
             apparatusWorkOrders: state.apparatusWorkOrders,
             apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
             upcomingSchedule: state.upcomingSchedule,
+            departmentScheduleEntries: state.departmentScheduleEntries,
+            tomorrowScheduleEntries: state.tomorrowScheduleEntries,
+            unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
+            isLoadingStats: true,
             isLoading: true,
             errorMessage: nil
         )
@@ -116,6 +120,7 @@ final class DashboardViewModel: ObservableObject {
             async let upcomingScheduleResponse = timedDashboardRequest("upcoming schedule") {
                 try await APIClient.shared.fetchMobileUpcomingSchedule()
             }
+            async let departmentScheduleEntriesResponse = fetchDepartmentScheduleOutlook()
 
             let dashboard = try await dashboardResponse
             let dispatchHistory = try await dispatchHistoryResponse
@@ -129,10 +134,12 @@ final class DashboardViewModel: ObservableObject {
                 print("🧨 Upcoming schedule failed:", error.localizedDescription)
             }
 
+            let departmentScheduleEntries = await departmentScheduleEntriesResponse
+
             activeDispatches = dashboard.activeDispatches ?? dispatchHistory.activeDispatches
 
-            let departmentYtd = dashboard.department?.totalYtd
-            let stationYtd = dashboard.station?.totalYtd
+            let departmentYtd: Int? = nil
+            let stationYtd: Int? = nil
 
             state = DashboardState(
                 greeting: "Welcome",
@@ -147,13 +154,17 @@ final class DashboardViewModel: ObservableObject {
                 pendingDocumentSignatures: dashboard.trainingSummary?.pendingDocumentSignatures ?? 0,
                 stationCallTotal: stationYtd,
                 departmentCallTotal: departmentYtd,
-                dashboardDepartment: dashboard.department,
-                dashboardStation: dashboard.station,
-                lastUpdated: dashboard.lastUpdated,
+                dashboardDepartment: nil,
+                dashboardStation: nil,
+                lastUpdated: nil,
                 recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
                 apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
                 apparatusWorkOrdersMessage: dashboard.apparatusWorkOrdersMessage,
                 upcomingSchedule: upcomingSchedule,
+                departmentScheduleEntries: departmentScheduleEntries,
+                tomorrowScheduleEntries: [],
+                unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
+                isLoadingStats: true,
                 isLoading: false,
                 errorMessage: nil
             )
@@ -163,6 +174,10 @@ final class DashboardViewModel: ObservableObject {
 
             Task {
                 await loadDispatchStats()
+            }
+
+            Task {
+                await loadUnreadNonDispatchMessageCount()
             }
         } catch {
             activeDispatches = []
@@ -187,12 +202,85 @@ final class DashboardViewModel: ObservableObject {
                 apparatusWorkOrders: [],
                 apparatusWorkOrdersMessage: nil,
                 upcomingSchedule: nil,
+                unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
+                isLoadingStats: false,
                 isLoading: false,
                 errorMessage: error.localizedDescription
             )
 
             print("Dashboard load failed: \(error.localizedDescription)")
         }
+    }
+
+    private func loadUnreadNonDispatchMessageCount() async {
+        do {
+            let response = try await APIClient.shared.fetchMessages()
+            let unreadCount = response.messages.filter { message in
+                message.type != "DISPATCH" &&
+                message.type != "DISPATCH_UPDATE" &&
+                message.dispatchId == nil &&
+                !message.isRead
+            }.count
+
+            state = DashboardState(
+                greeting: state.greeting,
+                role: state.role,
+                alerts: state.alerts,
+                stationUpdates: state.stationUpdates,
+                departmentUpdates: state.departmentUpdates,
+                attentionItems: state.attentionItems,
+                quickActions: state.quickActions,
+                progressItems: state.progressItems,
+                assignedTrainingPreview: state.assignedTrainingPreview,
+                pendingDocumentSignatures: state.pendingDocumentSignatures,
+                stationCallTotal: state.stationCallTotal,
+                departmentCallTotal: state.departmentCallTotal,
+                dashboardDepartment: state.dashboardDepartment,
+                dashboardStation: state.dashboardStation,
+                lastUpdated: state.lastUpdated,
+                recentDepartmentCalls: state.recentDepartmentCalls,
+                apparatusWorkOrders: state.apparatusWorkOrders,
+                apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
+                upcomingSchedule: state.upcomingSchedule,
+                unreadNonDispatchMessageCount: unreadCount,
+                isLoadingStats: state.isLoadingStats,
+                isLoading: state.isLoading,
+                errorMessage: state.errorMessage
+            )
+        } catch {
+            print("Dashboard unread non-dispatch message count failed:", error.localizedDescription)
+        }
+    }
+
+    private func fetchDepartmentScheduleOutlook() async -> [APIClient.MobileScheduleEntry] {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        var entries: [APIClient.MobileScheduleEntry] = []
+
+        for offset in 0..<4 {
+            guard let date = calendar.date(byAdding: .day, value: offset, to: today) else {
+                continue
+            }
+
+            let dateString = formatter.string(from: date)
+
+            do {
+                let response = try await APIClient.shared.fetchMobileSchedule(date: dateString)
+                print("🗓️ Department schedule \(dateString): \(response.entries.count) entries")
+                entries.append(contentsOf: response.entries)
+            } catch {
+                print("🧨 Department schedule failed for \(dateString):", error.localizedDescription)
+            }
+        }
+
+        print("🗓️ Department schedule outlook total entries:", entries.count)
+        return entries
     }
 
     private func loadDispatchStats() async {
@@ -222,6 +310,10 @@ final class DashboardViewModel: ObservableObject {
                 apparatusWorkOrders: state.apparatusWorkOrders,
                 apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
                 upcomingSchedule: state.upcomingSchedule,
+                departmentScheduleEntries: state.departmentScheduleEntries,
+                tomorrowScheduleEntries: state.tomorrowScheduleEntries,
+                unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
+                isLoadingStats: false,
                 isLoading: state.isLoading,
                 errorMessage: state.errorMessage
             )
@@ -278,9 +370,15 @@ final class DashboardViewModel: ObservableObject {
     private func mapApparatusWorkOrders(
         from workOrders: [APIClient.ApparatusWorkOrder]
     ) -> [DashboardApparatusWorkOrder] {
-        workOrders.prefix(3).map { workOrder in
+        print("🛠️ Dashboard work orders received:", workOrders.count)
+        workOrders.forEach { workOrder in
+            print("🛠️ Work order:", workOrder.apparatusName, workOrder.title)
+        }
+
+        return workOrders.map { workOrder in
             DashboardApparatusWorkOrder(
                 id: workOrder.id,
+                apparatusApiId: workOrder.apparatusApiId,
                 apparatusName: workOrder.apparatusName,
                 title: workOrder.title,
                 status: workOrder.status

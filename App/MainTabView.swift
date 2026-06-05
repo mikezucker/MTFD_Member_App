@@ -1,4 +1,27 @@
 import SwiftUI
+import UIKit
+
+enum DashboardEmoji {
+    static let dispatch = "🚨"
+    static let messages = "📨"
+    static let training = "🎓"
+    static let schedule = "🗓️"
+    static let staffing = "👥"
+    static let apparatus = "🛠️"
+    static let documents = "📄"
+    static let fire = "🔥"
+    static let ems = "🚑"
+    static let department = "🏢"
+    static let warning = "⚠️"
+    static let unread = "🔔"
+    static let progress = "📈"
+    static let inbox = "📥"
+    static let announcements = "📣"
+    static let member = "👤"
+    static let settings = "⚙️"
+    static let shield = "🛡️"
+}
+
 
 struct MainTabView: View {
     @EnvironmentObject private var session: SessionManager
@@ -24,19 +47,20 @@ struct MainTabView: View {
     var body: some View {
         ZStack(alignment: .top) {
             TabView(selection: $router.selectedTab) {
-                DashboardView()
-                    .tabItem {
-                        Label("Home", systemImage: "house.fill")
+                Group {
+                    if shouldShowCommandCenterAsHome {
+                        CommandView()
+                    } else {
+                        DashboardView()
                     }
-                    .tag(NavigationRouter.AppTab.home)
-
-                if canUseCommandTab {
-                    CommandView()
-                        .tabItem {
-                            Label("Command", systemImage: "shield.lefthalf.filled")
-                        }
-                        .tag(NavigationRouter.AppTab.command)
                 }
+                .tabItem {
+                    Label(
+                        shouldShowCommandCenterAsHome ? "Command" : "Home",
+                        systemImage: shouldShowCommandCenterAsHome ? "shield.lefthalf.filled" : "house.fill"
+                    )
+                }
+                .tag(NavigationRouter.AppTab.home)
 
                 TrainingView()
                     .tabItem {
@@ -129,6 +153,7 @@ struct MainTabView: View {
                 address: nil,
                 units: [],
                 isWorkingFire: false,
+                activeCallCount: 1,
                 stationId: nil,
                 messageId: nil,
                 trainingId: nil,
@@ -137,6 +162,13 @@ struct MainTabView: View {
 
             router.route(from: payload)
         }
+    }
+
+    private var shouldShowCommandCenterAsHome: Bool {
+        // All roles use DashboardView as the shared dashboard shell.
+        // This keeps APNs, dispatches, notification taps, Live Activities,
+        // header alert behavior, haptics, and active dispatch handling consistent.
+        false
     }
 
     private var canUseCommandTab: Bool {
@@ -251,42 +283,42 @@ private struct CommandView: View {
 private struct ChiefCommandView: View {
     var body: some View {
         CommandWorkspaceView(
-            title: "Chief Command",
-            subtitle: "Department-wide command workspace",
-            description: "Monitor department operations, staffing, training compliance, messages, documents, and future apparatus location tools.",
+            title: "Command Center",
+            subtitle: "Department-wide operational overview",
+            description: "Monitor active incidents, staffing, training, messages, apparatus readiness, and department priorities.",
             tiles: [
                 CommandTileData(
-                    title: "Department Operations",
-                    subtitle: "View active incidents, department-wide status, dispatch activity, and operational priorities.",
-                    systemImage: "shield.lefthalf.filled"
+                    title: "Department Schedule",
+                    subtitle: "View department events, signups, training-linked items, and upcoming operational dates.",
+                    emoji: DashboardEmoji.schedule
                 ),
                 CommandTileData(
-                    title: "Staffing Overview",
+                    title: "Staffing",
                     subtitle: "Review today’s staffing, vacancies, relief driver coverage, and department schedule status.",
-                    systemImage: "person.3.sequence.fill",
+                    emoji: DashboardEmoji.staffing,
                     destination: .staffing
                 ),
                 CommandTileData(
-                    title: "Training Compliance",
+                    title: "Training",
                     subtitle: "Track assigned training, overdue members, JPR progress, and evaluator sign-offs.",
-                    systemImage: "checklist.checked",
+                    emoji: DashboardEmoji.training,
                     destination: .training
                 ),
                 CommandTileData(
-                    title: "Department Messages",
+                    title: "Messages",
                     subtitle: "Prepare department-wide messages, announcements, and operational updates.",
-                    systemImage: "megaphone.fill",
+                    emoji: DashboardEmoji.messages,
                     destination: .messages
                 ),
                 CommandTileData(
                     title: "Documents / SOPs",
                     subtitle: "Review SOP acknowledgements, missing signatures, and document completion status.",
-                    systemImage: "doc.text.magnifyingglass"
+                    emoji: DashboardEmoji.documents
                 ),
                 CommandTileData(
-                    title: "Apparatus GPS",
-                    subtitle: "Future apparatus location map, stale-location warnings, and vehicle status overview.",
-                    systemImage: "location.north.line.fill"
+                    title: "Apparatus",
+                    subtitle: "Review apparatus work orders, unit readiness, and future GPS location tools.",
+                    emoji: DashboardEmoji.apparatus
                 )
             ]
         )
@@ -296,42 +328,42 @@ private struct ChiefCommandView: View {
 private struct LieutenantCommandView: View {
     var body: some View {
         CommandWorkspaceView(
-            title: "Lieutenant Command",
-            subtitle: "Station and company command workspace",
-            description: "Focus on assigned members, station staffing, training progress, station messages, and operational readiness.",
+            title: "Command Center",
+            subtitle: "Station and company operational overview",
+            description: "Monitor assigned members, station staffing, training progress, station messages, and operational readiness.",
             tiles: [
                 CommandTileData(
-                    title: "Station Operations",
-                    subtitle: "View active incidents, assigned units, station/company status, and operational updates.",
-                    systemImage: "building.2.crop.circle.fill"
+                    title: "Station Schedule",
+                    subtitle: "View station events, company assignments, training-linked items, and upcoming operational dates.",
+                    emoji: DashboardEmoji.schedule
                 ),
                 CommandTileData(
-                    title: "My Staffing",
+                    title: "Staffing",
                     subtitle: "Review station/company schedule, vacancies, assigned members, and relief driver coverage.",
-                    systemImage: "person.2.badge.gearshape.fill",
+                    emoji: DashboardEmoji.staffing,
                     destination: .staffing
                 ),
                 CommandTileData(
-                    title: "Training Progress",
+                    title: "Training",
                     subtitle: "Track assigned member training, JPR completion, skill checkoffs, and sign-offs.",
-                    systemImage: "checkmark.seal.fill",
+                    emoji: DashboardEmoji.training,
                     destination: .training
                 ),
                 CommandTileData(
-                    title: "Station Messages",
+                    title: "Messages",
                     subtitle: "Prepare station or company-specific messages and updates.",
-                    systemImage: "text.bubble.fill",
+                    emoji: DashboardEmoji.messages,
                     destination: .messages
                 ),
                 CommandTileData(
-                    title: "Documents",
+                    title: "Documents / SOPs",
                     subtitle: "Review SOPs, station documents, acknowledgements, and required signatures.",
-                    systemImage: "doc.text.fill"
+                    emoji: DashboardEmoji.documents
                 ),
                 CommandTileData(
                     title: "Members",
                     subtitle: "View assigned member status, profiles, roles, and readiness information.",
-                    systemImage: "person.crop.rectangle.stack.fill"
+                    emoji: DashboardEmoji.staffing
                 )
             ]
         )
@@ -345,6 +377,7 @@ private struct CommandWorkspaceView: View {
     @StateObject private var messageViewModel = MessageCenterViewModel()
     @State private var selectedDispatch: DispatchNotificationPayload?
     @State private var selectedCommandDestination: CommandDestination?
+    @AppStorage("dashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
 
     private let title: String
     private let subtitle: String
@@ -364,42 +397,60 @@ private struct CommandWorkspaceView: View {
     }
 
     var body: some View {
-        AppScreen(title: "Command") {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    header
+        NavigationStack {
+            ZStack(alignment: .top) {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.06, green: 0.18, blue: 0.38),
+                        Color(red: 0.03, green: 0.10, blue: 0.22)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
 
-                    if !dashboardViewModel.activeDispatches.isEmpty {
-                        activeDispatchSection
-                    }
+                VStack(spacing: 0) {
+                    commandRoleHeader
 
-                    staffingOverviewSection
+                    ScrollView(showsIndicators: false) {
+                        VStack(alignment: .leading, spacing: 18) {
+                            commandCallStatsSection
 
-                    trainingOversightSection
+                            compactDailyStaffingSection
 
-                    messagesOverviewSection
+                            activeDispatchSection
 
-                    LazyVGrid(
-                        columns: [
-                            GridItem(.flexible(), spacing: 14),
-                            GridItem(.flexible(), spacing: 14)
-                        ],
-                        spacing: 14
-                    ) {
-                        ForEach(tiles) { tile in
-                            commandTile(tile)
+                            commandWorkOrdersSection
+
+                            messagesOverviewSection
+
+                            trainingOversightSection
+
+                            LazyVGrid(
+                                columns: [
+                                    GridItem(.flexible(), spacing: 14),
+                                    GridItem(.flexible(), spacing: 14)
+                                ],
+                                spacing: 14
+                            ) {
+                                ForEach(tiles) { tile in
+                                    commandTile(tile)
+                                }
+                            }
                         }
+                        .padding(.horizontal)
+                        .padding(.top, 12)
+                        .padding(.bottom, 120)
+                    }
+                    .refreshable {
+                        dashboardViewModel.refresh(role: mappedCommandUserRole)
+                        await scheduleViewModel.refresh()
+                        await messageViewModel.refresh()
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 28)
             }
-            .refreshable {
-                dashboardViewModel.refresh(role: mappedCommandUserRole)
-                await scheduleViewModel.refresh()
-                await messageViewModel.refresh()
-            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .task {
             dashboardViewModel.loadIfNeeded(role: mappedCommandUserRole)
@@ -412,6 +463,17 @@ private struct CommandWorkspaceView: View {
         }
         .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
             syncLiveActivityWithActiveDispatches()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .didReceiveDispatchNotification)) { notification in
+            guard let dispatch = notification.object as? DispatchNotificationPayload else {
+                print("⚠️ Command dashboard received dispatch notification, but payload was not DispatchNotificationPayload.")
+                return
+            }
+
+            print("🔔 Command dashboard dispatch received:", dispatch.id)
+
+            dashboardViewModel.addActiveDispatch(from: dispatch)
+            selectedDispatch = dispatch
         }
         .sheet(item: $selectedDispatch) { dispatch in
             DispatchDetailView(dispatch: dispatch)
@@ -441,6 +503,261 @@ private struct CommandWorkspaceView: View {
                     }
                 )
             }
+        }
+    }
+
+    private enum CommandCallTotalKind {
+        case department
+        case fire
+        case ems
+    }
+
+    private var selectedDashboardTotalsWindow: DashboardTotalsWindow {
+        DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
+    }
+
+    private var commandCallStatsSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Call Totals")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                HStack(spacing: 6) {
+                    ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedWindowRawValue = window.rawValue
+                            }
+                        } label: {
+                            Text(window.rawValue)
+                                .font(.caption.bold())
+                                .foregroundStyle(selectedDashboardTotalsWindow == window ? AppTheme.navy : .white.opacity(0.72))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(selectedDashboardTotalsWindow == window ? AppTheme.gold : Color.white.opacity(0.10))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(alignment: .center, spacing: 0) {
+                commandInlineTotal(
+                    value: commandCallTotalValue(.department),
+                    label: "Department"
+                )
+
+                Divider()
+                    .frame(height: 48)
+                    .background(Color.white.opacity(0.18))
+
+                commandInlineTotal(
+                    value: commandCallTotalValue(.fire),
+                    label: "\(DashboardEmoji.fire) Fire"
+                )
+
+                Divider()
+                    .frame(height: 48)
+                    .background(Color.white.opacity(0.18))
+
+                commandInlineTotal(
+                    value: commandCallTotalValue(.ems),
+                    label: "\(DashboardEmoji.ems) EMS"
+                )
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+        }
+    }
+
+    private func commandInlineTotal(value: Int, label: String) -> some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func commandCallTotalValue(_ kind: CommandCallTotalKind) -> Int {
+        let department = dashboardViewModel.state.dashboardDepartment
+
+        switch (selectedDashboardTotalsWindow, kind) {
+        case (.last24h, .department):
+            return department?.total24h ?? 0
+        case (.last24h, .fire):
+            return department?.fire24h ?? 0
+        case (.last24h, .ems):
+            return department?.ems24h ?? 0
+
+        case (.last7d, .department):
+            return department?.total7d ?? 0
+        case (.last7d, .fire):
+            return department?.fire7d ?? 0
+        case (.last7d, .ems):
+            return department?.ems7d ?? 0
+
+        case (.last30d, .department):
+            return department?.total30d ?? 0
+        case (.last30d, .fire):
+            return department?.fire30d ?? 0
+        case (.last30d, .ems):
+            return department?.ems30d ?? 0
+
+        case (.ytd, .department):
+            return department?.totalYtd ?? 0
+        case (.ytd, .fire):
+            return department?.fireYtd ?? 0
+        case (.ytd, .ems):
+            return department?.emsYtd ?? 0
+        }
+    }
+
+    private var commandWorkOrdersSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Apparatus Work Orders")
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            if dashboardViewModel.state.isLoading {
+                commandInfoCard(
+                    title: "Loading apparatus issues",
+                    message: "Checking open apparatus work orders...",
+                    emoji: DashboardEmoji.apparatus
+                )
+            } else if dashboardViewModel.state.apparatusWorkOrders.isEmpty {
+                commandInfoCard(
+                    title: "No open work orders",
+                    message: dashboardViewModel.state.apparatusWorkOrdersMessage ?? "No open apparatus work orders.",
+                    emoji: DashboardEmoji.apparatus
+                )
+            } else {
+                DashboardApparatusWorkOrdersCard(
+                    workOrders: dashboardViewModel.state.apparatusWorkOrders
+                ) {
+                    selectedCommandDestination = nil
+                }
+            }
+        }
+    }
+
+    private var compactDailyStaffingSection: some View {
+        Button {
+            selectedCommandDestination = .staffing
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Daily Staffing")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Text(scheduleViewModel.date ?? "Today and next shift coverage")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.62))
+                    }
+
+                    Spacer()
+
+                    if scheduleVacancyCount > 0 {
+                        Text("\(scheduleVacancyCount) vacant")
+                            .font(.caption.bold())
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.orange.opacity(0.16))
+                            .clipShape(Capsule())
+                    } else if !scheduleViewModel.entries.isEmpty {
+                        Text("Covered")
+                            .font(.caption.bold())
+                            .foregroundStyle(AppTheme.gold)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(AppTheme.gold.opacity(0.16))
+                            .clipShape(Capsule())
+                    }
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.38))
+                }
+
+                if scheduleViewModel.isLoading && scheduleViewModel.entries.isEmpty {
+                    Text("Loading staffing...")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
+                } else if scheduleViewModel.entries.isEmpty {
+                    Text("No staffing entries available.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(scheduleViewModel.entries.prefix(2)) { entry in
+                            compactStaffingLine(entry)
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .background(.white.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(.white.opacity(0.10), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func compactStaffingLine(_ entry: APIClient.MobileScheduleEntry) -> some View {
+        let filledNames = entry.staffingDetails
+            .filter { !$0.isVacant }
+            .compactMap { detail in
+                let trimmed = detail.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed?.isEmpty == false ? trimmed : nil
+            }
+
+        let filledText = filledNames.isEmpty
+            ? "No assigned members"
+            : filledNames.joined(separator: " • ")
+
+        let vacantCount = entry.staffingDetails.filter { $0.isVacant }.count
+
+        return VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text("\(entry.title) • \(entry.timeRange)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                if vacantCount > 0 {
+                    Text("\(vacantCount) vacant")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            Text(filledText)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(3)
         }
     }
 
@@ -487,7 +804,7 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "No messages",
                     message: messageViewModel.errorMessage ?? "Department, station, and training messages will appear here.",
-                    systemImage: "tray"
+                    emoji: DashboardEmoji.messages
                 )
             } else {
                 VStack(spacing: 10) {
@@ -619,7 +936,7 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "No active assigned training",
                     message: "Assigned training, JPR readiness, and evaluator sign-offs will appear here as they become available.",
-                    systemImage: "checkmark.seal.fill"
+                    emoji: DashboardEmoji.training
                 )
             } else {
                 VStack(spacing: 10) {
@@ -768,20 +1085,20 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "No staffing entries",
                     message: scheduleViewModel.errorMessage ?? "No schedule entries were returned for today.",
-                    systemImage: "calendar.badge.exclamationmark"
+                    emoji: DashboardEmoji.schedule
                 )
             } else {
                 HStack(spacing: 10) {
                     commandMetricCard(
                         title: "Assignments",
                         value: "\(scheduleFilledCount)",
-                        systemImage: "person.crop.circle.fill"
+                        emoji: DashboardEmoji.staffing
                     )
 
                     commandMetricCard(
                         title: "Vacancies",
                         value: "\(scheduleVacancyCount)",
-                        systemImage: "person.crop.circle.badge.exclamationmark"
+                        emoji: DashboardEmoji.warning
                     )
                 }
 
@@ -876,12 +1193,12 @@ private struct CommandWorkspaceView: View {
     private func commandMetricCard(
         title: String,
         value: String,
-        systemImage: String
+        emoji: String
     ) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(AppTheme.gold)
+            Text(emoji)
+                .font(.system(size: 26))
+                .frame(width: 32, alignment: .center)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
@@ -904,12 +1221,12 @@ private struct CommandWorkspaceView: View {
     private func commandInfoCard(
         title: String,
         message: String,
-        systemImage: String
+        emoji: String
     ) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.orange)
+            Text(emoji)
+                .font(.system(size: 30))
+                .frame(width: 38, alignment: .center)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
@@ -935,10 +1252,18 @@ private struct CommandWorkspaceView: View {
                 .font(.headline)
                 .foregroundStyle(.white)
 
-            ActiveDispatchStackView(dispatches: dashboardViewModel.activeDispatches) { activeDispatch in
-                let payload = makeDispatchPayload(from: activeDispatch)
-                DispatchLiveActivityManager.shared.startOrUpdate(from: payload)
-                selectedDispatch = payload
+            if dashboardViewModel.activeDispatches.isEmpty {
+                commandInfoCard(
+                    title: "No active dispatches",
+                    message: "Active department dispatches will appear here when available.",
+                    emoji: DashboardEmoji.dispatch
+                )
+            } else {
+                ActiveDispatchStackView(dispatches: dashboardViewModel.activeDispatches) { activeDispatch in
+                    let payload = makeDispatchPayload(from: activeDispatch)
+
+                    selectedDispatch = payload
+                }
             }
         }
     }
@@ -958,12 +1283,20 @@ private struct CommandWorkspaceView: View {
     }
 
     private func syncLiveActivityWithActiveDispatches() {
+        print("🟣 MainTab LiveActivity sync. activeDispatches:", dashboardViewModel.activeDispatches.count)
+
         guard let newestDispatch = dashboardViewModel.activeDispatches.first else {
+            print("🟣 MainTab LiveActivity no active dispatches. Ending all.")
             DispatchLiveActivityManager.shared.endAll()
             return
         }
 
-        let payload = makeDispatchPayload(from: newestDispatch)
+        print("🟣 MainTab LiveActivity newest dispatch:", newestDispatch.id, newestDispatch.callType)
+
+        let payload = makeDispatchPayload(
+            from: newestDispatch,
+            activeCallCount: dashboardViewModel.activeDispatches.count
+        )
         DispatchLiveActivityManager.shared.startOrUpdate(from: payload)
     }
 
@@ -981,7 +1314,10 @@ private struct CommandWorkspaceView: View {
         return .member
     }
 
-    private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {
+    private func makeDispatchPayload(
+        from activeDispatch: APIClient.ActiveDispatch,
+        activeCallCount: Int = 1
+    ) -> DispatchNotificationPayload {
         DispatchNotificationPayload(
             type: activeDispatch.priority == "CRITICAL" ? .dispatchCritical : .dispatch,
             id: activeDispatch.id,
@@ -991,10 +1327,86 @@ private struct CommandWorkspaceView: View {
             address: activeDispatch.address,
             units: activeDispatch.units,
             isWorkingFire: activeDispatch.isWorkingFire ?? false,
+            activeCallCount: activeCallCount,
             stationId: nil,
             messageId: nil,
             trainingId: nil,
             documentId: nil
+        )
+    }
+
+    private var firstName: String {
+        if session.currentUser?.role.uppercased() == "CHIEF" {
+            return "Chief"
+        }
+
+        let name = session.currentUser?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.split(separator: " ").first.map(String.init) ?? "Member"
+    }
+
+    private var stationDisplayName: String {
+        switch session.currentUser?.company {
+        case "FIRE_HQ":
+            return "Fire HQ"
+        case let company? where !company.isEmpty:
+            return StationMapper.displayName(from: company)
+        default:
+            return "Morris Township Fire"
+        }
+    }
+
+    private func memberRoleDisplayName(from rawRole: String?) -> String {
+        guard let rawRole = rawRole?.uppercased() else {
+            return "Member"
+        }
+
+        switch rawRole {
+        case "ADMIN":
+            return "Administrator"
+        case "CHIEF":
+            return "Chief"
+        case "OFFICER_CAREER":
+            return "Career Officer"
+        case "OFFICER_VOLUNTEER":
+            return "Volunteer Officer"
+        case "MEMBER_CAREER":
+            return "Career Member"
+        case "MEMBER_VOLUNTEER":
+            return "Volunteer Member"
+        default:
+            return rawRole
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
+        }
+    }
+
+    private var commandHeaderAlertMode: DashboardHeaderAlertMode {
+        if !dashboardViewModel.activeDispatches.isEmpty {
+            return .activeDispatch(messageCount: messageViewModel.unreadCount)
+        }
+
+        if messageViewModel.unreadCount > 0 {
+            return .unreadMessages(count: messageViewModel.unreadCount)
+        }
+
+        return .latestDispatches
+    }
+
+    private var commandRoleHeader: some View {
+        DashboardHeaderView(
+            firstName: firstName,
+            roleTitle: memberRoleDisplayName(from: session.currentUser?.role),
+            stationTitle: stationDisplayName,
+            alertMode: commandHeaderAlertMode,
+            isBellRinging: false,
+            onTapAlert: {
+                if let activeDispatch = dashboardViewModel.activeDispatches.first {
+                    selectedDispatch = makeDispatchPayload(
+                        from: activeDispatch,
+                        activeCallCount: dashboardViewModel.activeDispatches.count
+                    )
+                }
+            }
         )
     }
 
@@ -1024,9 +1436,8 @@ private struct CommandWorkspaceView: View {
         } label: {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top) {
-                    Image(systemName: tile.systemImage)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(AppTheme.gold)
+                    Text(tile.emoji)
+                        .font(.system(size: 30))
                         .frame(width: 42, height: 42)
                         .background(Color.white.opacity(0.10))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -1097,7 +1508,7 @@ private struct CommandTileData: Identifiable {
     let id = UUID()
     let title: String
     let subtitle: String
-    let systemImage: String
+    let emoji: String
     var destination: CommandDestination? = nil
 }
 
@@ -1132,13 +1543,13 @@ private struct CommandStaffingDetailView: View {
                             metricCard(
                                 title: "Filled",
                                 value: "\(filledCount)",
-                                systemImage: "person.crop.circle.fill"
+                                emoji: DashboardEmoji.staffing
                             )
 
                             metricCard(
                                 title: "Vacant",
                                 value: "\(vacancyCount)",
-                                systemImage: "person.crop.circle.badge.exclamationmark",
+                                emoji: DashboardEmoji.warning,
                                 isWarning: vacancyCount > 0
                             )
                         }
@@ -1207,13 +1618,12 @@ private struct CommandStaffingDetailView: View {
     private func metricCard(
         title: String,
         value: String,
-        systemImage: String,
+        emoji: String,
         isWarning: Bool = false
     ) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(isWarning ? .orange : AppTheme.gold)
+            Text(emoji)
+                .font(.system(size: 26))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
@@ -1327,13 +1737,13 @@ private struct CommandTrainingDetailView: View {
                             metricCard(
                                 title: "Assigned",
                                 value: "\(items.count)",
-                                systemImage: "checklist.checked"
+                                emoji: DashboardEmoji.training
                             )
 
                             metricCard(
                                 title: "Overdue",
                                 value: "\(overdueCount)",
-                                systemImage: "exclamationmark.triangle.fill",
+                                emoji: DashboardEmoji.warning,
                                 isWarning: overdueCount > 0
                             )
                         }
@@ -1342,13 +1752,13 @@ private struct CommandTrainingDetailView: View {
                             metricCard(
                                 title: "Completed",
                                 value: "\(completedCount)",
-                                systemImage: "checkmark.seal.fill"
+                                emoji: DashboardEmoji.training
                             )
 
                             metricCard(
                                 title: "Avg. progress",
                                 value: "\(averageProgress)%",
-                                systemImage: "chart.line.uptrend.xyaxis"
+                                emoji: DashboardEmoji.progress
                             )
                         }
 
@@ -1446,13 +1856,12 @@ private struct CommandTrainingDetailView: View {
     private func metricCard(
         title: String,
         value: String,
-        systemImage: String,
+        emoji: String,
         isWarning: Bool = false
     ) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(isWarning ? .red : AppTheme.gold)
+            Text(emoji)
+                .font(.system(size: 26))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
@@ -1614,13 +2023,13 @@ private struct CommandMessagesDetailView: View {
                             metricCard(
                                 title: "Messages",
                                 value: "\(displayedMessages.count)",
-                                systemImage: "text.bubble.fill"
+                                emoji: DashboardEmoji.messages
                             )
 
                             metricCard(
                                 title: "Unread",
                                 value: "\(unreadVisibleCount)",
-                                systemImage: "bell.badge.fill",
+                                emoji: DashboardEmoji.unread,
                                 isWarning: unreadVisibleCount > 0
                             )
                         }
@@ -1629,13 +2038,13 @@ private struct CommandMessagesDetailView: View {
                             metricCard(
                                 title: "Read",
                                 value: "\(readCount)",
-                                systemImage: "checkmark.circle.fill"
+                                emoji: DashboardEmoji.training
                             )
 
                             metricCard(
                                 title: "App unread",
                                 value: "\(unreadCount)",
-                                systemImage: "tray.full.fill",
+                                emoji: DashboardEmoji.inbox,
                                 isWarning: unreadCount > 0
                             )
                         }
@@ -1756,13 +2165,12 @@ private struct CommandMessagesDetailView: View {
     private func metricCard(
         title: String,
         value: String,
-        systemImage: String,
+        emoji: String,
         isWarning: Bool = false
     ) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(isWarning ? .red : AppTheme.gold)
+            Text(emoji)
+                .font(.system(size: 26))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(value)
