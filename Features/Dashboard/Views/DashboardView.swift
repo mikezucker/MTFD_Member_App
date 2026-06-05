@@ -74,7 +74,27 @@ struct DashboardView: View {
                             AdminDashboardView()
 
                         case .chief:
-                            ChiefDashboardView()
+                            ChiefDashboardView(
+                                activeDispatches: viewModel.activeDispatches,
+                                workOrders: viewModel.state.apparatusWorkOrders,
+                                departmentStats: viewModel.state.dashboardDepartment,
+                                recentCalls: viewModel.state.recentDepartmentCalls,
+                                outlookDays: scheduleViewModel.outlookDays,
+                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats || scheduleViewModel.isLoading
+                            ) {
+                                showApparatusWorkOrders = true
+                            } onOpenMessages: {
+                                openMessageCenter(mode: .messagesOnly)
+                            } onOpenDispatch: { dispatch in
+                                latestDispatch = dispatch
+                                highlightedDispatchId = dispatch.id
+
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                    selectedDispatch = dispatch
+                                }
+                            } onOpenPastDispatches: {
+                                openMessageCenter(mode: .dispatchesOnly)
+                            }
 
                         case .officerCareer:
                             CareerOfficerDashboardView()
@@ -83,7 +103,43 @@ struct DashboardView: View {
                             VolunteerOfficerDashboardView()
 
                         case .memberCareer:
-                            CareerMemberDashboardView()
+                            CareerMemberDashboardView(
+                                activeDispatches: viewModel.activeDispatches,
+                                departmentStats: viewModel.state.dashboardDepartment,
+                                stationStats: viewModel.state.dashboardStation,
+                                upcomingSchedule: viewModel.state.upcomingSchedule,
+                                workOrders: viewModel.state.apparatusWorkOrders,
+                                recentCalls: viewModel.state.recentDepartmentCalls,
+                                assignedTraining: viewModel.state.assignedTrainingPreview,
+                                pendingDocuments: viewModel.state.pendingDocumentSignatures,
+                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                onOpenDispatch: { dispatch in
+                                    latestDispatch = dispatch
+                                    highlightedDispatchId = dispatch.id
+
+                                    withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                                        selectedDispatch = dispatch
+                                    }
+                                },
+                                onOpenMessages: {
+                                    openMessageCenter(mode: .messagesOnly)
+                                },
+                                onOpenWorkOrders: {
+                                    showApparatusWorkOrders = true
+                                },
+                                onOpenSchedule: {
+                                    router.selectedTab = .schedule
+                                },
+                                onOpenTraining: {
+                                    handleNavigation(to: .trainingAssigned)
+                                },
+                                onOpenDocuments: {
+                                    handleNavigation(to: .documents)
+                                },
+                                onOpenPastDispatches: {
+                                    openMessageCenter(mode: .dispatchesOnly)
+                                }
+                            )
 
                         case .memberVolunteer:
                             VolunteerMemberDashboardView()
@@ -157,6 +213,9 @@ struct DashboardView: View {
 
                         */
                     }
+                    .refreshable {
+                        await refreshDashboardContent()
+                    }
 
                 }
 
@@ -180,7 +239,7 @@ struct DashboardView: View {
                 viewModel.loadIfNeeded(role: mappedUserRole(from: session.currentUser?.role))
                 scheduleLiveActivitySync()
 
-                if isChiefRole && scheduleViewModel.outlookDays.isEmpty {
+                if (dashboardRole == .chief || dashboardRole == .admin) && scheduleViewModel.outlookDays.isEmpty {
                     Task {
                         await scheduleViewModel.loadOutlookDays(count: 4)
 
@@ -302,6 +361,22 @@ struct DashboardView: View {
                     DashboardLayoutView()
                 }
             }
+        }
+    }
+
+
+    @MainActor
+    private func refreshDashboardContent() async {
+        viewModel.refresh(role: mappedUserRole(from: session.currentUser?.role))
+
+        switch dashboardRole {
+        case .admin, .chief:
+            await scheduleViewModel.loadOutlookDays(count: 4)
+            if selectedChiefScheduleDayId == nil {
+                selectedChiefScheduleDayId = scheduleViewModel.outlookDays.first?.id
+            }
+        default:
+            break
         }
     }
 
@@ -1283,32 +1358,35 @@ struct DashboardApparatusWorkOrdersCard: View {
             }
 
             if groupedWorkOrders.count > 1 {
-                HStack(spacing: 6) {
-                    ForEach(groupedWorkOrders.prefix(6), id: \.apparatusName) { group in
-                        let isSelected = selectedGroup?.apparatusName == group.apparatusName
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(groupedWorkOrders.prefix(6), id: \.apparatusName) { group in
+                            let isSelected = selectedGroup?.apparatusName == group.apparatusName
 
-                        Button {
-                            selectedApparatusName = group.apparatusName
-                        } label: {
-                            Text(shortApparatusLabel(group.apparatusName))
-                                .font(.caption.bold())
-                                .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
-                                .frame(minWidth: 44, minHeight: 32)
-                                .padding(.horizontal, 6)
-                                .background(
-                                    Capsule()
-                                        .fill(isSelected ? AppTheme.gold : Color.white.opacity(0.10))
-                                )
+                            Button {
+                                selectedApparatusName = group.apparatusName
+                            } label: {
+                                Text(shortApparatusLabel(group.apparatusName))
+                                    .font(.caption.bold())
+                                    .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
+                                    .frame(minWidth: 44, minHeight: 32)
+                                    .padding(.horizontal, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(isSelected ? AppTheme.gold : Color.white.opacity(0.10))
+                                    )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                    }
 
-                    if groupedWorkOrders.count > 6 {
-                        Text("+\(groupedWorkOrders.count - 6)")
-                            .font(.caption.bold())
-                            .foregroundStyle(.white.opacity(0.58))
-                            .frame(minHeight: 32)
+                        if groupedWorkOrders.count > 6 {
+                            Text("+\(groupedWorkOrders.count - 6)")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white.opacity(0.58))
+                                .frame(minHeight: 32)
+                        }
                     }
+                    .padding(.horizontal, 1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -1330,27 +1408,31 @@ struct DashboardApparatusWorkOrdersCard: View {
                             .foregroundStyle(.white.opacity(0.55))
                     }
 
-                    VStack(spacing: 10) {
-                        ForEach(selectedGroup.workOrders.prefix(3)) { workOrder in
-                            VStack(alignment: .leading, spacing: 5) {
-                                if let status = workOrder.status, !status.isEmpty {
-                                    Text(status)
-                                        .font(.caption2.weight(.semibold))
-                                        .foregroundStyle(.white.opacity(0.55))
-                                        .lineLimit(1)
-                                }
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(spacing: 10) {
+                            ForEach(selectedGroup.workOrders) { workOrder in
+                                VStack(alignment: .leading, spacing: 5) {
+                                    if let status = workOrder.status, !status.isEmpty {
+                                        Text(status)
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.white.opacity(0.55))
+                                            .lineLimit(1)
+                                    }
 
-                                Text(workOrder.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(2)
+                                    Text(workOrder.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(Color.white.opacity(0.06))
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .frame(height: 172)
 
                     if selectedGroup.workOrders.count > 3 {
                         Button(action: onTap) {
@@ -1368,6 +1450,7 @@ struct DashboardApparatusWorkOrdersCard: View {
                     .foregroundStyle(.white.opacity(0.64))
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
         .background(Color.white.opacity(0.09))
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -1455,7 +1538,7 @@ struct DashboardApparatusWorkOrdersCard: View {
 }
 
 
-private struct DashboardRecentCallsCard: View {
+struct DashboardRecentCallsCard: View {
     let calls: [RecentDepartmentCall]
     let onTap: () -> Void
 
@@ -1608,7 +1691,7 @@ private struct DashboardLoadingCard: View {
     }
 }
 
-private struct DashboardSmallStatusCard: View {
+struct DashboardSmallStatusCard: View {
     let title: String
     let subtitle: String
     let systemImage: String
@@ -1649,7 +1732,7 @@ private struct DashboardSmallStatusCard: View {
     }
 }
 
-private struct DashboardMessageCenterCard: View {
+struct DashboardMessageCenterCard: View {
     let onTap: () -> Void
 
     var body: some View {
@@ -1686,7 +1769,7 @@ private struct DashboardMessageCenterCard: View {
     }
 }
 
-private struct DashboardAssignedTrainingPreviewCard: View {
+struct DashboardAssignedTrainingPreviewCard: View {
     let items: [DashboardTrainingPreviewItem]
     let onTap: () -> Void
 
@@ -1953,7 +2036,7 @@ private struct NewDispatchBanner: View {
     }
 }
 
-private struct DashboardDispatchPreviewCard: View {
+struct DashboardDispatchPreviewCard: View {
     let dispatch: DispatchNotificationPayload
     let isHighlighted: Bool
     let onTap: () -> Void
@@ -2025,7 +2108,7 @@ private struct DashboardDispatchPreviewCard: View {
     }
 }
 
-private struct DispatchMapPreview: View {
+struct DispatchMapPreview: View {
     let address: String
 
     @State private var position = MapCameraPosition.region(
@@ -2100,7 +2183,7 @@ private struct DispatchMapPreview: View {
     }
 }
 
-private struct DashboardUpcomingScheduleCard: View {
+struct DashboardUpcomingScheduleCard: View {
     let schedule: APIClient.MobileUpcomingScheduleResponse
     let shift: APIClient.MobileUpcomingShift
     let onTap: () -> Void
