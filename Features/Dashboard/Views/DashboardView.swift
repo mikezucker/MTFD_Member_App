@@ -112,6 +112,8 @@ struct DashboardView: View {
                                 recentCalls: viewModel.state.recentDepartmentCalls,
                                 assignedTraining: viewModel.state.assignedTrainingPreview,
                                 pendingDocuments: viewModel.state.pendingDocumentSignatures,
+                                departmentUpdates: viewModel.state.departmentUpdates,
+                                stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
                                 onOpenDispatch: { dispatch in
                                     latestDispatch = dispatch
@@ -1276,7 +1278,7 @@ struct DashboardView: View {
         }
     }
 
-    private struct DashboardUpdateBlock: View {
+    struct DashboardUpdateBlock: View {
         let update: DashboardBulletin
 
         var body: some View {

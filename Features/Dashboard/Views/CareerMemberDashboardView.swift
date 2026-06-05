@@ -10,6 +10,8 @@ struct CareerMemberDashboardView: View {
     let recentCalls: [RecentDepartmentCall]
     let assignedTraining: [DashboardTrainingPreviewItem]
     let pendingDocuments: Int
+    let departmentUpdates: [DashboardBulletin]
+    let stationUpdates: [DashboardBulletin]
     let isLoading: Bool
 
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
@@ -41,6 +43,7 @@ struct CareerMemberDashboardView: View {
             callTotalsSection
             scheduleSection
             messagesSection
+            updatesSection
             workOrdersSection
             trainingSection
             pastDispatchesSection
@@ -202,6 +205,72 @@ struct CareerMemberDashboardView: View {
             DashboardMessageCenterCard {
                 onOpenMessages()
             }
+        }
+    }
+
+
+    private var updatesSection: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            updatesGroup(
+                title: "Station Updates",
+                emptyMessage: "No station updates posted.",
+                updates: stationUpdates
+            )
+
+            updatesGroup(
+                title: "Department Updates",
+                emptyMessage: "No department updates posted.",
+                updates: departmentUpdates
+            )
+        }
+    }
+
+    private func updatesGroup(
+        title: String,
+        emptyMessage: String,
+        updates: [DashboardBulletin]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle(title)
+
+            if isLoading && updates.isEmpty {
+                loadingCard("Loading \(title.lowercased())...")
+            } else if updates.isEmpty {
+                emptyCard(emptyMessage)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(updates) { update in
+                        bulletinRow(update)
+                    }
+                }
+            }
+        }
+    }
+
+
+    private func bulletinRow(_ update: DashboardBulletin) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(update.title)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+
+            Text(update.message)
+                .font(.system(size: 14))
+                .foregroundStyle(.white.opacity(0.82))
+
+            if let updatedAt = update.updatedAt, !updatedAt.isEmpty {
+                Text(updatedAt)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
         }
     }
 
