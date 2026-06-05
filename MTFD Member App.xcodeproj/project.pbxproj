@@ -7,11 +7,17 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		29EA0E981267FDFE63EC108A /* LiveActivitiesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A85CC8AAC42424969824CE0E /* LiveActivitiesSettingsView.swift */; };
 		4001D01C2FAD6771007A8D45 /* DispatchDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4001D01B2FAD676D007A8D45 /* DispatchDetailViewModel.swift */; };
+		4008A35C2FD21A4F0030BAC9 /* ApparatusWorkOrdersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4008A35B2FD21A4F0030BAC9 /* ApparatusWorkOrdersView.swift */; };
 		401A01722FA7C6960087EA9E /* NavigationRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 401A01712FA7C6930087EA9E /* NavigationRouter.swift */; };
 		402260892FA7D85D003FB081 /* StationMapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 402260882FA7D857003FB081 /* StationMapper.swift */; };
 		402487EF2FC79E6C00475348 /* ScheduleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 402487EC2FC79E6C00475348 /* ScheduleView.swift */; };
 		402487F02FC79E6C00475348 /* ScheduleViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 402487EA2FC79E6C00475348 /* ScheduleViewModel.swift */; };
+		403298DA2FD2E0AD004D53EE /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403298D82FD2E06A004D53EE /* CarPlaySceneDelegate.swift */; };
+		403298E02FD2F2EB004D53EE /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CAABAB2FCE2C99008C33D9 /* WidgetKit.framework */; };
+		403298E12FD2F2EB004D53EE /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 40CAABAD2FCE2C99008C33D9 /* SwiftUI.framework */; };
+		403298EE2FD2F2ED004D53EE /* MTFDControlWidgetExtensionExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 403298DF2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		404C364C2FB207F80088997E /* ActiveDispatchStackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */; };
 		404C36502FB208DD0088997E /* DashboardHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364F2FB208D40088997E /* DashboardHeaderView.swift */; };
 		404C36532FB2401B0088997E /* AppBadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C36522FB2400C0088997E /* AppBadgeManager.swift */; };
@@ -88,10 +94,16 @@
 		40D121202FB13E36003B3E41 /* MessageCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D1211F2FB13E34003B3E41 /* MessageCenterView.swift */; };
 		40F2EEB12FCDF44C00140AC5 /* DashboardLayoutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB02FCDF44C00140AC5 /* DashboardLayoutView.swift */; };
 		40F2EEB32FCDF4AE00140AC5 /* DashboardCardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F2EEB22FCDF4AE00140AC5 /* DashboardCardLayout.swift */; };
-		29EA0E981267FDFE63EC108A /* LiveActivitiesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A85CC8AAC42424969824CE0E /* LiveActivitiesSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		403298EC2FD2F2ED004D53EE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 407DBFBC2F8D41C7006B3DAF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 403298DE2FD2F2EB004D53EE;
+			remoteInfo = MTFDControlWidgetExtensionExtension;
+		};
 		40CAABBD2FCE2C9A008C33D9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 407DBFBC2F8D41C7006B3DAF /* Project object */;
@@ -116,6 +128,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				40CAABBF2FCE2C9A008C33D9 /* MTFDLiveActivitiesExtension.appex in Embed Foundation Extensions */,
+				403298EE2FD2F2ED004D53EE /* MTFDControlWidgetExtensionExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -135,10 +148,13 @@
 
 /* Begin PBXFileReference section */
 		4001D01B2FAD676D007A8D45 /* DispatchDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchDetailViewModel.swift; sourceTree = "<group>"; };
+		4008A35B2FD21A4F0030BAC9 /* ApparatusWorkOrdersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApparatusWorkOrdersView.swift; sourceTree = "<group>"; };
 		401A01712FA7C6930087EA9E /* NavigationRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationRouter.swift; sourceTree = "<group>"; };
 		402260882FA7D857003FB081 /* StationMapper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StationMapper.swift; sourceTree = "<group>"; };
 		402487EA2FC79E6C00475348 /* ScheduleViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleViewModel.swift; sourceTree = "<group>"; };
 		402487EC2FC79E6C00475348 /* ScheduleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleView.swift; sourceTree = "<group>"; };
+		403298D82FD2E06A004D53EE /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+		403298DF2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MTFDControlWidgetExtensionExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveDispatchStackView.swift; sourceTree = "<group>"; };
 		404C364F2FB208D40088997E /* DashboardHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHeaderView.swift; sourceTree = "<group>"; };
 		404C36522FB2400C0088997E /* AppBadgeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBadgeManager.swift; sourceTree = "<group>"; };
@@ -220,20 +236,44 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		403298EF2FD2F2ED004D53EE /* Exceptions for "MTFDControlWidgetExtension" folder in "MTFDControlWidgetExtensionExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 403298DE2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension */;
+		};
+		403298F42FD2F437004D53EE /* Exceptions for "MTFDLiveActivities" folder in "MTFDControlWidgetExtensionExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				MTFDLiveActivitiesControl.swift,
+			);
+			target = 403298DE2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension */;
+		};
 		40CAABC32FCE2C9A008C33D9 /* Exceptions for "MTFDLiveActivities" folder in "MTFDLiveActivitiesExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				MTFDLiveActivitiesControl.swift,
 			);
 			target = 40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		403298E22FD2F2EB004D53EE /* MTFDControlWidgetExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				403298EF2FD2F2ED004D53EE /* Exceptions for "MTFDControlWidgetExtension" folder in "MTFDControlWidgetExtensionExtension" target */,
+			);
+			path = MTFDControlWidgetExtension;
+			sourceTree = "<group>";
+		};
 		40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				40CAABC32FCE2C9A008C33D9 /* Exceptions for "MTFDLiveActivities" folder in "MTFDLiveActivitiesExtension" target */,
+				403298F42FD2F437004D53EE /* Exceptions for "MTFDLiveActivities" folder in "MTFDControlWidgetExtensionExtension" target */,
 			);
 			path = MTFDLiveActivities;
 			sourceTree = "<group>";
@@ -246,6 +286,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		403298DC2FD2F2EB004D53EE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				403298E12FD2F2EB004D53EE /* SwiftUI.framework in Frameworks */,
+				403298E02FD2F2EB004D53EE /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		407DBFC12F8D41C7006B3DAF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -340,6 +389,7 @@
 		407DBFBB2F8D41C7006B3DAF = {
 			isa = PBXGroup;
 			children = (
+				403298D82FD2E06A004D53EE /* CarPlaySceneDelegate.swift */,
 				402487E82FC79D0400475348 /* Views */,
 				408910AA2F8FED180035C355 /* Supporting Files */,
 				408910A92F8FED0C0035C355 /* Resources */,
@@ -351,6 +401,7 @@
 				408910A22F8FECA40035C355 /* App */,
 				40CAABAF2FCE2C99008C33D9 /* MTFDLiveActivities */,
 				40CAABCA2FCE342E008C33D9 /* MTFD Watch App Watch App */,
+				403298E22FD2F2EB004D53EE /* MTFDControlWidgetExtension */,
 				40CAABAA2FCE2C99008C33D9 /* Frameworks */,
 				407DBFC52F8D41C7006B3DAF /* Products */,
 				408910A52F8FECD00035C355 /* Services */,
@@ -364,6 +415,7 @@
 				407DBFC42F8D41C7006B3DAF /* MTFD Member App.app */,
 				40CAABA92FCE2C99008C33D9 /* MTFDLiveActivitiesExtension.appex */,
 				40CAABC92FCE342E008C33D9 /* MTFD Watch App Watch App.app */,
+				403298DF2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -829,6 +881,7 @@
 		4089112F2F90160A0035C355 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4008A35B2FD21A4F0030BAC9 /* ApparatusWorkOrdersView.swift */,
 				404C364F2FB208D40088997E /* DashboardHeaderView.swift */,
 				404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */,
 				408910BD2F8FED410035C355 /* DashboardView.swift */,
@@ -1006,6 +1059,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		403298DE2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 403298F02FD2F2ED004D53EE /* Build configuration list for PBXNativeTarget "MTFDControlWidgetExtensionExtension" */;
+			buildPhases = (
+				403298DB2FD2F2EB004D53EE /* Sources */,
+				403298DC2FD2F2EB004D53EE /* Frameworks */,
+				403298DD2FD2F2EB004D53EE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				403298E22FD2F2EB004D53EE /* MTFDControlWidgetExtension */,
+			);
+			name = MTFDControlWidgetExtensionExtension;
+			packageProductDependencies = (
+			);
+			productName = MTFDControlWidgetExtensionExtension;
+			productReference = 403298DF2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		407DBFC32F8D41C7006B3DAF /* MTFD Member App */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 407DBFD52F8D41C9006B3DAF /* Build configuration list for PBXNativeTarget "MTFD Member App" */;
@@ -1021,6 +1096,7 @@
 			dependencies = (
 				40CAABBE2FCE2C9A008C33D9 /* PBXTargetDependency */,
 				40CAABD22FCE342F008C33D9 /* PBXTargetDependency */,
+				403298ED2FD2F2ED004D53EE /* PBXTargetDependency */,
 			);
 			name = "MTFD Member App";
 			packageProductDependencies = (
@@ -1083,6 +1159,9 @@
 				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
+					403298DE2FD2F2EB004D53EE = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					407DBFC32F8D41C7006B3DAF = {
 						CreatedOnToolsVersion = 26.4;
 					};
@@ -1111,11 +1190,19 @@
 				407DBFC32F8D41C7006B3DAF /* MTFD Member App */,
 				40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */,
 				40CAABC82FCE342E008C33D9 /* MTFD Watch App Watch App */,
+				403298DE2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		403298DD2FD2F2EB004D53EE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		407DBFC22F8D41C7006B3DAF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1141,6 +1228,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		403298DB2FD2F2EB004D53EE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		407DBFC02F8D41C7006B3DAF /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -1189,6 +1283,7 @@
 				408910F32F8FED410035C355 /* LoginView.swift in Sources */,
 				404C36532FB2401B0088997E /* AppBadgeManager.swift in Sources */,
 				40D1211C2FB13CA3003B3E41 /* MobileMessage.swift in Sources */,
+				4008A35C2FD21A4F0030BAC9 /* ApparatusWorkOrdersView.swift in Sources */,
 				4001D01C2FAD6771007A8D45 /* DispatchDetailViewModel.swift in Sources */,
 				408911432F902A4A0035C355 /* DashboardQuickActionTile.swift in Sources */,
 				408910F42F8FED410035C355 /* MainTabView.swift in Sources */,
@@ -1196,6 +1291,7 @@
 				408910F62F8FED410035C355 /* ModuleCard.swift in Sources */,
 				4089113D2F9029890035C355 /* DashboardViewModel.swift in Sources */,
 				408911452F902A5F0035C355 /* DashboardAttentionCard.swift in Sources */,
+				403298DA2FD2E0AD004D53EE /* CarPlaySceneDelegate.swift in Sources */,
 				408911472F902B0A0035C355 /* AppDestination.swift in Sources */,
 				408910F72F8FED410035C355 /* MoreView.swift in Sources */,
 				40B22B7A2F9FDDBE00808F42 /* NotificationPreferencesView.swift in Sources */,
@@ -1242,6 +1338,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		403298ED2FD2F2ED004D53EE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 403298DE2FD2F2EB004D53EE /* MTFDControlWidgetExtensionExtension */;
+			targetProxy = 403298EC2FD2F2ED004D53EE /* PBXContainerItemProxy */;
+		};
 		40CAABBE2FCE2C9A008C33D9 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 40CAABA82FCE2C99008C33D9 /* MTFDLiveActivitiesExtension */;
@@ -1255,6 +1356,94 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		403298F12FD2F2ED004D53EE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 48J5KADD5V;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MTFDControlWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MTFDControlWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.MTFDControlWidgetExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Debug;
+		};
+		403298F22FD2F2ED004D53EE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 48J5KADD5V;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MTFDControlWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = MTFDControlWidgetExtension;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.MTFDControlWidgetExtension";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,7";
+				XROS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Release;
+		};
 		407DBFD62F8D41C9006B3DAF /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -1263,25 +1452,29 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "MTFD Member App/MTFD_Member_App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 48J5KADD5V;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 48J5KADD5V;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Supporting Files/Info.plist";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "MTFD Member App Dev CarPlay 2026";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -1300,25 +1493,29 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "MTFD Member App/MTFD_Member_App.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 48J5KADD5V;
+				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 48J5KADD5V;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "MTFD Member App/Info.plist";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = "MTFD Member App Dev CarPlay 2026";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -1465,13 +1662,13 @@
 				INFOPLIST_FILE = MTFDLiveActivities/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MTFDLiveActivities;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.MTFDLiveActivities";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1497,13 +1694,13 @@
 				INFOPLIST_FILE = MTFDLiveActivities/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = MTFDLiveActivities;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.MTFDLiveActivities";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1534,7 +1731,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.watchkitapp";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1546,7 +1743,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.6;
 			};
 			name = Debug;
 		};
@@ -1568,7 +1765,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.StartCPR.MTFD-Member-App.watchkitapp";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -1580,13 +1777,22 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.6;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		403298F02FD2F2ED004D53EE /* Build configuration list for PBXNativeTarget "MTFDControlWidgetExtensionExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				403298F12FD2F2ED004D53EE /* Debug */,
+				403298F22FD2F2ED004D53EE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		407DBFBF2F8D41C7006B3DAF /* Build configuration list for PBXProject "MTFD Member App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

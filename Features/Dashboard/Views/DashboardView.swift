@@ -13,10 +13,11 @@ struct DashboardView: View {
 
     @State private var dispatchNotificationCount = 0
     @State private var isDispatchBellRinging = false
-    @State private var showContent = false
+    @State private var showContent = true
     @State private var hasLoadedDispatchUnits = false
     @State private var showMessageModal = false
     @State private var showMessageCenter = false
+    @State private var showApparatusWorkOrders = false
     @State private var messageCenterMode: MessageCenterView.Mode = .combined
     @State private var dashboardLayoutRefreshID = UUID()
     @State private var showDashboardLayoutEditor = false
@@ -109,6 +110,9 @@ struct DashboardView: View {
 
                             ForEach(visibleDashboardCards, id: \.rawValue) { card in
                                 dashboardCard(card)
+                                    .transaction { transaction in
+                                        transaction.animation = nil
+                                    }
                             }
 
                             if let errorMessage = viewModel.state.errorMessage,
@@ -122,23 +126,9 @@ struct DashboardView: View {
                         .padding(.horizontal)
                         .padding(.top, 12)
                         .padding(.bottom, 120)
-                        .opacity(showContent ? 1 : 0)
-                        .offset(y: showContent ? 0 : 16)
-                        .animation(.easeInOut(duration: 0.35), value: showContent)
+                        .opacity(1)
                     }
-                    .refreshable {
-                        viewModel.refresh(role: mappedUserRole(from: session.currentUser?.role))
 
-                        if isChiefRole {
-                            await scheduleViewModel.loadOutlookDays(count: 4)
-
-                            if selectedChiefScheduleDayId == nil {
-                                selectedChiefScheduleDayId = scheduleViewModel.outlookDays.first?.id
-                            }
-                        }
-
-                        scheduleLiveActivitySync()
-                    }
                 }
 
                 if showNewDispatchBanner, let latestDispatch {
@@ -270,6 +260,11 @@ struct DashboardView: View {
             .navigationDestination(isPresented: $showMessageCenter) {
                 MessageCenterView(mode: messageCenterMode)
             }
+            .navigationDestination(isPresented: $showApparatusWorkOrders) {
+                ApparatusWorkOrdersView(
+                    workOrders: viewModel.state.apparatusWorkOrders
+                )
+            }
             .onReceive(NotificationCenter.default.publisher(for: .dashboardLayoutDidChange)) { _ in
                 dashboardLayoutRefreshID = UUID()
             }
@@ -365,9 +360,7 @@ struct DashboardView: View {
                 HStack(spacing: 6) {
                     ForEach(scheduleViewModel.outlookDays) { day in
                         Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedChiefScheduleDayId = day.id
-                            }
+                            selectedChiefScheduleDayId = day.id
                         } label: {
                             let isSelected = selectedChiefScheduleDayId == day.id || (selectedChiefScheduleDayId == nil && day.id == scheduleViewModel.outlookDays.first?.id)
 
@@ -488,9 +481,7 @@ struct DashboardView: View {
         let currentIndex = days.firstIndex { $0.id == currentId } ?? 0
         let nextIndex = min(currentIndex + 1, days.count - 1)
 
-        withAnimation(.easeInOut(duration: 0.22)) {
-            selectedChiefScheduleDayId = days[nextIndex].id
-        }
+        selectedChiefScheduleDayId = days[nextIndex].id
     }
 
     private func selectPreviousChiefScheduleDay() {
@@ -501,9 +492,7 @@ struct DashboardView: View {
         let currentIndex = days.firstIndex { $0.id == currentId } ?? 0
         let previousIndex = max(currentIndex - 1, 0)
 
-        withAnimation(.easeInOut(duration: 0.22)) {
-            selectedChiefScheduleDayId = days[previousIndex].id
-        }
+        selectedChiefScheduleDayId = days[previousIndex].id
     }
 
     private func chiefScheduleEntryRow(_ entry: APIClient.MobileScheduleEntry) -> some View {
@@ -568,9 +557,7 @@ struct DashboardView: View {
                 HStack(spacing: 6) {
                     ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
                         Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedWindowRawValue = window.rawValue
-                            }
+                            selectedWindowRawValue = window.rawValue
                         } label: {
                             Text(window.rawValue)
                                 .font(.caption.bold())
@@ -636,9 +623,7 @@ struct DashboardView: View {
 
         let nextIndex = min(currentIndex + 1, windows.count - 1)
 
-        withAnimation(.easeInOut(duration: 0.22)) {
-            selectedWindowRawValue = windows[nextIndex].rawValue
-        }
+        selectedWindowRawValue = windows[nextIndex].rawValue
     }
 
     private func selectPreviousChiefTotalsWindow() {
@@ -647,9 +632,7 @@ struct DashboardView: View {
 
         let previousIndex = max(currentIndex - 1, 0)
 
-        withAnimation(.easeInOut(duration: 0.22)) {
-            selectedWindowRawValue = windows[previousIndex].rawValue
-        }
+        selectedWindowRawValue = windows[previousIndex].rawValue
     }
 
     private func chiefInlineTotal(value: Int, label: String) -> some View {
@@ -749,10 +732,61 @@ struct DashboardView: View {
             .savedOrder(for: session.currentUser?.role)
             .filter { !hiddenCards.contains($0) }
 
-        let cardsWithData = enabledCards.filter { dashboardCardHasData($0) }
-        let emptyCards = enabledCards.filter { !dashboardCardHasData($0) }
+        return enabledCards.sorted { lhs, rhs in
+            let lhsPriority = dashboardCardPriority(lhs)
+            let rhsPriority = dashboardCardPriority(rhs)
 
-        return cardsWithData + emptyCards
+            if lhsPriority != rhsPriority {
+                return lhsPriority > rhsPriority
+            }
+
+            let lhsIndex = enabledCards.firstIndex(of: lhs) ?? Int.max
+            let rhsIndex = enabledCards.firstIndex(of: rhs) ?? Int.max
+            return lhsIndex < rhsIndex
+        }
+    }
+
+    private func dashboardCardPriority(_ card: DashboardCardID) -> Int {
+        switch card {
+        case .recentCalls:
+            return viewModel.activeDispatches.isEmpty ? 0 : 100
+
+        case .needsAttention:
+            return viewModel.state.attentionItems.isEmpty ? 0 : 95
+
+        case .messages:
+            return viewModel.state.unreadNonDispatchMessageCount > 0 ? 90 : 10
+
+        case .apparatusWorkOrders:
+            return viewModel.state.apparatusWorkOrders.isEmpty ? 0 : 85
+
+        case .scheduleEvents:
+            if viewModel.state.upcomingSchedule?.isWorkingNow == true {
+                return 80
+            }
+
+            if viewModel.state.upcomingSchedule?.nextShift != nil {
+                return 35
+            }
+
+            return 0
+
+        case .assignedTraining:
+            return viewModel.state.assignedTrainingPreview.isEmpty ? 0 : 75
+
+        case .documents:
+            return viewModel.state.pendingDocumentSignatures > 0 ? 70 : 0
+
+        case .departmentUpdates:
+            return viewModel.state.departmentUpdates.isEmpty ? 0 : 55
+
+        case .stationUpdates:
+            return viewModel.state.stationUpdates.isEmpty ? 0 : 50
+
+        case .commandOverview:
+            let role = session.currentUser?.role.uppercased() ?? ""
+            return role == "ADMIN" || role == "CHIEF" || role.contains("OFFICER") ? 40 : 0
+        }
     }
 
     private func dashboardCardHasData(_ card: DashboardCardID) -> Bool {
@@ -956,7 +990,7 @@ struct DashboardView: View {
                 DashboardApparatusWorkOrdersCard(
                     workOrders: viewModel.state.apparatusWorkOrders
                 ) {
-                    handleNavigation(to: .messageCenter)
+                    showApparatusWorkOrders = true
                 }
             }
 
@@ -970,7 +1004,17 @@ struct DashboardView: View {
                     systemImage: "calendar.badge.clock"
                 )
             } else if let upcomingSchedule = viewModel.state.upcomingSchedule,
-               let nextShift = upcomingSchedule.nextShift {
+                      upcomingSchedule.isWorkingNow == true,
+                      upcomingSchedule.nextShift == nil {
+                DashboardSmallStatusCard(
+                    title: "Working Now",
+                    subtitle: "You are currently scheduled as working.",
+                    systemImage: "calendar.badge.clock"
+                ) {
+                    router.selectedTab = .schedule
+                }
+            } else if let upcomingSchedule = viewModel.state.upcomingSchedule,
+                      let nextShift = upcomingSchedule.nextShift {
                 DashboardUpcomingScheduleCard(
                     schedule: upcomingSchedule,
                     shift: nextShift
@@ -1169,69 +1213,182 @@ struct DashboardApparatusWorkOrdersCard: View {
     let workOrders: [DashboardApparatusWorkOrder]
     let onTap: () -> Void
 
+    @State private var selectedApparatusName: String?
+
+    private var groupedWorkOrders: [(apparatusName: String, workOrders: [DashboardApparatusWorkOrder])] {
+        let grouped = Dictionary(grouping: workOrders) { workOrder in
+            workOrder.apparatusName
+        }
+
+        return grouped
+            .map { apparatusName, orders in
+                (
+                    apparatusName: apparatusName,
+                    workOrders: orders
+                )
+            }
+            .sorted { lhs, rhs in
+                lhs.apparatusName.localizedStandardCompare(rhs.apparatusName) == .orderedAscending
+            }
+    }
+
+    private var selectedGroup: (apparatusName: String, workOrders: [DashboardApparatusWorkOrder])? {
+        if let selectedApparatusName,
+           let group = groupedWorkOrders.first(where: { $0.apparatusName == selectedApparatusName }) {
+            return group
+        }
+
+        return groupedWorkOrders.first
+    }
+
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    DashboardColorIcon(systemImage: "wrench.and.screwdriver.fill")
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                DashboardColorIcon(systemImage: "wrench.and.screwdriver.fill")
 
-                    Text("Open apparatus issues")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
+                Text("Open apparatus issues")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
 
-                    Spacer()
+                Spacer()
 
-                    Text("View")
-                        .font(.caption.bold())
-                        .foregroundStyle(AppTheme.gold)
+                Button(action: onTap) {
+                    HStack(spacing: 4) {
+                        Text("View")
+                            .font(.caption.bold())
 
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(AppTheme.gold.opacity(0.9))
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                    }
+                    .foregroundStyle(AppTheme.gold)
                 }
+                .buttonStyle(.plain)
+            }
 
-                VStack(spacing: 10) {
-                    ForEach(workOrders.prefix(3)) { workOrder in
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(alignment: .top, spacing: 8) {
-                                Text(workOrder.apparatusName)
+            if groupedWorkOrders.count > 1 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(groupedWorkOrders, id: \.apparatusName) { group in
+                            let isSelected = selectedGroup?.apparatusName == group.apparatusName
+
+                            Button {
+                                selectedApparatusName = group.apparatusName
+                            } label: {
+                                Text(shortApparatusLabel(group.apparatusName))
                                     .font(.caption.bold())
-                                    .foregroundStyle(AppTheme.gold)
-                                    .lineLimit(1)
+                                    .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
+                                    .frame(minWidth: 44, minHeight: 32)
+                                    .padding(.horizontal, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(isSelected ? AppTheme.gold : Color.white.opacity(0.10))
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
 
-                                Spacer()
+            if let selectedGroup {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(selectedGroup.apparatusName)
+                            .font(.caption.bold())
+                            .foregroundStyle(AppTheme.gold)
+                            .lineLimit(1)
 
+                        Spacer()
+
+                        Text("\(selectedGroup.workOrders.count) open")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+
+                    VStack(spacing: 10) {
+                        ForEach(selectedGroup.workOrders.prefix(3)) { workOrder in
+                            VStack(alignment: .leading, spacing: 5) {
                                 if let status = workOrder.status, !status.isEmpty {
                                     Text(status)
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(.white.opacity(0.55))
                                         .lineLimit(1)
                                 }
-                            }
 
-                            Text(workOrder.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(2)
+                                Text(workOrder.title)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(2)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(Color.white.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+
+                    if selectedGroup.workOrders.count > 3 {
+                        Button(action: onTap) {
+                            Text("View all \(selectedGroup.workOrders.count) work orders")
+                                .font(.caption.bold())
+                                .foregroundStyle(AppTheme.gold)
+                                .padding(.top, 2)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-            }
-            .padding(16)
-            .background(Color.white.opacity(0.09))
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            } else {
+                Text("No open apparatus work orders.")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.64))
             }
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .background(Color.white.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .onAppear {
+            if selectedApparatusName == nil {
+                selectedApparatusName = groupedWorkOrders.first?.apparatusName
+            }
+        }
+        .onChange(of: workOrders) { _, _ in
+            if let selectedApparatusName,
+               groupedWorkOrders.contains(where: { $0.apparatusName == selectedApparatusName }) {
+                return
+            }
+
+            selectedApparatusName = groupedWorkOrders.first?.apparatusName
+        }
+    }
+
+    private func shortApparatusLabel(_ name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let digits = trimmed.filter(\.isNumber)
+
+        if trimmed.localizedCaseInsensitiveContains("engine") {
+            return digits.isEmpty ? "ENG" : "E\(digits)"
+        }
+
+        if trimmed.localizedCaseInsensitiveContains("ladder") {
+            return digits.isEmpty ? "LAD" : "L\(digits)"
+        }
+
+        if trimmed.localizedCaseInsensitiveContains("truck") {
+            return digits.isEmpty ? "TRK" : "T\(digits)"
+        }
+
+        if trimmed.localizedCaseInsensitiveContains("rescue") {
+            return digits.isEmpty ? "RES" : "R\(digits)"
+        }
+
+        return String(trimmed.prefix(4)).uppercased()
     }
 }
+
 
 private struct DashboardRecentCallsCard: View {
     let calls: [RecentDepartmentCall]
@@ -1306,7 +1463,7 @@ private struct DashboardRecentCallsCard: View {
     }
 }
 
-private struct DashboardColorIcon: View {
+struct DashboardColorIcon: View {
     let systemImage: String
 
     private var emoji: String {
@@ -1854,7 +2011,7 @@ private struct DispatchMapPreview: View {
                 return
             }
 
-            let newCoordinate = item.location.coordinate
+            let newCoordinate = item.placemark.coordinate
 
             await MainActor.run {
                 coordinate = newCoordinate
@@ -1967,3 +2124,5 @@ private struct DashboardUpcomingScheduleCard: View {
         .buttonStyle(.plain)
     }
 }
+
+

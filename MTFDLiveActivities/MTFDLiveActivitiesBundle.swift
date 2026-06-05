@@ -12,7 +12,6 @@ import SwiftUI
 struct MTFDLiveActivitiesBundle: WidgetBundle {
     var body: some Widget {
         MTFDLiveActivities()
-        MTFDLiveActivitiesControl()
-        MTFDLiveActivitiesLiveActivity()
     }
 }
+

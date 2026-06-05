@@ -389,7 +389,10 @@ struct MessageCenterView: View {
         .frame(maxWidth: .infinity, minHeight: 260)
     }
 
-    private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {
+    private func makeDispatchPayload(
+        from activeDispatch: APIClient.ActiveDispatch,
+        activeCallCount: Int = 1
+    ) -> DispatchNotificationPayload {
         DispatchNotificationPayload(
             type: activeDispatch.priority == "CRITICAL" ? .dispatchCritical : .dispatch,
             id: activeDispatch.id,
@@ -399,6 +402,7 @@ struct MessageCenterView: View {
             address: activeDispatch.address,
             units: activeDispatch.units,
             isWorkingFire: activeDispatch.isWorkingFire ?? false,
+            activeCallCount: activeCallCount,
             stationId: nil,
             messageId: nil,
             trainingId: nil,
@@ -416,6 +420,7 @@ struct MessageCenterView: View {
             address: dispatch.address,
             units: dispatch.units,
             isWorkingFire: dispatch.isWorkingFire ?? false,
+            activeCallCount: 1,
             stationId: nil,
             messageId: nil,
             trainingId: nil,
@@ -917,7 +922,7 @@ private struct MessageDispatchMapPreview: View {
                 return
             }
 
-            let newCoordinate = item.location.coordinate
+            let newCoordinate = item.placemark.coordinate
 
             await MainActor.run {
                 coordinate = newCoordinate

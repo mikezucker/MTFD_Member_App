@@ -52,6 +52,12 @@ struct DispatchDetailView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
+            AppDetailHeader(
+                title: "Dispatch",
+                subtitle: dispatch.callType ?? dispatch.title,
+                systemImage: "bell.and.waves.left.and.right.fill"
+            )
+
                 VStack(spacing: 16) {
                     headerCard
                     locationCard
@@ -310,10 +316,8 @@ struct DispatchDetailView: View {
                 longitude: longitude
             )
 
-            let item = MKMapItem(
-                location: location,
-                address: nil
-            )
+            let placemark = MKPlacemark(coordinate: location.coordinate)
+            let item = MKMapItem(placemark: placemark)
 
             item.name = address
 

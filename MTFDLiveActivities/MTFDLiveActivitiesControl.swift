@@ -1,77 +1,28 @@
-//
-//  MTFDLiveActivitiesControl.swift
-//  MTFDLiveActivities
-//
-//  Created by Michael Zucker on 6/1/26.
-//
-
 import AppIntents
 import SwiftUI
 import WidgetKit
 
-struct MTFDLiveActivitiesControl: ControlWidget {
-    static let kind: String = "com.StartCPR.MTFD-Member-App.MTFDLiveActivities"
-
-    var body: some ControlWidgetConfiguration {
-        AppIntentControlConfiguration(
-            kind: Self.kind,
-            provider: Provider()
-        ) { value in
-            ControlWidgetToggle(
-                "Start Timer",
-                isOn: value.isRunning,
-                action: StartTimerIntent(value.name)
-            ) { isRunning in
-                Label(isRunning ? "On" : "Off", systemImage: "timer")
-            }
-        }
-        .displayName("Timer")
-        .description("A an example control that runs a timer.")
-    }
-}
-
-extension MTFDLiveActivitiesControl {
-    struct Value {
-        var isRunning: Bool
-        var name: String
-    }
-
-    struct Provider: AppIntentControlValueProvider {
-        func previewValue(configuration: TimerConfiguration) -> Value {
-            MTFDLiveActivitiesControl.Value(isRunning: false, name: configuration.timerName)
-        }
-
-        func currentValue(configuration: TimerConfiguration) async throws -> Value {
-            let isRunning = true // Check if the timer is running
-            return MTFDLiveActivitiesControl.Value(isRunning: isRunning, name: configuration.timerName)
-        }
-    }
-}
-
-struct TimerConfiguration: ControlConfigurationIntent {
-    static let title: LocalizedStringResource = "Timer Name Configuration"
-
-    @Parameter(title: "Timer Name", default: "Timer")
-    var timerName: String
-}
-
-struct StartTimerIntent: SetValueIntent {
-    static let title: LocalizedStringResource = "Start a timer"
-
-    @Parameter(title: "Timer Name")
-    var name: String
-
-    @Parameter(title: "Timer is running")
-    var value: Bool
-
-    init() {}
-
-    init(_ name: String) {
-        self.name = name
-    }
+@available(iOSApplicationExtension 18.0, *)
+struct OpenActiveDispatchIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open Active Dispatch"
+    static var description = IntentDescription("Opens the MTFD app to active dispatches.")
 
     func perform() async throws -> some IntentResult {
-        // Start the timer…
         return .result()
+    }
+}
+
+@available(iOSApplicationExtension 18.0, *)
+struct MTFDLiveActivitiesControl: ControlWidget {
+    static let kind = "com.StartCPR.MTFD-Member-App.active-dispatch-control"
+
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: Self.kind) {
+            ControlWidgetButton(action: OpenActiveDispatchIntent()) {
+                Label("Active Dispatch", systemImage: "flame.fill")
+            }
+        }
+        .displayName("MTFD Active Dispatch")
+        .description("Quick access to active MTFD dispatches.")
     }
 }
