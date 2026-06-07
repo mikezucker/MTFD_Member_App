@@ -1303,7 +1303,8 @@ private struct CommandWorkspaceView: View {
         print("🟣 MainTab LiveActivity sync. activeDispatches:", dashboardViewModel.activeDispatches.count)
 
         guard let newestDispatch = dashboardViewModel.activeDispatches.first else {
-            print("🟣 MainTab LiveActivity no active dispatches in local state. Leaving existing Live Activity alone.")
+            print("🟣 MainTab LiveActivity no active dispatches. Ending all.")
+            DispatchLiveActivityManager.shared.endAll()
             return
         }
 

@@ -806,7 +806,8 @@ struct DashboardView: View {
         print("🟣 Dashboard LiveActivity sync. activeDispatches:", viewModel.activeDispatches.count)
 
         guard let newestDispatch = viewModel.activeDispatches.first else {
-            print("🟣 Dashboard LiveActivity no active dispatches in local state. Leaving existing Live Activity alone.")
+            print("🟣 Dashboard LiveActivity no active dispatches. Ending all.")
+            DispatchLiveActivityManager.shared.endAll()
             return
         }
 
@@ -1622,6 +1623,8 @@ struct DashboardRecentCallsCard: View {
 
 struct DashboardColorIcon: View {
     let systemImage: String
+    var size: CGFloat = 30
+    var frameSize: CGFloat = 42
 
     private var emoji: String {
         switch systemImage {
@@ -1641,6 +1644,8 @@ struct DashboardColorIcon: View {
             return "👤"
         case "clock.arrow.circlepath":
             return "🚨"
+        case "chart.bar.fill":
+            return "📈"
         case "megaphone.fill":
             return "📣"
         case "building.2.fill":
@@ -1658,8 +1663,8 @@ struct DashboardColorIcon: View {
 
     var body: some View {
         Text(emoji)
-            .font(.system(size: 30))
-            .frame(width: 42, height: 42)
+            .font(.system(size: size))
+            .frame(width: frameSize, height: frameSize)
             .minimumScaleFactor(0.8)
             .accessibilityLabel(Text(systemImage))
     }
@@ -1672,8 +1677,6 @@ private struct DashboardLoadingCard: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            DashboardColorIcon(systemImage: systemImage)
-
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline.weight(.semibold))
@@ -1710,8 +1713,6 @@ struct DashboardSmallStatusCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(alignment: .center, spacing: 12) {
-                DashboardColorIcon(systemImage: systemImage)
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
                         .font(.headline.weight(.semibold))
@@ -1747,8 +1748,6 @@ struct DashboardMessageCenterCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(alignment: .center, spacing: 12) {
-                DashboardColorIcon(systemImage: "envelope.fill")
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Messages")
                         .font(.headline.weight(.semibold))

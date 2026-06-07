@@ -57,7 +57,7 @@ struct CareerMemberDashboardView: View {
     @ViewBuilder
     private var activeDispatchSection: some View {
         if let primaryActiveDispatch {
-            sectionTitle("Current Dispatch")
+            sectionTitle("Current Dispatch", systemImage: "bell.and.waves.left.and.right.fill")
 
             DashboardDispatchPreviewCard(
                 dispatch: makeDispatchPayload(from: primaryActiveDispatch),
@@ -67,7 +67,7 @@ struct CareerMemberDashboardView: View {
             }
 
             if !secondaryActiveDispatches.isEmpty {
-                sectionTitle("Additional Active Dispatches")
+                sectionTitle("Additional Active Dispatches", systemImage: "bell.and.waves.left.and.right.fill")
 
                 ActiveDispatchStackView(dispatches: secondaryActiveDispatches) { activeDispatch in
                     onOpenDispatch(makeDispatchPayload(from: activeDispatch))
@@ -79,7 +79,7 @@ struct CareerMemberDashboardView: View {
     private var callTotalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionTitle("Call Totals")
+                sectionTitle("Call Totals", systemImage: "chart.bar.fill")
                 Spacer()
 
                 HStack(spacing: 6) {
@@ -171,7 +171,7 @@ struct CareerMemberDashboardView: View {
 
     private var scheduleSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle(upcomingSchedule?.isWorkingNow == true ? "Working Now" : "Next Shift")
+            sectionTitle(upcomingSchedule?.isWorkingNow == true ? "Working Now" : "Next Shift", systemImage: upcomingSchedule?.isWorkingNow == true ? "person.fill.checkmark" : "calendar.badge.clock")
 
             if isLoading && upcomingSchedule == nil {
                 loadingCard("Loading schedule...")
@@ -201,7 +201,7 @@ struct CareerMemberDashboardView: View {
 
     private var messagesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Messages")
+            sectionTitle("Messages", systemImage: "envelope.fill")
             DashboardMessageCenterCard {
                 onOpenMessages()
             }
@@ -231,7 +231,7 @@ struct CareerMemberDashboardView: View {
         updates: [DashboardBulletin]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle(title)
+            sectionTitle(title, systemImage: title == "Station Updates" ? "building.2.fill" : "megaphone.fill")
 
             if isLoading && updates.isEmpty {
                 loadingCard("Loading \(title.lowercased())...")
@@ -276,7 +276,7 @@ struct CareerMemberDashboardView: View {
 
     private var workOrdersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Apparatus Work Orders")
+            sectionTitle("Apparatus Work Orders", systemImage: "wrench.and.screwdriver.fill")
 
             if isLoading && workOrders.isEmpty {
                 loadingCard("Loading apparatus work orders...")
@@ -297,7 +297,7 @@ struct CareerMemberDashboardView: View {
 
     private var trainingSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Assigned Training")
+            sectionTitle("Assigned Training", systemImage: "graduationcap.fill")
 
             if isLoading && assignedTraining.isEmpty {
                 loadingCard("Loading training...")
@@ -319,7 +319,7 @@ struct CareerMemberDashboardView: View {
 
     private var pastDispatchesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Past Dispatches")
+            sectionTitle("Past Dispatches", systemImage: "clock.arrow.circlepath")
 
             if isLoading && recentCalls.isEmpty {
                 loadingCard("Loading past dispatches...")
@@ -335,7 +335,7 @@ struct CareerMemberDashboardView: View {
 
     private var documentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Documents / SOPs")
+            sectionTitle("Documents / SOPs", systemImage: "doc.text.fill")
 
             DashboardSmallStatusCard(
                 title: "Documents / SOPs",
@@ -450,10 +450,16 @@ struct CareerMemberDashboardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(.headline)
-            .foregroundStyle(.white)
+    private func sectionTitle(_ text: String, systemImage: String? = nil) -> some View {
+        HStack(spacing: 8) {
+            if let systemImage {
+                DashboardColorIcon(systemImage: systemImage, size: 22, frameSize: 30)
+            }
+
+            Text(text)
+                .font(.headline)
+                .foregroundStyle(.white)
+        }
     }
 
     private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {

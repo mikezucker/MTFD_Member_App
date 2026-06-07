@@ -67,7 +67,7 @@ struct ChiefDashboardView: View {
     @ViewBuilder
     private var activeDispatchSection: some View {
         if let primaryActiveDispatch {
-            sectionTitle("Current Dispatch")
+            sectionTitle("Current Dispatch", systemImage: "bell.and.waves.left.and.right.fill")
 
             DashboardDispatchPreviewCard(
                 dispatch: makeDispatchPayload(from: primaryActiveDispatch),
@@ -77,7 +77,7 @@ struct ChiefDashboardView: View {
             }
 
             if !secondaryActiveDispatches.isEmpty {
-                sectionTitle("Additional Active Dispatches")
+                sectionTitle("Additional Active Dispatches", systemImage: "bell.and.waves.left.and.right.fill")
 
                 ActiveDispatchStackView(
                     dispatches: secondaryActiveDispatches
@@ -92,7 +92,7 @@ struct ChiefDashboardView: View {
     private var callTotalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionTitle("Call Totals")
+                sectionTitle("Call Totals", systemImage: "chart.bar.fill")
 
                 Spacer()
 
@@ -228,7 +228,7 @@ struct ChiefDashboardView: View {
     private var scheduleOutlookSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 12) {
-                sectionTitle("Schedule Outlook")
+                sectionTitle("Schedule Outlook", systemImage: "calendar.badge.clock")
 
                 HStack(spacing: 6) {
                     ForEach(outlookDays) { day in
@@ -387,7 +387,7 @@ struct ChiefDashboardView: View {
 
     private var commandMessagesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Command Messages")
+            sectionTitle("Command Messages", systemImage: "envelope.fill")
 
             DashboardMessageCenterCard {
                 onOpenMessages()
@@ -398,7 +398,7 @@ struct ChiefDashboardView: View {
 
     private var recentDispatchesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Past Dispatches")
+            sectionTitle("Past Dispatches", systemImage: "clock.arrow.circlepath")
 
             if isLoading && recentCalls.isEmpty {
                 loadingCard("Loading past dispatches...")
@@ -416,7 +416,7 @@ struct ChiefDashboardView: View {
 
     private var apparatusWorkOrdersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Apparatus Work Orders")
+            sectionTitle("Apparatus Work Orders", systemImage: "wrench.and.screwdriver.fill")
 
             if workOrders.isEmpty {
                 Text("No open apparatus work orders.")
@@ -490,10 +490,16 @@ struct ChiefDashboardView: View {
             .foregroundStyle(.white.opacity(0.78))
     }
 
-    private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(.headline)
-            .foregroundStyle(.white)
+    private func sectionTitle(_ text: String, systemImage: String? = nil) -> some View {
+        HStack(spacing: 8) {
+            if let systemImage {
+                DashboardColorIcon(systemImage: systemImage, size: 22, frameSize: 30)
+            }
+
+            Text(text)
+                .font(.headline)
+                .foregroundStyle(.white)
+        }
     }
 
     private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {
