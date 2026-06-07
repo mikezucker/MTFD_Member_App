@@ -102,16 +102,25 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             guard let self else { return }
 
             do {
-                let response = try await APIClient.shared.fetchDispatchHistory(window: "24h")
+                async let dashboardResponse = APIClient.shared.fetchDashboard()
+                async let dispatchHistoryResponse = APIClient.shared.fetchDispatchHistory(window: "24h")
+
+                let dashboard = try await dashboardResponse
+                let response = try await dispatchHistoryResponse
+
+                let dashboardActiveDispatches = dashboard.activeDispatches ?? []
+                let resolvedActiveDispatches = response.activeDispatches.isEmpty
+                    ? dashboardActiveDispatches
+                    : response.activeDispatches
 
                 await MainActor.run {
-                    let newDispatches = response.activeDispatches.filter {
+                    let newDispatches = resolvedActiveDispatches.filter {
                         !self.knownActiveDispatchIds.contains($0.id)
                     }
 
-                    self.activeDispatches = response.activeDispatches
+                    self.activeDispatches = resolvedActiveDispatches
                     self.recentDispatches = Array(response.historicalDispatches.prefix(12))
-                    self.knownActiveDispatchIds = Set(response.activeDispatches.map(\.id))
+                    self.knownActiveDispatchIds = Set(resolvedActiveDispatches.map(\.id))
 
                     if let newest = newDispatches.first, !self.knownActiveDispatchIds.isEmpty {
                         self.presentNewDispatchAlert(newest)
@@ -129,7 +138,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                             animated: false,
                             completion: nil
                         )
-                    case .active, .recent, .detail:
+                    case .active:
+                        self.replaceTopTemplate(with: self.makeActiveDispatchesTemplate())
+                    case .recent:
+                        self.replaceTopTemplate(with: self.makeRecentDispatchesTemplate())
+                    case .detail:
                         break
                     }
                 }
@@ -302,22 +315,29 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         typeItem.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
         items.append(typeItem)
 
-        if let address = formattedAddress(placeName: dispatch.placeName, address: dispatch.address, city: dispatch.city, state: dispatch.state) {
+        if let displayAddress = formattedAddress(placeName: dispatch.placeName, address: dispatch.address, city: dispatch.city, state: dispatch.state) {
+            let navigationAddress = navigationAddress(
+                placeName: dispatch.placeName,
+                address: dispatch.address,
+                city: dispatch.city,
+                state: dispatch.state
+            ) ?? displayAddress
+
             let navigateItem = CPListItem(
                 text: "Navigate to Scene",
-                detailText: address
+                detailText: displayAddress
             )
             navigateItem.setImage(carPlayIcon("location.fill"))
 
             navigateItem.handler = { [weak self] _, completion in
                 print("🚗 CarPlay Navigate row tapped")
-                self?.navigateToAddress(address)
+                self?.navigateToAddress(navigationAddress)
                 completion()
             }
 
             items.append(navigateItem)
 
-            let locationItem = CPListItem(text: "Location", detailText: address)
+            let locationItem = CPListItem(text: "Location", detailText: displayAddress)
             locationItem.isEnabled = false
             items.append(locationItem)
         }
@@ -395,13 +415,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         typeItem.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
         items.append(typeItem)
 
-        if let address = formattedAddress(
+        if let displayAddress = formattedAddress(
             placeName: dispatch.placeName,
             address: dispatch.address,
             city: dispatch.city,
             state: dispatch.state
         ) {
-            items.append(CPListItem(text: "Location", detailText: address))
+            let navAddress = navigationAddress(
+                placeName: dispatch.placeName,
+                address: dispatch.address,
+                city: dispatch.city,
+                state: dispatch.state
+            ) ?? displayAddress
+
+            items.append(CPListItem(text: "Location", detailText: displayAddress))
 
             let navigateItem = CPListItem(
                 text: "Navigate",
@@ -410,7 +437,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             navigateItem.setImage(carPlayIcon("location.fill"))
 
             navigateItem.handler = { [weak self] _, completion in
-                self?.navigateToAddress(address)
+                self?.navigateToAddress(navAddress)
                 completion()
             }
 
@@ -560,6 +587,37 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
 
         let result = parts.joined(separator: " • ")
+        return result.isEmpty ? nil : result
+    }
+
+
+    private func navigationAddress(placeName: String?, address: String?, city: String?, state: String?) -> String? {
+        let cleanedAddress = address?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedPlaceName = placeName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedCity = city?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanedState = state?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var parts: [String] = []
+
+        if let cleanedAddress, !cleanedAddress.isEmpty {
+            parts.append(cleanedAddress)
+        } else if let cleanedPlaceName, !cleanedPlaceName.isEmpty {
+            parts.append(cleanedPlaceName)
+        }
+
+        if let cleanedCity, !cleanedCity.isEmpty {
+            parts.append(cleanedCity)
+        } else {
+            parts.append("Morris Township")
+        }
+
+        if let cleanedState, !cleanedState.isEmpty {
+            parts.append(cleanedState)
+        } else {
+            parts.append("NJ")
+        }
+
+        let result = parts.joined(separator: ", ")
         return result.isEmpty ? nil : result
     }
 
