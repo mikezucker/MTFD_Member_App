@@ -6,6 +6,8 @@ struct StationMapper {
         guard let company = company?.uppercased() else { return "Station" }
 
         switch company {
+        case "FIRE_HQ", "FIRE HQ", "FIREHQ", "HQ", "HEADQUARTERS":
+            return "Fire Headquarters"
         case "COLLINSVILLE":
             return "Station 2"
         case "MT. KEMBLE", "MT KEMBLE":
