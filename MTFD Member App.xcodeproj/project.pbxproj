@@ -329,13 +329,6 @@
 			path = Navigation;
 			sourceTree = "<group>";
 		};
-		402487E82FC79D0400475348 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Views;
-			sourceTree = "<group>";
-		};
 		402487EB2FC79E6C00475348 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -418,7 +411,6 @@
 			isa = PBXGroup;
 			children = (
 				403298D82FD2E06A004D53EE /* CarPlaySceneDelegate.swift */,
-				402487E82FC79D0400475348 /* Views */,
 				408910AA2F8FED180035C355 /* Supporting Files */,
 				408910A92F8FED0C0035C355 /* Resources */,
 				408910A82F8FECF70035C355 /* Utilities */,
