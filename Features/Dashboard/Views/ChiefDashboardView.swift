@@ -52,6 +52,8 @@ struct ChiefDashboardView: View {
 
             callTotalsSection
 
+            chiefBriefSection
+
             ForEach(visibleCards.filter(isSupportedDashboardCard), id: \.rawValue) { card in
                 dashboardSection(for: card)
             }
@@ -110,6 +112,69 @@ struct ChiefDashboardView: View {
         }
     }
 
+
+    private var chiefBriefSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Chief Brief", systemImage: "shield.lefthalf.filled")
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(chiefBriefHeadline)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
+
+                Text(chiefBriefSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+    }
+
+    private var chiefBriefHeadline: String {
+        if !activeDispatches.isEmpty {
+            return "Active Operations Underway"
+        }
+
+        if callTotal(.department) >= 8 {
+            return "Elevated Activity Across the Department"
+        }
+
+        if !workOrders.isEmpty {
+            return "Apparatus Readiness Items Remain Open"
+        }
+
+        return "Steady Operations Continue Across the Department"
+    }
+
+    private var chiefBriefSummary: String {
+        if !activeDispatches.isEmpty {
+            let count = activeDispatches.count
+            return count == 1
+                ? "One active dispatch is currently visible for command review."
+                : "\(count) active dispatches are currently visible for command review."
+        }
+
+        if callTotal(.department) >= 8 {
+            return "Recent call volume is higher than usual. Schedule coverage, recent dispatches, and apparatus readiness remain available below."
+        }
+
+        if !workOrders.isEmpty {
+            let count = workOrders.count
+            return count == 1
+                ? "One apparatus work order remains open and is available for review."
+                : "\(count) apparatus work orders remain open and are available for review."
+        }
+
+        return "Department activity remains within normal range. Schedule coverage, recent dispatches, and apparatus readiness are available for review."
+    }
 
     private var callTotalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
