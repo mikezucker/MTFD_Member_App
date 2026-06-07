@@ -66,7 +66,7 @@ struct DashboardView: View {
                         onTapAlert: handleHeaderAlertTap
                     )
 
-                    ScrollView(showsIndicators: false) {
+                    ScrollView(.vertical, showsIndicators: false) {
 
                         switch dashboardRole {
 
@@ -215,9 +215,8 @@ struct DashboardView: View {
 
                         */
                     }
-                    .refreshable {
-                        await refreshDashboardContent()
-                    }
+                    // Pull-to-refresh intentionally disabled on Dashboard.
+                    // It allows short dashboard content to drag/bounce around.
 
                 }
 
@@ -237,6 +236,10 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
+                UIScrollView.appearance().bounces = false
+                UIScrollView.appearance().alwaysBounceVertical = false
+                UIScrollView.appearance().alwaysBounceHorizontal = false
+
                 showContent = true
                 viewModel.loadIfNeeded(role: mappedUserRole(from: session.currentUser?.role))
                 scheduleLiveActivitySync()
@@ -270,6 +273,11 @@ struct DashboardView: View {
             }
             .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
                 syncLiveActivityWithDashboardActiveDispatches()
+            }
+            .onDisappear {
+                UIScrollView.appearance().bounces = true
+                UIScrollView.appearance().alwaysBounceVertical = true
+                UIScrollView.appearance().alwaysBounceHorizontal = false
             }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
