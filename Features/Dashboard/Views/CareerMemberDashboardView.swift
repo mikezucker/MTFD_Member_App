@@ -3,6 +3,7 @@ import SwiftUI
 struct CareerMemberDashboardView: View {
 
     let activeDispatches: [APIClient.ActiveDispatch]
+    let visibleCards: [DashboardCardID]
     let departmentStats: APIClient.DispatchBucket?
     let stationStats: APIClient.DispatchBucket?
     let upcomingSchedule: APIClient.MobileUpcomingScheduleResponse?
@@ -41,17 +42,55 @@ struct CareerMemberDashboardView: View {
         VStack(alignment: .leading, spacing: 22) {
             activeDispatchSection
             callTotalsSection
-            scheduleSection
-            messagesSection
-            updatesSection
-            workOrdersSection
-            trainingSection
-            pastDispatchesSection
-            documentsSection
+
+            ForEach(visibleCards.filter(isSupportedDashboardCard), id: \.rawValue) { card in
+                dashboardSection(for: card)
+            }
         }
         .padding(.horizontal, 24)
         .padding(.top, 22)
         .padding(.bottom, 120)
+    }
+
+    private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
+        switch card {
+        case .messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .recentCalls:
+            return true
+        case .commandOverview, .needsAttention:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardSection(for card: DashboardCardID) -> some View {
+        switch card {
+        case .messages:
+            messagesSection
+        case .scheduleEvents:
+            scheduleSection
+        case .apparatusWorkOrders:
+            workOrdersSection
+        case .assignedTraining:
+            trainingSection
+        case .documents:
+            documentsSection
+        case .departmentUpdates:
+            updatesGroup(
+                title: "Department Updates",
+                emptyMessage: "No department updates posted.",
+                updates: departmentUpdates
+            )
+        case .stationUpdates:
+            updatesGroup(
+                title: "Station Updates",
+                emptyMessage: "No station updates posted.",
+                updates: stationUpdates
+            )
+        case .recentCalls:
+            pastDispatchesSection
+        case .commandOverview, .needsAttention:
+            EmptyView()
+        }
     }
 
     @ViewBuilder

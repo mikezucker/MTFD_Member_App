@@ -76,6 +76,7 @@ struct DashboardView: View {
                         case .chief:
                             ChiefDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
+                                visibleCards: visibleDashboardCards,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 departmentStats: viewModel.state.dashboardDepartment,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
@@ -105,6 +106,7 @@ struct DashboardView: View {
                         case .memberCareer:
                             CareerMemberDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
+                                visibleCards: visibleDashboardCards,
                                 departmentStats: viewModel.state.dashboardDepartment,
                                 stationStats: viewModel.state.dashboardStation,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
@@ -830,22 +832,10 @@ struct DashboardView: View {
         _ = dashboardLayoutRefreshID
 
         let hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
-        let enabledCards = DashboardCardLayoutDefaults
+
+        return DashboardCardLayoutDefaults
             .savedOrder(for: session.currentUser?.role)
             .filter { !hiddenCards.contains($0) }
-
-        return enabledCards.sorted { lhs, rhs in
-            let lhsPriority = dashboardCardPriority(lhs)
-            let rhsPriority = dashboardCardPriority(rhs)
-
-            if lhsPriority != rhsPriority {
-                return lhsPriority > rhsPriority
-            }
-
-            let lhsIndex = enabledCards.firstIndex(of: lhs) ?? Int.max
-            let rhsIndex = enabledCards.firstIndex(of: rhs) ?? Int.max
-            return lhsIndex < rhsIndex
-        }
     }
 
     private func dashboardCardPriority(_ card: DashboardCardID) -> Int {

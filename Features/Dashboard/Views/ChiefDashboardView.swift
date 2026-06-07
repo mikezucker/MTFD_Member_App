@@ -3,6 +3,7 @@ import SwiftUI
 struct ChiefDashboardView: View {
 
     let activeDispatches: [APIClient.ActiveDispatch]
+    let visibleCards: [DashboardCardID]
     let workOrders: [DashboardApparatusWorkOrder]
     let departmentStats: APIClient.DispatchBucket?
     let recentCalls: [RecentDepartmentCall]
@@ -51,17 +52,38 @@ struct ChiefDashboardView: View {
 
             callTotalsSection
 
-            scheduleOutlookSection
-
-            commandMessagesSection
-
-            recentDispatchesSection
-
-            apparatusWorkOrdersSection
+            ForEach(visibleCards.filter(isSupportedDashboardCard), id: \.rawValue) { card in
+                dashboardSection(for: card)
+            }
         }
         .padding(.horizontal, 24)
         .padding(.top, 22)
         .padding(.bottom, 120)
+    }
+
+    private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
+        switch card {
+        case .messages, .scheduleEvents, .apparatusWorkOrders, .recentCalls:
+            return true
+        case .commandOverview, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .needsAttention:
+            return false
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardSection(for card: DashboardCardID) -> some View {
+        switch card {
+        case .messages:
+            commandMessagesSection
+        case .scheduleEvents:
+            scheduleOutlookSection
+        case .apparatusWorkOrders:
+            apparatusWorkOrdersSection
+        case .recentCalls:
+            recentDispatchesSection
+        case .commandOverview, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .needsAttention:
+            EmptyView()
+        }
     }
 
     @ViewBuilder
