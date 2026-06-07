@@ -856,9 +856,19 @@ extension APIClient {
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
+        let stations: ChiefStationStats?
         let lastUpdated: String?
         let sourceLabel: String?
         let message: String?
+    }
+
+    struct ChiefStationStats: Decodable {
+        let all: DispatchBucket?
+        let station1: DispatchBucket?
+        let station2: DispatchBucket?
+        let station3: DispatchBucket?
+        let station4: DispatchBucket?
+        let station5: DispatchBucket?
     }
 
     struct DispatchStats: Decodable {
