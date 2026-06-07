@@ -414,11 +414,11 @@ private struct CommandWorkspaceView: View {
 
                     ScrollView(showsIndicators: false) {
                         VStack(alignment: .leading, spacing: 18) {
+                            activeDispatchSection
+
                             commandCallStatsSection
 
                             compactDailyStaffingSection
-
-                            activeDispatchSection
 
                             commandWorkOrdersSection
 
@@ -1258,11 +1258,28 @@ private struct CommandWorkspaceView: View {
                     message: "Active department dispatches will appear here when available.",
                     emoji: DashboardEmoji.dispatch
                 )
-            } else {
-                ActiveDispatchStackView(dispatches: dashboardViewModel.activeDispatches) { activeDispatch in
-                    let payload = makeDispatchPayload(from: activeDispatch)
+            } else if let primaryDispatch = dashboardViewModel.activeDispatches.first {
+                DashboardDispatchPreviewCard(
+                    dispatch: makeDispatchPayload(
+                        from: primaryDispatch,
+                        activeCallCount: dashboardViewModel.activeDispatches.count
+                    ),
+                    isHighlighted: false
+                ) {
+                    selectedDispatch = makeDispatchPayload(
+                        from: primaryDispatch,
+                        activeCallCount: dashboardViewModel.activeDispatches.count
+                    )
+                }
 
-                    selectedDispatch = payload
+                let secondaryDispatches = Array(dashboardViewModel.activeDispatches.dropFirst())
+                if !secondaryDispatches.isEmpty {
+                    ActiveDispatchStackView(dispatches: secondaryDispatches) { activeDispatch in
+                        selectedDispatch = makeDispatchPayload(
+                            from: activeDispatch,
+                            activeCallCount: dashboardViewModel.activeDispatches.count
+                        )
+                    }
                 }
             }
         }
@@ -1286,8 +1303,7 @@ private struct CommandWorkspaceView: View {
         print("🟣 MainTab LiveActivity sync. activeDispatches:", dashboardViewModel.activeDispatches.count)
 
         guard let newestDispatch = dashboardViewModel.activeDispatches.first else {
-            print("🟣 MainTab LiveActivity no active dispatches. Ending all.")
-            DispatchLiveActivityManager.shared.endAll()
+            print("🟣 MainTab LiveActivity no active dispatches in local state. Leaving existing Live Activity alone.")
             return
         }
 

@@ -806,8 +806,7 @@ struct DashboardView: View {
         print("🟣 Dashboard LiveActivity sync. activeDispatches:", viewModel.activeDispatches.count)
 
         guard let newestDispatch = viewModel.activeDispatches.first else {
-            print("🟣 Dashboard LiveActivity no active dispatches. Ending all.")
-            DispatchLiveActivityManager.shared.endAll()
+            print("🟣 Dashboard LiveActivity no active dispatches in local state. Leaving existing Live Activity alone.")
             return
         }
 
