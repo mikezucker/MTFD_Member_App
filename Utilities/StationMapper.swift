@@ -3,10 +3,20 @@ import Foundation
 struct StationMapper {
 
     static func displayName(from company: String?) -> String {
-        guard let company = company?.uppercased() else { return "Station" }
+        guard let rawCompany = company?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawCompany.isEmpty else { return "Station" }
 
-        switch company {
-        case "FIRE_HQ", "FIRE HQ", "FIREHQ", "HQ", "HEADQUARTERS":
+        let company = rawCompany
+            .uppercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .joined(separator: " ")
+
+        let compactCompany = company.replacingOccurrences(of: " ", with: "")
+
+        switch compactCompany {
+        case "FIREHQ", "FIREHEADQUARTERS", "HQ", "HEADQUARTERS":
             return "Fire Headquarters"
         case "COLLINSVILLE":
             return "Station 2"
