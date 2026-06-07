@@ -313,6 +313,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             detailText: dispatch.message
         )
         typeItem.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
+        typeItem.handler = { _, completion in
+            completion()
+        }
         items.append(typeItem)
 
         if let displayAddress = formattedAddress(placeName: dispatch.placeName, address: dispatch.address, city: dispatch.city, state: dispatch.state) {
@@ -324,30 +327,41 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             ) ?? displayAddress
 
             let navigateItem = CPListItem(
-                text: "Navigate to Scene",
+                text: "Send to Apple Maps",
                 detailText: displayAddress
             )
             navigateItem.setImage(carPlayIcon("location.fill"))
 
             navigateItem.handler = { [weak self] _, completion in
                 print("🚗 CarPlay Navigate row tapped")
-                self?.navigateToAddress(navigationAddress)
-                completion()
+                self?.navigateToAddress(navigationAddress) {
+                    completion()
+                }
             }
 
             items.append(navigateItem)
 
             let locationItem = CPListItem(text: "Location", detailText: displayAddress)
-            locationItem.isEnabled = false
+            locationItem.handler = { _, completion in
+                completion()
+            }
             items.append(locationItem)
         }
 
         if !dispatch.units.isEmpty {
-            items.append(CPListItem(text: "Units", detailText: dispatch.units.joined(separator: ", ")))
+            let unitsItem = CPListItem(text: "Units", detailText: dispatch.units.joined(separator: ", "))
+            unitsItem.handler = { _, completion in
+                completion()
+            }
+            items.append(unitsItem)
         }
 
         if let dispatchedAt = dispatch.dispatchedAt {
-            items.append(CPListItem(text: "Dispatched", detailText: formatDate(dispatchedAt)))
+            let dispatchedItem = CPListItem(text: "Dispatched", detailText: formatDate(dispatchedAt))
+            dispatchedItem.handler = { _, completion in
+                completion()
+            }
+            items.append(dispatchedItem)
         }
 
         return CPListTemplate(
@@ -413,6 +427,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             detailText: dispatch.message
         )
         typeItem.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
+        typeItem.handler = { _, completion in
+            completion()
+        }
         items.append(typeItem)
 
         if let displayAddress = formattedAddress(
@@ -428,36 +445,57 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 state: dispatch.state
             ) ?? displayAddress
 
-            items.append(CPListItem(text: "Location", detailText: displayAddress))
+            let locationItem = CPListItem(text: "Location", detailText: displayAddress)
+            locationItem.handler = { _, completion in
+                completion()
+            }
+            items.append(locationItem)
 
             let navigateItem = CPListItem(
-                text: "Navigate",
-                detailText: "Open in Apple Maps"
+                text: "Send to Apple Maps",
+                detailText: "Opens destination in Apple Maps"
             )
             navigateItem.setImage(carPlayIcon("location.fill"))
 
             navigateItem.handler = { [weak self] _, completion in
-                self?.navigateToAddress(navAddress)
-                completion()
+                self?.navigateToAddress(navAddress) {
+                    completion()
+                }
             }
 
             items.append(navigateItem)
         }
 
         if !dispatch.units.isEmpty {
-            items.append(CPListItem(text: "Units", detailText: dispatch.units.joined(separator: ", ")))
+            let unitsItem = CPListItem(text: "Units", detailText: dispatch.units.joined(separator: ", "))
+            unitsItem.handler = { _, completion in
+                completion()
+            }
+            items.append(unitsItem)
         }
 
         if let tacChannel = dispatch.tacChannel, !tacChannel.isEmpty {
-            items.append(CPListItem(text: "Tac Channel", detailText: tacChannel))
+            let tacItem = CPListItem(text: "Tac Channel", detailText: tacChannel)
+            tacItem.handler = { _, completion in
+                completion()
+            }
+            items.append(tacItem)
         }
 
         if let status = dispatch.status, !status.isEmpty {
-            items.append(CPListItem(text: "Status", detailText: status))
+            let statusItem = CPListItem(text: "Status", detailText: status)
+            statusItem.handler = { _, completion in
+                completion()
+            }
+            items.append(statusItem)
         }
 
         if let dispatchedAt = dispatch.dispatchedAt {
-            items.append(CPListItem(text: "Dispatched", detailText: formatDate(dispatchedAt)))
+            let dispatchedItem = CPListItem(text: "Dispatched", detailText: formatDate(dispatchedAt))
+            dispatchedItem.handler = { _, completion in
+                completion()
+            }
+            items.append(dispatchedItem)
         }
 
         return CPListTemplate(
@@ -656,7 +694,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             .withTintColor(color, renderingMode: .alwaysOriginal)
     }
 
-    private func navigateToAddress(_ address: String) {
+    private func navigateToAddress(_ address: String, completion: @escaping () -> Void = {}) {
         let searchAddress = address.localizedCaseInsensitiveContains("NJ")
             ? address
             : "\(address), Morris Township, NJ"
@@ -665,23 +703,33 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
         CLGeocoder().geocodeAddressString(searchAddress) { placemarks, error in
             DispatchQueue.main.async {
-                guard let coordinate = placemarks?.first?.location?.coordinate else {
-                    print("🚗 CarPlay navigation geocode failed: \(error?.localizedDescription ?? "Unknown error")")
+                if let coordinate = placemarks?.first?.location?.coordinate {
+                    let placemark = MKPlacemark(coordinate: coordinate)
+                    let mapItem = MKMapItem(placemark: placemark)
+                    mapItem.name = searchAddress
+
+                    print("🚗 CarPlay opening Apple Maps: \(searchAddress) @ \(coordinate.latitude), \(coordinate.longitude)")
+
+                    MKMapItem.openMaps(
+                        with: [mapItem],
+                        launchOptions: [
+                            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                        ]
+                    )
+
+                    completion()
                     return
                 }
 
-                let placemark = MKPlacemark(coordinate: coordinate)
-                let mapItem = MKMapItem(placemark: placemark)
-                mapItem.name = searchAddress
+                print("🚗 CarPlay navigation geocode failed: \(error?.localizedDescription ?? "Unknown error")")
 
-                print("🚗 CarPlay opening Apple Maps: \(searchAddress) @ \(coordinate.latitude), \(coordinate.longitude)")
+                let encodedAddress = searchAddress.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? searchAddress
+                if let url = URL(string: "maps://?daddr=\(encodedAddress)&dirflg=d") {
+                    print("🚗 CarPlay opening Apple Maps fallback URL: \(url.absoluteString)")
+                    UIApplication.shared.open(url)
+                }
 
-                MKMapItem.openMaps(
-                    with: [mapItem],
-                    launchOptions: [
-                        MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-                    ]
-                )
+                completion()
             }
         }
     }
