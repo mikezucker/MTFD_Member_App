@@ -1346,8 +1346,6 @@ struct DashboardApparatusWorkOrdersCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                DashboardColorIcon(systemImage: "wrench.and.screwdriver.fill")
-
                 Text("Open apparatus issues")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
@@ -1556,8 +1554,6 @@ struct DashboardRecentCallsCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    DashboardColorIcon(systemImage: "clock.arrow.circlepath")
-
                     Text("Latest dispatches")
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(.white)
@@ -1823,8 +1819,6 @@ struct DashboardAssignedTrainingPreviewCard: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(spacing: 10) {
-                DashboardColorIcon(systemImage: "graduationcap.fill")
-
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Assigned Training")
                         .font(.headline)
@@ -2012,8 +2006,6 @@ private struct NewDispatchBanner: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                DashboardColorIcon(systemImage: "bell.and.waves.left.and.right.fill")
-
                 VStack(alignment: .leading, spacing: 2) {
                     Text("NEW DISPATCH")
                         .font(.caption.bold())
@@ -2221,8 +2213,6 @@ struct DashboardUpcomingScheduleCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 10) {
-                    DashboardColorIcon(systemImage: schedule.isWorkingNow ? "person.fill.checkmark" : "calendar.badge.clock")
-
                     VStack(alignment: .leading, spacing: 2) {
                         Text(statusText.uppercased())
                             .font(.caption2.weight(.black))
