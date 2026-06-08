@@ -43,6 +43,20 @@ struct DashboardView: View {
         Array(viewModel.activeDispatches.dropFirst())
     }
 
+    private func refreshDashboard() async {
+        await viewModel.refreshAsync(role: mappedUserRole(from: session.currentUser?.role))
+
+        if dashboardRole == .chief || dashboardRole == .admin {
+            await scheduleViewModel.loadOutlookDays(count: 4)
+
+            if selectedChiefScheduleDayId == nil {
+                selectedChiefScheduleDayId = scheduleViewModel.outlookDays.first?.id
+            }
+        }
+
+        scheduleLiveActivitySync()
+    }
+
     var body: some View {
         NavigationStack {
             ZStack(alignment: .top) {
@@ -79,6 +93,8 @@ struct DashboardView: View {
                                 visibleCards: visibleDashboardCards,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 departmentStats: viewModel.state.dashboardDepartment,
+                                stationStats: viewModel.state.dashboardStation,
+                                chiefStationStats: viewModel.state.dashboardStations,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
                                 outlookDays: scheduleViewModel.outlookDays,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats || scheduleViewModel.isLoading
@@ -217,9 +233,9 @@ struct DashboardView: View {
 
                         */
                     }
-                    // Pull-to-refresh intentionally disabled on Dashboard.
-                    // It allows short dashboard content to drag/bounce around.
-
+                    .refreshable {
+                        await refreshDashboard()
+                    }
                 }
 
                 if showNewDispatchBanner, let latestDispatch {
@@ -238,8 +254,8 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
-                UIScrollView.appearance().bounces = false
-                UIScrollView.appearance().alwaysBounceVertical = false
+                UIScrollView.appearance().bounces = true
+                UIScrollView.appearance().alwaysBounceVertical = true
                 UIScrollView.appearance().alwaysBounceHorizontal = false
 
                 showContent = true

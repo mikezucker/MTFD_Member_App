@@ -6,6 +6,8 @@ struct ChiefDashboardView: View {
     let visibleCards: [DashboardCardID]
     let workOrders: [DashboardApparatusWorkOrder]
     let departmentStats: APIClient.DispatchBucket?
+    let stationStats: APIClient.DispatchBucket?
+    let chiefStationStats: APIClient.ChiefStationStats?
     let recentCalls: [RecentDepartmentCall]
     let outlookDays: [ScheduleOutlookDay]
     let isLoading: Bool
@@ -32,9 +34,31 @@ struct ChiefDashboardView: View {
     }
 
     @AppStorage("chiefDashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
+    @AppStorage("chiefDashboardTotalsScope") private var selectedTotalsScopeRawValue = ChiefTotalsScope.all.rawValue
 
     private var selectedTotalsWindow: DashboardTotalsWindow {
         DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
+    }
+
+    private var selectedTotalsScope: ChiefTotalsScope {
+        ChiefTotalsScope(rawValue: selectedTotalsScopeRawValue) ?? .all
+    }
+
+    private var selectedTotalsBucket: APIClient.DispatchBucket? {
+        switch selectedTotalsScope {
+        case .all:
+            return chiefStationStats?.all ?? departmentStats
+        case .station1:
+            return chiefStationStats?.station1
+        case .station2:
+            return chiefStationStats?.station2
+        case .station3:
+            return chiefStationStats?.station3
+        case .station4:
+            return chiefStationStats?.station4
+        case .station5:
+            return chiefStationStats?.station5
+        }
     }
 
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
@@ -126,6 +150,14 @@ struct ChiefDashboardView: View {
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    chiefBriefDetailRow(label: "Today", value: todayStaffingCountText)
+                    chiefBriefDetailRow(label: "Recent Calls", value: recentCalls.isEmpty ? "None listed" : "\(recentCalls.count)")
+                    chiefBriefDetailRow(label: "Notable", value: notableRecentCallTypes.isEmpty ? "None listed" : notableRecentCallTypes.prefix(2).joined(separator: ", "))
+                    chiefBriefDetailRow(label: "Work Orders", value: workOrders.isEmpty ? "None open" : "\(workOrders.count) open")
+                }
+                .padding(.top, 4)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
@@ -138,13 +170,46 @@ struct ChiefDashboardView: View {
         }
     }
 
+    private func chiefBriefDetailRow(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label.uppercased())
+                .font(.caption2.weight(.black))
+                .foregroundStyle(AppTheme.gold)
+                .tracking(0.5)
+                .frame(width: 92, alignment: .leading)
+
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var todayStaffingCountText: String {
+        guard let today = outlookDays.first else {
+            return "Unavailable"
+        }
+
+        let count = today.entries
+            .flatMap(\.staffingDetails)
+            .filter { !$0.isVacant }
+            .compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .count
+
+        return count == 1 ? "1 working" : "\(count) working"
+    }
+
     private var chiefBriefHeadline: String {
         if !activeDispatches.isEmpty {
             return "Active Operations Underway"
         }
 
-        if callTotal(.department) >= 8 {
-            return "Elevated Activity Across the Department"
+        if !notableRecentCallTypes.isEmpty {
+            return "Notable Activity Logged Across the Department"
         }
 
         if !workOrders.isEmpty {
@@ -155,25 +220,129 @@ struct ChiefDashboardView: View {
     }
 
     private var chiefBriefSummary: String {
+        chiefBriefParts.joined(separator: " ")
+    }
+
+    private var chiefBriefParts: [String] {
+        var parts: [String] = []
+
+        parts.append(todayStaffingSummary)
+
         if !activeDispatches.isEmpty {
             let count = activeDispatches.count
-            return count == 1
+            parts.append(count == 1
                 ? "One active dispatch is currently visible for command review."
                 : "\(count) active dispatches are currently visible for command review."
+            )
+        } else if !recentCalls.isEmpty {
+            let count = recentCalls.count
+            parts.append(count == 1
+                ? "One recent department call is listed in the current feed."
+                : "\(count) recent department calls are listed in the current feed."
+            )
         }
 
-        if callTotal(.department) >= 8 {
-            return "Recent call volume is higher than usual. Schedule coverage, recent dispatches, and apparatus readiness remain available below."
+        if !notableRecentCallTypes.isEmpty {
+            parts.append("Notable recent call types include \(notableRecentCallTypes.joined(separator: ", ")).")
         }
 
         if !workOrders.isEmpty {
             let count = workOrders.count
-            return count == 1
-                ? "One apparatus work order remains open and is available for review."
-                : "\(count) apparatus work orders remain open and are available for review."
+            let apparatus = workOrders
+                .map(\.apparatusName)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .prefix(3)
+                .joined(separator: ", ")
+
+            if apparatus.isEmpty {
+                parts.append(count == 1
+                    ? "One apparatus work order remains open."
+                    : "\(count) apparatus work orders remain open."
+                )
+            } else {
+                parts.append(count == 1
+                    ? "One apparatus work order remains open for \(apparatus)."
+                    : "\(count) apparatus work orders remain open, including \(apparatus)."
+                )
+            }
+        }
+        return parts
+    }
+
+    private var todayStaffingSummary: String {
+        guard let today = outlookDays.first else {
+            return "Today’s staffing outlook is available for review."
         }
 
-        return "Department activity remains within normal range. Schedule coverage, recent dispatches, and apparatus readiness are available for review."
+        let staffedDetails = today.entries
+            .flatMap(\.staffingDetails)
+            .filter { !$0.isVacant }
+
+        let names = staffedDetails
+            .compactMap { detail -> String? in
+                guard let name = detail.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !name.isEmpty else {
+                    return nil
+                }
+
+                if let qualifier = detail.qualifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !qualifier.isEmpty {
+                    return "\(name) (\(qualifier))"
+                }
+
+                return name
+            }
+
+        if names.isEmpty {
+            return "Today’s schedule is available for command review."
+        }
+
+        let preview = names.prefix(4).joined(separator: ", ")
+        let remaining = max(0, names.count - 4)
+
+        if remaining > 0 {
+            return "Today’s staffing shows \(names.count) scheduled members, including \(preview), and \(remaining) more."
+        }
+
+        return "Today’s staffing shows \(names.count) scheduled members: \(preview)."
+    }
+
+    private var notableRecentCallTypes: [String] {
+        let seriousKeywords = [
+            "working fire",
+            "structure fire",
+            "building fire",
+            "cardiac arrest",
+            "choking",
+            "mva",
+            "motor vehicle",
+            "extrication",
+            "hazmat",
+            "carbon monoxide",
+            "co alarm",
+            "gas leak",
+            "overdose",
+            "unconscious",
+        ]
+
+        var seen = Set<String>()
+
+        return recentCalls.compactMap { call in
+            let title = call.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty else { return nil }
+
+            let normalized = title.lowercased()
+            guard seriousKeywords.contains(where: { normalized.contains($0) }) else {
+                return nil
+            }
+
+            guard !seen.contains(normalized) else {
+                return nil
+            }
+
+            seen.insert(normalized)
+            return title
+        }
     }
 
     private var callTotalsSection: some View {
@@ -203,11 +372,32 @@ struct ChiefDashboardView: View {
                 }
             }
 
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(ChiefTotalsScope.allCases, id: \.rawValue) { scope in
+                        Button {
+                            selectedTotalsScopeRawValue = scope.rawValue
+                        } label: {
+                            Text(scope.title)
+                                .font(.caption.bold())
+                                .foregroundStyle(selectedTotalsScope == scope ? AppTheme.navy : .white.opacity(0.72))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(selectedTotalsScope == scope ? AppTheme.gold : Color.white.opacity(0.08))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             if isLoading && departmentStats == nil {
                 loadingCard("Loading call totals...")
             } else {
                 HStack(spacing: 0) {
-                    chiefInlineTotal(value: callTotal(.department), label: "Department")
+                    chiefInlineTotal(value: callTotal(.total), label: selectedTotalsScope.title)
 
                     Divider()
                         .frame(height: 48)
@@ -285,27 +475,50 @@ struct ChiefDashboardView: View {
     }
 
     private func callTotal(_ kind: ChiefCallTotalKind) -> Int {
+        let bucket = selectedTotalsBucket
+
         switch (selectedTotalsWindow, kind) {
-        case (.last24h, .department): return departmentStats?.total24h ?? 0
-        case (.last24h, .fire): return departmentStats?.fire24h ?? 0
-        case (.last24h, .ems): return departmentStats?.ems24h ?? 0
+        case (.last24h, .total): return bucket?.total24h ?? 0
+        case (.last24h, .fire): return bucket?.fire24h ?? 0
+        case (.last24h, .ems): return bucket?.ems24h ?? 0
 
-        case (.last7d, .department): return departmentStats?.total7d ?? 0
-        case (.last7d, .fire): return departmentStats?.fire7d ?? 0
-        case (.last7d, .ems): return departmentStats?.ems7d ?? 0
+        case (.last7d, .total): return bucket?.total7d ?? 0
+        case (.last7d, .fire): return bucket?.fire7d ?? 0
+        case (.last7d, .ems): return bucket?.ems7d ?? 0
 
-        case (.last30d, .department): return departmentStats?.total30d ?? 0
-        case (.last30d, .fire): return departmentStats?.fire30d ?? 0
-        case (.last30d, .ems): return departmentStats?.ems30d ?? 0
+        case (.last30d, .total): return bucket?.total30d ?? 0
+        case (.last30d, .fire): return bucket?.fire30d ?? 0
+        case (.last30d, .ems): return bucket?.ems30d ?? 0
 
-        case (.ytd, .department): return departmentStats?.totalYtd ?? 0
-        case (.ytd, .fire): return departmentStats?.fireYtd ?? 0
-        case (.ytd, .ems): return departmentStats?.emsYtd ?? 0
+        case (.ytd, .total): return bucket?.totalYtd ?? 0
+        case (.ytd, .fire): return bucket?.fireYtd ?? 0
+        case (.ytd, .ems): return bucket?.emsYtd ?? 0
+        }
+    }
+
+
+    private enum ChiefTotalsScope: String, CaseIterable {
+        case all = "ALL"
+        case station1 = "1"
+        case station2 = "2"
+        case station3 = "3"
+        case station4 = "4"
+        case station5 = "5"
+
+        var title: String {
+            switch self {
+            case .all: return "ALL"
+            case .station1: return "Sta 1"
+            case .station2: return "Sta 2"
+            case .station3: return "Sta 3"
+            case .station4: return "Sta 4"
+            case .station5: return "Sta 5"
+            }
         }
     }
 
     private enum ChiefCallTotalKind {
-        case department
+        case total
         case fire
         case ems
     }

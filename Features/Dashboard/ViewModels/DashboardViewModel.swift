@@ -25,6 +25,10 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
+    func refreshAsync(role: UserRole) async {
+        await loadDashboard(role: role, force: true)
+    }
+
     func refreshIfStale(role: UserRole) {
         if let lastLoadedAt, Date().timeIntervalSince(lastLoadedAt) < minimumRefreshInterval {
             return
@@ -102,6 +106,7 @@ final class DashboardViewModel: ObservableObject {
             departmentCallTotal: state.departmentCallTotal,
             dashboardDepartment: state.dashboardDepartment,
             dashboardStation: state.dashboardStation,
+            dashboardStations: state.dashboardStations,
             lastUpdated: state.lastUpdated,
             recentDepartmentCalls: state.recentDepartmentCalls,
             apparatusWorkOrders: state.apparatusWorkOrders,
@@ -164,6 +169,7 @@ final class DashboardViewModel: ObservableObject {
                 departmentCallTotal: departmentYtd,
                 dashboardDepartment: nil,
                 dashboardStation: nil,
+                dashboardStations: nil,
                 lastUpdated: nil,
                 recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
                 apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
@@ -205,6 +211,7 @@ final class DashboardViewModel: ObservableObject {
                 departmentCallTotal: nil,
                 dashboardDepartment: nil,
                 dashboardStation: nil,
+                dashboardStations: nil,
                 lastUpdated: nil,
                 recentDepartmentCalls: [],
                 apparatusWorkOrders: [],
@@ -245,6 +252,7 @@ final class DashboardViewModel: ObservableObject {
                 departmentCallTotal: state.departmentCallTotal,
                 dashboardDepartment: state.dashboardDepartment,
                 dashboardStation: state.dashboardStation,
+                dashboardStations: state.dashboardStations,
                 lastUpdated: state.lastUpdated,
                 recentDepartmentCalls: state.recentDepartmentCalls,
                 apparatusWorkOrders: state.apparatusWorkOrders,
@@ -313,6 +321,7 @@ final class DashboardViewModel: ObservableObject {
                 departmentCallTotal: statsResponse.stats?.departmentYtd,
                 dashboardDepartment: statsResponse.department,
                 dashboardStation: statsResponse.station,
+                dashboardStations: statsResponse.stations,
                 lastUpdated: statsResponse.lastUpdated,
                 recentDepartmentCalls: state.recentDepartmentCalls,
                 apparatusWorkOrders: state.apparatusWorkOrders,

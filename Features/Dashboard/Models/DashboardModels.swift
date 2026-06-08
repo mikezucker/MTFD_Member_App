@@ -83,6 +83,7 @@ struct DashboardState {
     // Raw stats payload for the selector-based totals display
     var dashboardDepartment: APIClient.DispatchBucket? = nil
     var dashboardStation: APIClient.DispatchBucket? = nil
+    var dashboardStations: APIClient.ChiefStationStats? = nil
     var lastUpdated: String? = nil
 
     var recentDepartmentCalls: [RecentDepartmentCall] = []
@@ -112,6 +113,7 @@ struct DashboardState {
             departmentCallTotal: nil,
             dashboardDepartment: nil,
             dashboardStation: nil,
+            dashboardStations: nil,
             lastUpdated: nil,
             recentDepartmentCalls: [],
             apparatusWorkOrders: [],
