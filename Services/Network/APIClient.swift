@@ -895,6 +895,10 @@ extension APIClient {
         let ems7d: Int?
         let ems30d: Int?
         let emsYtd: Int?
+        let other24h: Int?
+        let other7d: Int?
+        let other30d: Int?
+        let otherYtd: Int?
     }
 
     struct DispatchHistoryResponse: Decodable {

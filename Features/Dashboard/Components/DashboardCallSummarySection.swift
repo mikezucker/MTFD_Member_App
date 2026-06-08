@@ -239,7 +239,11 @@ struct DashboardCallSummarySection: View {
             ems24h: 4,
             ems7d: 26,
             ems30d: 98,
-            emsYtd: 515
+            emsYtd: 515,
+            other24h: 0,
+            other7d: 0,
+            other30d: 6,
+            otherYtd: 21
         ),
         station: APIClient.DispatchBucket(
             total24h: 1,
@@ -253,7 +257,11 @@ struct DashboardCallSummarySection: View {
             ems24h: 1,
             ems7d: 4,
             ems30d: 16,
-            emsYtd: 387
+            emsYtd: 387,
+            other24h: 0,
+            other7d: 0,
+            other30d: 0,
+            otherYtd: 16
         ),
         isLoading: false
     )

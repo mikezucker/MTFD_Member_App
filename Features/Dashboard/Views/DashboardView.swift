@@ -88,6 +88,15 @@ struct DashboardView: View {
                             AdminDashboardView()
 
                         case .chief:
+                            let _ = print("🧭 CHIEF VIEW STATS",
+                                          "department24h=", viewModel.state.dashboardDepartment?.total24h as Any,
+                                          "station24h=", viewModel.state.dashboardStation?.total24h as Any,
+                                          "all24h=", viewModel.state.dashboardStations?.all?.total24h as Any,
+                                          "station1=", viewModel.state.dashboardStations?.station1?.total24h as Any,
+                                          "station2=", viewModel.state.dashboardStations?.station2?.total24h as Any,
+                                          "station3=", viewModel.state.dashboardStations?.station3?.total24h as Any,
+                                          "station4=", viewModel.state.dashboardStations?.station4?.total24h as Any,
+                                          "station5=", viewModel.state.dashboardStations?.station5?.total24h as Any)
                             ChiefDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
                                 visibleCards: visibleDashboardCards,
@@ -667,6 +676,7 @@ struct DashboardView: View {
         case department
         case fire
         case ems
+        case other
     }
 
     private var selectedChiefTotalsWindow: DashboardTotalsWindow {
@@ -722,6 +732,15 @@ struct DashboardView: View {
                 chiefInlineTotal(
                     value: chiefCallTotalValue(.ems),
                     label: "🚑 EMS"
+                )
+
+                Divider()
+                    .frame(height: 48)
+                    .background(Color.white.opacity(0.18))
+
+                chiefInlineTotal(
+                    value: chiefCallTotalValue(.other),
+                    label: "Other"
                 )
             }
             .frame(maxWidth: .infinity)
@@ -782,6 +801,8 @@ struct DashboardView: View {
             return department?.fire24h ?? 0
         case (.last24h, .ems):
             return department?.ems24h ?? 0
+        case (.last24h, .other):
+            return department?.other24h ?? 0
 
         case (.last7d, .department):
             return department?.total7d ?? 0
@@ -789,6 +810,8 @@ struct DashboardView: View {
             return department?.fire7d ?? 0
         case (.last7d, .ems):
             return department?.ems7d ?? 0
+        case (.last7d, .other):
+            return department?.other7d ?? 0
 
         case (.last30d, .department):
             return department?.total30d ?? 0
@@ -796,6 +819,8 @@ struct DashboardView: View {
             return department?.fire30d ?? 0
         case (.last30d, .ems):
             return department?.ems30d ?? 0
+        case (.last30d, .other):
+            return department?.other30d ?? 0
 
         case (.ytd, .department):
             return department?.totalYtd ?? 0
@@ -803,6 +828,8 @@ struct DashboardView: View {
             return department?.fireYtd ?? 0
         case (.ytd, .ems):
             return department?.emsYtd ?? 0
+        case (.ytd, .other):
+            return department?.otherYtd ?? 0
         }
     }
 

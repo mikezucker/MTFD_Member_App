@@ -410,6 +410,12 @@ struct ChiefDashboardView: View {
                         .background(Color.white.opacity(0.18))
 
                     chiefInlineTotal(value: callTotal(.ems), label: "🚑 EMS")
+
+                    Divider()
+                        .frame(height: 48)
+                        .background(Color.white.opacity(0.18))
+
+                    chiefInlineTotal(value: callTotal(.other), label: "Other")
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 16)
@@ -481,18 +487,22 @@ struct ChiefDashboardView: View {
         case (.last24h, .total): return bucket?.total24h ?? 0
         case (.last24h, .fire): return bucket?.fire24h ?? 0
         case (.last24h, .ems): return bucket?.ems24h ?? 0
+        case (.last24h, .other): return bucket?.other24h ?? 0
 
         case (.last7d, .total): return bucket?.total7d ?? 0
         case (.last7d, .fire): return bucket?.fire7d ?? 0
         case (.last7d, .ems): return bucket?.ems7d ?? 0
+        case (.last7d, .other): return bucket?.other7d ?? 0
 
         case (.last30d, .total): return bucket?.total30d ?? 0
         case (.last30d, .fire): return bucket?.fire30d ?? 0
         case (.last30d, .ems): return bucket?.ems30d ?? 0
+        case (.last30d, .other): return bucket?.other30d ?? 0
 
         case (.ytd, .total): return bucket?.totalYtd ?? 0
         case (.ytd, .fire): return bucket?.fireYtd ?? 0
         case (.ytd, .ems): return bucket?.emsYtd ?? 0
+        case (.ytd, .other): return bucket?.otherYtd ?? 0
         }
     }
 
@@ -521,6 +531,7 @@ struct ChiefDashboardView: View {
         case total
         case fire
         case ems
+        case other
     }
 
 

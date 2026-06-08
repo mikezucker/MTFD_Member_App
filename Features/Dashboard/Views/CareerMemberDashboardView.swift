@@ -194,6 +194,8 @@ struct CareerMemberDashboardView: View {
                 inlineTotal(value: callTotal(stats, .fire), label: "🔥 Fire")
                 Divider().frame(height: 44).background(Color.white.opacity(0.18))
                 inlineTotal(value: callTotal(stats, .ems), label: "🚑 EMS")
+                Divider().frame(height: 44).background(Color.white.opacity(0.18))
+                inlineTotal(value: callTotal(stats, .other), label: "Other")
             }
         }
         .padding(.horizontal, 16)
@@ -409,6 +411,7 @@ struct CareerMemberDashboardView: View {
         case total
         case fire
         case ems
+        case other
     }
 
     private func callTotal(_ stats: APIClient.DispatchBucket?, _ kind: TotalKind) -> Int {
@@ -416,18 +419,22 @@ struct CareerMemberDashboardView: View {
         case (.last24h, .total): return stats?.total24h ?? 0
         case (.last24h, .fire): return stats?.fire24h ?? 0
         case (.last24h, .ems): return stats?.ems24h ?? 0
+        case (.last24h, .other): return stats?.other24h ?? 0
 
         case (.last7d, .total): return stats?.total7d ?? 0
         case (.last7d, .fire): return stats?.fire7d ?? 0
         case (.last7d, .ems): return stats?.ems7d ?? 0
+        case (.last7d, .other): return stats?.other7d ?? 0
 
         case (.last30d, .total): return stats?.total30d ?? 0
         case (.last30d, .fire): return stats?.fire30d ?? 0
         case (.last30d, .ems): return stats?.ems30d ?? 0
+        case (.last30d, .other): return stats?.other30d ?? 0
 
         case (.ytd, .total): return stats?.totalYtd ?? 0
         case (.ytd, .fire): return stats?.fireYtd ?? 0
         case (.ytd, .ems): return stats?.emsYtd ?? 0
+        case (.ytd, .other): return stats?.otherYtd ?? 0
         }
     }
 
