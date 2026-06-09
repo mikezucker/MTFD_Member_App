@@ -84,6 +84,7 @@ struct DashboardState {
     var dashboardDepartment: APIClient.DispatchBucket? = nil
     var dashboardStation: APIClient.DispatchBucket? = nil
     var dashboardStations: APIClient.ChiefStationStats? = nil
+    var volunteerContext: APIClient.VolunteerContext? = nil
     var lastUpdated: String? = nil
 
     var recentDepartmentCalls: [RecentDepartmentCall] = []
@@ -114,6 +115,7 @@ struct DashboardState {
             dashboardDepartment: nil,
             dashboardStation: nil,
             dashboardStations: nil,
+            volunteerContext: nil,
             lastUpdated: nil,
             recentDepartmentCalls: [],
             apparatusWorkOrders: [],

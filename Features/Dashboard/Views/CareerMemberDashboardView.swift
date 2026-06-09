@@ -3,7 +3,6 @@ import SwiftUI
 struct CareerMemberDashboardView: View {
 
     let activeDispatches: [APIClient.ActiveDispatch]
-    let visibleCards: [DashboardCardID]
     let departmentStats: APIClient.DispatchBucket?
     let stationStats: APIClient.DispatchBucket?
     let upcomingSchedule: APIClient.MobileUpcomingScheduleResponse?
@@ -39,20 +38,29 @@ struct CareerMemberDashboardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            activeDispatchSection
-            callTotalsSection
+        NonBouncingVerticalScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 22) {
+                activeDispatchSection
+                callTotalsSection
 
-            ForEach(visibleCards.filter(isSupportedDashboardCard), id: \.rawValue) { card in
-                dashboardSection(for: card)
+                ForEach(supportedDashboardCards, id: \.rawValue) { card in
+                    dashboardSection(for: card)
+                }
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 120)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 22)
-        .padding(.bottom, 120)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
+    
+    private var supportedDashboardCards: [DashboardCardID] {
+        DashboardCardID.allCases.filter(isSupportedDashboardCard)
+    }
+
+private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
         switch card {
         case .messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .recentCalls:
             return true
@@ -207,7 +215,6 @@ struct CareerMemberDashboardView: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         }
         .contentShape(Rectangle())
-        .gesture(totalsSwipeGesture)
     }
 
     private var scheduleSection: some View {
@@ -438,25 +445,7 @@ struct CareerMemberDashboardView: View {
         }
     }
 
-    private var totalsSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-
-                guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else {
-                    return
-                }
-
-                if horizontal < 0 {
-                    selectNextTotalsWindow()
-                } else {
-                    selectPreviousTotalsWindow()
-                }
-            }
-    }
-
-    private func selectNextTotalsWindow() {
+private func selectNextTotalsWindow() {
         let windows = DashboardTotalsWindow.allCases
         guard let currentIndex = windows.firstIndex(of: selectedTotalsWindow) else { return }
         selectedWindowRawValue = windows[min(currentIndex + 1, windows.count - 1)].rawValue

@@ -750,6 +750,7 @@ extension APIClient {
         let latestUpdates: [LatestUpdate]?
         let trainingSummary: TrainingSummary?
         let assignedTrainingPreview: [DashboardTrainingPreviewItem]?
+        let volunteerContext: VolunteerContext?
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
@@ -765,6 +766,29 @@ extension APIClient {
         let notesConfigured: Bool?
         let notesMessage: String?
         let error: String?
+    }
+
+    struct VolunteerContext: Decodable {
+        let company: String?
+        let station: String?
+        let officer: VolunteerOfficer?
+        let apparatus: VolunteerApparatus?
+    }
+
+    struct VolunteerOfficer: Decodable {
+        let id: String?
+        let name: String?
+        let email: String?
+        let phone: String?
+        let role: String?
+    }
+
+    struct VolunteerApparatus: Decodable {
+        let displayName: String?
+        let station: String?
+        let dispatchUnitIds: String?
+        let apparatusApiId: String?
+        let unitId: String?
     }
 
     struct ApparatusWorkOrder: Decodable, Identifiable {

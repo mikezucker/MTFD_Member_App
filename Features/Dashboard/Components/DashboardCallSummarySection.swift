@@ -180,27 +180,6 @@ struct DashboardCallSummarySection: View {
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func horizontalSwipeGesture(
-        onPrevious: @escaping () -> Void,
-        onNext: @escaping () -> Void
-    ) -> some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-
-                guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else {
-                    return
-                }
-
-                if horizontal < 0 {
-                    onNext()
-                } else {
-                    onPrevious()
-                }
-            }
-    }
-
     private func selectNextWindow() {
         let windows = DashboardTotalsWindow.allCases
         guard let currentIndex = windows.firstIndex(of: selectedWindow) else { return }

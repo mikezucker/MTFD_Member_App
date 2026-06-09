@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 
 struct DispatchDetailView: View {
     let dispatch: DispatchNotificationPayload
@@ -61,6 +62,7 @@ struct DispatchDetailView: View {
                 VStack(spacing: 16) {
                     headerCard
                     locationCard
+                    arrivalPreviewCard
                     unitsCard
                     notesCard
                     metadataCard
@@ -179,6 +181,26 @@ struct DispatchDetailView: View {
             .clipShape(RoundedRectangle(cornerRadius: 22))
         }
         .buttonStyle(.plain)
+    }
+
+    private var arrivalPreviewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Arrival Preview", icon: "binoculars.fill")
+
+            DispatchDetailLookAroundPreview(
+                address: address,
+                city: liveDispatch?.city,
+                state: liveDispatch?.state,
+                latitude: liveDispatch?.latitude,
+                longitude: liveDispatch?.longitude
+            )
+            .frame(height: 300)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
     }
 
     private var unitsCard: some View {
@@ -406,5 +428,141 @@ private struct FlowLayout: View {
                     .clipShape(Capsule())
             }
         }
+    }
+}
+
+
+private struct DispatchDetailLookAroundPreview: View {
+    let address: String
+    let city: String?
+    let state: String?
+    let latitude: Double?
+    let longitude: Double?
+
+    @State private var scene: MKLookAroundScene?
+    @State private var isLoading = false
+
+    private var normalizedAddress: String {
+        normalizeDispatchAddress(address: address, city: city, state: state)
+    }
+
+    var body: some View {
+        ZStack {
+            if let scene {
+                LookAroundDetailControllerPreview(scene: scene)
+            } else {
+                DispatchMapPreview(address: normalizedAddress)
+            }
+
+            if isLoading {
+                VStack(spacing: 8) {
+                    ProgressView()
+                        .tint(.white)
+
+                    Text("Checking Look Around")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.black.opacity(0.45))
+                )
+            }
+        }
+        .task(id: normalizedAddress) {
+            await loadLookAroundScene()
+        }
+    }
+
+    private func loadLookAroundScene() async {
+        await MainActor.run {
+            isLoading = true
+            scene = nil
+        }
+
+        do {
+            let trimmedAddress = normalizedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !trimmedAddress.isEmpty, trimmedAddress != "Unknown Location" else {
+                await MainActor.run {
+                    scene = nil
+                    isLoading = false
+                }
+                return
+            }
+
+            let placemarks = try await CLGeocoder().geocodeAddressString(trimmedAddress)
+
+            guard let coordinate = placemarks.first?.location?.coordinate else {
+                await MainActor.run {
+                    scene = nil
+                    isLoading = false
+                }
+                return
+            }
+
+            let request = MKLookAroundSceneRequest(coordinate: coordinate)
+            let resolvedScene = try await request.scene
+
+            await MainActor.run {
+                scene = resolvedScene
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                scene = nil
+                isLoading = false
+            }
+        }
+    }
+
+    private func normalizeDispatchAddress(address: String, city: String?, state: String?) -> String {
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmed.isEmpty else {
+            return trimmed
+        }
+
+        let lowercased = trimmed.lowercased()
+
+        if lowercased.contains(" nj") ||
+            lowercased.contains(",nj") ||
+            lowercased.contains("new jersey") ||
+            lowercased.contains("morristown") ||
+            lowercased.contains("morris township") ||
+            lowercased.contains("morris twp") {
+            return trimmed
+        }
+
+        let cleanCity = city?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanState = state?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let cleanCity, !cleanCity.isEmpty {
+            return [
+                trimmed,
+                cleanCity,
+                cleanState?.isEmpty == false ? cleanState : "NJ"
+            ]
+            .compactMap { $0 }
+            .joined(separator: ", ")
+        }
+
+        return "\(trimmed), Morris Township, NJ"
+    }
+}
+
+private struct LookAroundDetailControllerPreview: UIViewControllerRepresentable {
+    let scene: MKLookAroundScene
+
+    func makeUIViewController(context: Context) -> MKLookAroundViewController {
+        let controller = MKLookAroundViewController()
+        controller.scene = scene
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: MKLookAroundViewController, context: Context) {
+        uiViewController.scene = scene
     }
 }

@@ -38,6 +38,17 @@
 		403299262FD3662A004D53EE /* AdminDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4032991D2FD3662A004D53EE /* AdminDashboardView.swift */; };
 		403299272FD3662A004D53EE /* CareerMemberDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4032991E2FD3662A004D53EE /* CareerMemberDashboardView.swift */; };
 		403299282FD3662A004D53EE /* VolunteerOfficerDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 403299222FD3662A004D53EE /* VolunteerOfficerDashboardView.swift */; };
+		4039B3582FD835B000C69F7D /* DashboardColorIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3512FD835B000C69F7D /* DashboardColorIcon.swift */; };
+		4039B3592FD835B000C69F7D /* DashboardAssignedTrainingPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3502FD835B000C69F7D /* DashboardAssignedTrainingPreviewCard.swift */; };
+		4039B35A2FD835B000C69F7D /* DashboardMessageCenterCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3532FD835B000C69F7D /* DashboardMessageCenterCard.swift */; };
+		4039B35B2FD835B000C69F7D /* DashboardRecentCallsCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3542FD835B000C69F7D /* DashboardRecentCallsCard.swift */; };
+		4039B35C2FD835B000C69F7D /* DashboardUpcomingScheduleCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3562FD835B000C69F7D /* DashboardUpcomingScheduleCard.swift */; };
+		4039B35D2FD835B000C69F7D /* DashboardSmallStatusCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3552FD835B000C69F7D /* DashboardSmallStatusCard.swift */; };
+		4039B35E2FD835B000C69F7D /* DashboardUpdateBlock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3572FD835B000C69F7D /* DashboardUpdateBlock.swift */; };
+		4039B35F2FD835B000C69F7D /* DashboardApparatusWorkOrdersCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B34F2FD835B000C69F7D /* DashboardApparatusWorkOrdersCard.swift */; };
+		4039B3602FD835B000C69F7D /* DashboardLoadingCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3522FD835B000C69F7D /* DashboardLoadingCard.swift */; };
+		4039B3622FD83D0B00C69F7D /* DashboardDispatchPreviewCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3612FD83D0B00C69F7D /* DashboardDispatchPreviewCard.swift */; };
+		4039B3642FD88C1200C69F7D /* NonBouncingVerticalScrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4039B3632FD88C1200C69F7D /* NonBouncingVerticalScrollView.swift */; };
 		404C364C2FB207F80088997E /* ActiveDispatchStackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */; };
 		404C36502FB208DD0088997E /* DashboardHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C364F2FB208D40088997E /* DashboardHeaderView.swift */; };
 		404C36532FB2401B0088997E /* AppBadgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 404C36522FB2400C0088997E /* AppBadgeManager.swift */; };
@@ -197,6 +208,17 @@
 		403299202FD3662A004D53EE /* ChiefDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChiefDashboardView.swift; sourceTree = "<group>"; };
 		403299212FD3662A004D53EE /* VolunteerMemberDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolunteerMemberDashboardView.swift; sourceTree = "<group>"; };
 		403299222FD3662A004D53EE /* VolunteerOfficerDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolunteerOfficerDashboardView.swift; sourceTree = "<group>"; };
+		4039B34F2FD835B000C69F7D /* DashboardApparatusWorkOrdersCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardApparatusWorkOrdersCard.swift; sourceTree = "<group>"; };
+		4039B3502FD835B000C69F7D /* DashboardAssignedTrainingPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardAssignedTrainingPreviewCard.swift; sourceTree = "<group>"; };
+		4039B3512FD835B000C69F7D /* DashboardColorIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardColorIcon.swift; sourceTree = "<group>"; };
+		4039B3522FD835B000C69F7D /* DashboardLoadingCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardLoadingCard.swift; sourceTree = "<group>"; };
+		4039B3532FD835B000C69F7D /* DashboardMessageCenterCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardMessageCenterCard.swift; sourceTree = "<group>"; };
+		4039B3542FD835B000C69F7D /* DashboardRecentCallsCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardRecentCallsCard.swift; sourceTree = "<group>"; };
+		4039B3552FD835B000C69F7D /* DashboardSmallStatusCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardSmallStatusCard.swift; sourceTree = "<group>"; };
+		4039B3562FD835B000C69F7D /* DashboardUpcomingScheduleCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardUpcomingScheduleCard.swift; sourceTree = "<group>"; };
+		4039B3572FD835B000C69F7D /* DashboardUpdateBlock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardUpdateBlock.swift; sourceTree = "<group>"; };
+		4039B3612FD83D0B00C69F7D /* DashboardDispatchPreviewCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardDispatchPreviewCard.swift; sourceTree = "<group>"; };
+		4039B3632FD88C1200C69F7D /* NonBouncingVerticalScrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NonBouncingVerticalScrollView.swift; sourceTree = "<group>"; };
 		404C364B2FB207F50088997E /* ActiveDispatchStackView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveDispatchStackView.swift; sourceTree = "<group>"; };
 		404C364F2FB208D40088997E /* DashboardHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardHeaderView.swift; sourceTree = "<group>"; };
 		404C36522FB2400C0088997E /* AppBadgeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBadgeManager.swift; sourceTree = "<group>"; };
@@ -497,8 +519,6 @@
 				408911182F9014A20035C355 /* Alerts */,
 				408911172F90149F0035C355 /* Progress */,
 				408911162F90149C0035C355 /* Cards */,
-				408911152F9014980035C355 /* Buttons */,
-				408911142F90148F0035C355 /* States */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -671,20 +691,6 @@
 				408910C42F8FED410035C355 /* KeychainService.swift */,
 			);
 			path = Auth;
-			sourceTree = "<group>";
-		};
-		408911142F90148F0035C355 /* States */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = States;
-			sourceTree = "<group>";
-		};
-		408911152F9014980035C355 /* Buttons */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Buttons;
 			sourceTree = "<group>";
 		};
 		408911162F90149C0035C355 /* Cards */ = {
@@ -937,6 +943,16 @@
 		408911322F9016280035C355 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				4039B3632FD88C1200C69F7D /* NonBouncingVerticalScrollView.swift */,
+				4039B34F2FD835B000C69F7D /* DashboardApparatusWorkOrdersCard.swift */,
+				4039B3502FD835B000C69F7D /* DashboardAssignedTrainingPreviewCard.swift */,
+				4039B3512FD835B000C69F7D /* DashboardColorIcon.swift */,
+				4039B3522FD835B000C69F7D /* DashboardLoadingCard.swift */,
+				4039B3532FD835B000C69F7D /* DashboardMessageCenterCard.swift */,
+				4039B3542FD835B000C69F7D /* DashboardRecentCallsCard.swift */,
+				4039B3552FD835B000C69F7D /* DashboardSmallStatusCard.swift */,
+				4039B3562FD835B000C69F7D /* DashboardUpcomingScheduleCard.swift */,
+				4039B3572FD835B000C69F7D /* DashboardUpdateBlock.swift */,
 				406310CB2F92E8D3001078AF /* DashboardCallSummarySection.swift */,
 				406310C92F92DC2B001078AF /* DepartmentStationStatsSection.swift */,
 				408911442F902A5E0035C355 /* DashboardAttentionCard.swift */,
@@ -987,6 +1003,7 @@
 		40B22B6C2F9FDD5A00808F42 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				4039B3612FD83D0B00C69F7D /* DashboardDispatchPreviewCard.swift */,
 				40B22B692F9FDD5A00808F42 /* DispatchDetailView.swift */,
 				40B22B6A2F9FDD5A00808F42 /* DispatchListView.swift */,
 				40B22B6B2F9FDD5A00808F42 /* DispatchMapView.swift */,
@@ -1312,6 +1329,17 @@
 				4008A35C2FD21A4F0030BAC9 /* ApparatusWorkOrdersView.swift in Sources */,
 				4001D01C2FAD6771007A8D45 /* DispatchDetailViewModel.swift in Sources */,
 				408911432F902A4A0035C355 /* DashboardQuickActionTile.swift in Sources */,
+				4039B3582FD835B000C69F7D /* DashboardColorIcon.swift in Sources */,
+				4039B3622FD83D0B00C69F7D /* DashboardDispatchPreviewCard.swift in Sources */,
+				4039B3642FD88C1200C69F7D /* NonBouncingVerticalScrollView.swift in Sources */,
+				4039B3592FD835B000C69F7D /* DashboardAssignedTrainingPreviewCard.swift in Sources */,
+				4039B35A2FD835B000C69F7D /* DashboardMessageCenterCard.swift in Sources */,
+				4039B35B2FD835B000C69F7D /* DashboardRecentCallsCard.swift in Sources */,
+				4039B35C2FD835B000C69F7D /* DashboardUpcomingScheduleCard.swift in Sources */,
+				4039B35D2FD835B000C69F7D /* DashboardSmallStatusCard.swift in Sources */,
+				4039B35E2FD835B000C69F7D /* DashboardUpdateBlock.swift in Sources */,
+				4039B35F2FD835B000C69F7D /* DashboardApparatusWorkOrdersCard.swift in Sources */,
+				4039B3602FD835B000C69F7D /* DashboardLoadingCard.swift in Sources */,
 				408910F42F8FED410035C355 /* MainTabView.swift in Sources */,
 				408910F52F8FED410035C355 /* User.swift in Sources */,
 				408910F62F8FED410035C355 /* ModuleCard.swift in Sources */,

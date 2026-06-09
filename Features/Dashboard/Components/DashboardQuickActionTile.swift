@@ -46,11 +46,6 @@ struct DashboardQuickActionTile: View {
             .animation(.easeInOut(duration: 0.15), value: isPressed)
         }
         .buttonStyle(.plain)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in if !isPressed { isPressed = true } }
-                .onEnded { _ in isPressed = false }
-        )
     }
 
     private var iconGradient: LinearGradient {

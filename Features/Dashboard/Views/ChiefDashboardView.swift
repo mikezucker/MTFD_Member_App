@@ -1,16 +1,21 @@
 import SwiftUI
+import UIKit
 
 struct ChiefDashboardView: View {
 
     let activeDispatches: [APIClient.ActiveDispatch]
-    let visibleCards: [DashboardCardID]
     let workOrders: [DashboardApparatusWorkOrder]
     let departmentStats: APIClient.DispatchBucket?
     let stationStats: APIClient.DispatchBucket?
     let chiefStationStats: APIClient.ChiefStationStats?
     let recentCalls: [RecentDepartmentCall]
-    let outlookDays: [ScheduleOutlookDay]
     let isLoading: Bool
+
+    @StateObject private var scheduleViewModel = ScheduleViewModel()
+
+    private var outlookDays: [ScheduleOutlookDay] {
+        scheduleViewModel.outlookDays
+    }
     let onOpenWorkOrders: () -> Void
     let onOpenMessages: () -> Void
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
@@ -70,24 +75,37 @@ struct ChiefDashboardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        NonBouncingVerticalScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 22) {
+                activeDispatchSection
 
-            activeDispatchSection
+                callTotalsSection
 
-            callTotalsSection
+                chiefBriefSection
 
-            chiefBriefSection
-
-            ForEach(visibleCards.filter(isSupportedDashboardCard), id: \.rawValue) { card in
-                dashboardSection(for: card)
+                ForEach(supportedDashboardCards, id: \.rawValue) { card in
+                    dashboardSection(for: card)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 120)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .task {
+            if scheduleViewModel.outlookDays.isEmpty {
+                await scheduleViewModel.loadOutlookDays(count: 4)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 22)
-        .padding(.bottom, 120)
     }
 
-    private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
+    
+    private var supportedDashboardCards: [DashboardCardID] {
+        DashboardCardID.allCases.filter(isSupportedDashboardCard)
+    }
+
+private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
         switch card {
         case .messages, .scheduleEvents, .apparatusWorkOrders, .recentCalls:
             return true
@@ -427,31 +445,11 @@ struct ChiefDashboardView: View {
                         .stroke(Color.white.opacity(0.12), lineWidth: 1)
                 }
                 .contentShape(Rectangle())
-                .gesture(totalsSwipeGesture)
             }
         }
     }
 
-
-    private var totalsSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-
-                guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else {
-                    return
-                }
-
-                if horizontal < 0 {
-                    selectNextTotalsWindow()
-                } else {
-                    selectPreviousTotalsWindow()
-                }
-            }
-    }
-
-    private func selectNextTotalsWindow() {
+private func selectNextTotalsWindow() {
         let windows = DashboardTotalsWindow.allCases
         guard let currentIndex = windows.firstIndex(of: selectedTotalsWindow) else { return }
         selectedWindowRawValue = windows[min(currentIndex + 1, windows.count - 1)].rawValue
@@ -574,7 +572,7 @@ struct ChiefDashboardView: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                if isLoading && outlookDays.isEmpty {
+                if scheduleViewModel.isLoading && outlookDays.isEmpty {
                     loadingRow("Loading schedule outlook...")
                 } else if outlookDays.isEmpty {
                     emptyRow("Schedule outlook unavailable.")
@@ -587,17 +585,14 @@ struct ChiefDashboardView: View {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.66))
                 } else {
-                    ScrollView(.vertical, showsIndicators: true) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(displayEntries) { entry in
-                                scheduleEntryRow(entry)
-                            }
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(displayEntries.prefix(3)) { entry in
+                            scheduleEntryRow(entry)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(height: 126)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("Swipe left/right for days. Scroll for more staffing.")
+                    Text("Showing first staffing items. View full Schedule for more.")
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.white.opacity(0.52))
                 }
@@ -618,7 +613,6 @@ struct ChiefDashboardView: View {
                     .stroke(Color.white.opacity(0.12), lineWidth: 1)
             }
             .contentShape(Rectangle())
-            .gesture(scheduleSwipeGesture)
         }
     }
 
@@ -663,25 +657,7 @@ struct ChiefDashboardView: View {
         .padding(.vertical, 2)
     }
 
-    private var scheduleSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-
-                guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else {
-                    return
-                }
-
-                if horizontal < 0 {
-                    selectNextScheduleDay()
-                } else {
-                    selectPreviousScheduleDay()
-                }
-            }
-    }
-
-    private func selectNextScheduleDay() {
+private func selectNextScheduleDay() {
         guard !outlookDays.isEmpty else { return }
         let currentId = selectedScheduleDay?.id ?? outlookDays.first?.id
         let currentIndex = outlookDays.firstIndex { $0.id == currentId } ?? 0
