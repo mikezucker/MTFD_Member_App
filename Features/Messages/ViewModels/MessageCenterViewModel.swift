@@ -77,10 +77,7 @@ final class MessageCenterViewModel: ObservableObject {
 
             messages = resolvedMessages.messages
             unreadCount = resolvedMessages.unreadCount
-            let dashboardActiveDispatches = resolvedDashboard.activeDispatches ?? []
-            activeDispatches = dashboardActiveDispatches.isEmpty
-                ? resolvedDispatchHistory.activeDispatches
-                : dashboardActiveDispatches
+            activeDispatches = resolvedDashboard.activeDispatches ?? []
             historicalDispatches = resolvedDispatchHistory.historicalDispatches
 
             pruneOldReadDispatchIds()

@@ -146,10 +146,7 @@ final class DashboardViewModel: ObservableObject {
 
             let departmentScheduleEntries = await departmentScheduleEntriesResponse
 
-            let dashboardActiveDispatches = dashboard.activeDispatches ?? []
-            activeDispatches = dashboardActiveDispatches.isEmpty
-                ? dispatchHistory.activeDispatches
-                : dashboardActiveDispatches
+            activeDispatches = dashboard.activeDispatches ?? []
 
             let departmentYtd: Int? = nil
             let stationYtd: Int? = nil
