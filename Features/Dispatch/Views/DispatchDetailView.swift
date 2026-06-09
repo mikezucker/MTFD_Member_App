@@ -142,10 +142,7 @@ struct DispatchDetailView: View {
     }
 
     private var locationCard: some View {
-        Button {
-            openMaps()
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
                 sectionTitle("Location", icon: "location.fill")
 
                 if let placeName, !placeName.isEmpty {
@@ -170,17 +167,24 @@ struct DispatchDetailView: View {
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
-                Label("Tap to navigate", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                    .font(.caption.bold())
-                    .foregroundStyle(AppTheme.gold)
-                    .padding(.top, 2)
+                Button {
+                    openMaps()
+                } label: {
+                    Label("Navigate to Scene", systemImage: "map.fill")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.red)
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 22))
-        }
-        .buttonStyle(.plain)
     }
 
     private var arrivalPreviewCard: some View {
@@ -266,18 +270,6 @@ struct DispatchDetailView: View {
 
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            Button {
-                openMaps()
-            } label: {
-                Label("Navigate to Scene", systemImage: "map.fill")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.red)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-
             Button {
                 UIPasteboard.general.string = address
             } label: {

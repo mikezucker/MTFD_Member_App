@@ -71,7 +71,10 @@ struct DashboardView: View {
                                 stationStats: viewModel.state.dashboardStation,
                                 chiefStationStats: viewModel.state.dashboardStations,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
-                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats
+                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                onRefresh: {
+                                    await refreshDashboard()
+                                }
                             ) {
                                 showApparatusWorkOrders = true
                             } onOpenMessages: {
@@ -103,6 +106,9 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                onRefresh: {
+                                    await refreshDashboard()
+                                },
                                 onOpenDispatch: { dispatch in
                                     latestDispatch = dispatch
 

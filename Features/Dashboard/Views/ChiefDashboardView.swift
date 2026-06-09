@@ -10,6 +10,7 @@ struct ChiefDashboardView: View {
     let chiefStationStats: APIClient.ChiefStationStats?
     let recentCalls: [RecentDepartmentCall]
     let isLoading: Bool
+    let onRefresh: () async -> Void
 
     @StateObject private var scheduleViewModel = ScheduleViewModel()
 
@@ -75,7 +76,13 @@ struct ChiefDashboardView: View {
     }
 
     var body: some View {
-        NonBouncingVerticalScrollView(showsIndicators: false) {
+        NonBouncingVerticalScrollView(
+            showsIndicators: false,
+            onRefresh: {
+                await onRefresh()
+                await scheduleViewModel.loadOutlookDays(count: 4)
+            }
+        ) {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
 

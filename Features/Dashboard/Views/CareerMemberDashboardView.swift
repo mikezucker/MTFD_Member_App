@@ -13,6 +13,7 @@ struct CareerMemberDashboardView: View {
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
     let isLoading: Bool
+    let onRefresh: () async -> Void
 
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
     let onOpenMessages: () -> Void
@@ -38,7 +39,10 @@ struct CareerMemberDashboardView: View {
     }
 
     var body: some View {
-        NonBouncingVerticalScrollView(showsIndicators: false) {
+        NonBouncingVerticalScrollView(
+            showsIndicators: false,
+            onRefresh: onRefresh
+        ) {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
                 callTotalsSection
