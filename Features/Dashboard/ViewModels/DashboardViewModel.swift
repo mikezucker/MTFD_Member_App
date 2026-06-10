@@ -107,6 +107,7 @@ final class DashboardViewModel: ObservableObject {
             dashboardDepartment: state.dashboardDepartment,
             dashboardStation: state.dashboardStation,
             dashboardStations: state.dashboardStations,
+            volunteerContext: state.volunteerContext,
             lastUpdated: state.lastUpdated,
             recentDepartmentCalls: state.recentDepartmentCalls,
             apparatusWorkOrders: state.apparatusWorkOrders,
@@ -148,6 +149,9 @@ final class DashboardViewModel: ObservableObject {
 
             activeDispatches = dashboard.activeDispatches ?? []
 
+            print("🧑‍🚒 volunteerContext:", dashboard.volunteerContext as Any)
+            print("🧑‍🚒 volunteer officer:", dashboard.volunteerContext?.officer as Any)
+
             let departmentYtd: Int? = nil
             let stationYtd: Int? = nil
 
@@ -167,6 +171,7 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: nil,
                 dashboardStation: nil,
                 dashboardStations: nil,
+                volunteerContext: dashboard.volunteerContext,
                 lastUpdated: nil,
                 recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
                 apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
@@ -209,6 +214,7 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: nil,
                 dashboardStation: nil,
                 dashboardStations: nil,
+                volunteerContext: nil,
                 lastUpdated: nil,
                 recentDepartmentCalls: [],
                 apparatusWorkOrders: [],
@@ -250,6 +256,7 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: state.dashboardDepartment,
                 dashboardStation: state.dashboardStation,
                 dashboardStations: state.dashboardStations,
+                volunteerContext: state.volunteerContext,
                 lastUpdated: state.lastUpdated,
                 recentDepartmentCalls: state.recentDepartmentCalls,
                 apparatusWorkOrders: state.apparatusWorkOrders,

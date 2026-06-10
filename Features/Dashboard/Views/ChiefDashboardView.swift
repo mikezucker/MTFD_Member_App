@@ -140,7 +140,7 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
     @ViewBuilder
     private var activeDispatchSection: some View {
         if let primaryActiveDispatch {
-            sectionTitle("Current Dispatch", systemImage: "bell.and.waves.left.and.right.fill")
+            sectionTitle("Current Dispatch", systemImage: "firetruck.fill")
 
             DashboardDispatchPreviewCard(
                 dispatch: makeDispatchPayload(from: primaryActiveDispatch),
@@ -150,7 +150,7 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
             }
 
             if !secondaryActiveDispatches.isEmpty {
-                sectionTitle("Additional Active Dispatches", systemImage: "bell.and.waves.left.and.right.fill")
+                sectionTitle("Additional Active Dispatches", systemImage: "firetruck.fill")
 
                 ActiveDispatchStackView(
                     dispatches: secondaryActiveDispatches
@@ -584,7 +584,7 @@ private func selectNextTotalsWindow() {
                 } else if outlookDays.isEmpty {
                     emptyRow("Schedule outlook unavailable.")
                 } else if displayEntries.isEmpty {
-                    Text("\(DashboardEmoji.schedule) No staffing returned for \(selectedScheduleDay?.label ?? "this day").")
+                    Text("📅 No staffing returned for \(selectedScheduleDay?.label ?? "this day").")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.white)
 
@@ -605,7 +605,7 @@ private func selectNextTotalsWindow() {
                 }
 
                 if totalVacancies > 0 {
-                    Text("\(DashboardEmoji.warning) \(totalVacancies) vacanc\(totalVacancies == 1 ? "y" : "ies"). View full Schedule for open positions.")
+                    Text("⚠️ \(totalVacancies) vacanc\(totalVacancies == 1 ? "y" : "ies"). View full Schedule for open positions.")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.orange)
                         .padding(.top, 2)

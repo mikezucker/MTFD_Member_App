@@ -108,7 +108,7 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
     @ViewBuilder
     private var activeDispatchSection: some View {
         if let primaryActiveDispatch {
-            sectionTitle("Current Dispatch", systemImage: "bell.and.waves.left.and.right.fill")
+            sectionTitle("Current Dispatch", systemImage: "firetruck.fill")
 
             DashboardDispatchPreviewCard(
                 dispatch: makeDispatchPayload(from: primaryActiveDispatch),
@@ -118,7 +118,7 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
             }
 
             if !secondaryActiveDispatches.isEmpty {
-                sectionTitle("Additional Active Dispatches", systemImage: "bell.and.waves.left.and.right.fill")
+                sectionTitle("Additional Active Dispatches", systemImage: "firetruck.fill")
 
                 ActiveDispatchStackView(dispatches: secondaryActiveDispatches) { activeDispatch in
                     onOpenDispatch(makeDispatchPayload(from: activeDispatch))

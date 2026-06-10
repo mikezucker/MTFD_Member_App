@@ -2,6 +2,34 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
+
+private func constrainedIncidentAddress(_ address: String) -> String {
+    let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+    let lower = trimmed.lowercased()
+
+    if lower.contains("morris township") ||
+        lower.contains("morristown") ||
+        lower.contains("morris county") {
+        return trimmed
+    }
+
+    return "\(trimmed), Morristown, NJ"
+}
+
+private func isLikelyMorrisArea(_ coordinate: CLLocationCoordinate2D) -> Bool {
+    coordinate.latitude >= 40.70 &&
+    coordinate.latitude <= 40.95 &&
+    coordinate.longitude >= -74.75 &&
+    coordinate.longitude <= -74.30
+}
+
+private func morrisSearchRegion() -> MKCoordinateRegion {
+    MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
+        span: MKCoordinateSpan(latitudeDelta: 0.25, longitudeDelta: 0.35)
+    )
+}
+
 struct DispatchDetailView: View {
     let dispatch: DispatchNotificationPayload
 
@@ -102,7 +130,7 @@ struct DispatchDetailView: View {
     private var headerCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                Image(systemName: isCritical ? "exclamationmark.triangle.fill" : "bell.and.waves.left.and.right.fill")
+                AppIcon(systemImage: isCritical ? "exclamationmark.triangle.fill" : "bell.and.waves.left.and.right.fill")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(isCritical ? .red : AppTheme.gold)
 
@@ -286,7 +314,7 @@ struct DispatchDetailView: View {
 
     private func sectionTitle(_ title: String, icon: String) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: icon)
+            AppIcon(systemImage: icon)
                 .foregroundStyle(AppTheme.gold)
 
             Text(title)
@@ -335,54 +363,43 @@ struct DispatchDetailView: View {
     private func openMaps() {
         if let latitude = liveDispatch?.latitude,
            let longitude = liveDispatch?.longitude {
-            let location = CLLocation(
-                latitude: latitude,
-                longitude: longitude
-            )
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
 
-            let placemark = MKPlacemark(coordinate: location.coordinate)
-            let item = MKMapItem(placemark: placemark)
+            if isLikelyMorrisArea(coordinate) {
+                let placemark = MKPlacemark(coordinate: coordinate)
+                let item = MKMapItem(placemark: placemark)
 
-            item.name = address
+                item.name = address
 
-            item.openInMaps(launchOptions: [
-                MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-            ])
+                item.openInMaps(launchOptions: [
+                    MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+                ])
 
-            return
+                return
+            } else {
+                print("❌ Rejecting out-of-area dispatch coordinates:", latitude, longitude)
+            }
         }
 
         Task {
             do {
                 let request = MKLocalSearch.Request()
 
-                let city = liveDispatch?.city?.trimmingCharacters(in: .whitespacesAndNewlines)
-                let state = liveDispatch?.state?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                let searchAddress: String
-                if let city, !city.isEmpty {
-                    searchAddress = [
-                        address,
-                        city,
-                        state?.isEmpty == false ? state : "NJ"
-                    ]
-                    .compactMap { $0 }
-                    .joined(separator: ", ")
-                } else {
-                    searchAddress = "\(address), Morris Township, NJ"
-                }
-
+                let searchAddress = constrainedIncidentAddress(address)
                 request.naturalLanguageQuery = searchAddress
-                request.region = MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
-                    span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
-                )
+                request.region = morrisSearchRegion()
 
                 let search = MKLocalSearch(request: request)
                 let response = try await search.start()
 
                 guard let item = response.mapItems.first else {
                     print("❌ No map item found")
+                    return
+                }
+
+                let coordinate = item.placemark.coordinate
+                guard isLikelyMorrisArea(coordinate) else {
+                    print("❌ Rejecting out-of-area dispatch map coordinate:", coordinate.latitude, coordinate.longitude)
                     return
                 }
 
@@ -485,9 +502,12 @@ private struct DispatchDetailLookAroundPreview: View {
                 return
             }
 
-            let placemarks = try await CLGeocoder().geocodeAddressString(trimmedAddress)
+            let lookupAddress = constrainedIncidentAddress(trimmedAddress)
+            print("🗺️ LookAround lookup:", lookupAddress)
+            let placemarks = try await CLGeocoder().geocodeAddressString(lookupAddress)
 
-            guard let coordinate = placemarks.first?.location?.coordinate else {
+            guard let coordinate = placemarks.first?.location?.coordinate,
+                  isLikelyMorrisArea(coordinate) else {
                 await MainActor.run {
                     scene = nil
                     isLoading = false
@@ -514,35 +534,21 @@ private struct DispatchDetailLookAroundPreview: View {
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmed.isEmpty else {
+            return "Unknown Location"
+        }
+
+        let lowerAddress = trimmed.lowercased()
+
+        if lowerAddress.contains("morristown") ||
+            lowerAddress.contains("morris township") ||
+            lowerAddress.contains("morris county") {
             return trimmed
         }
 
-        let lowercased = trimmed.lowercased()
-
-        if lowercased.contains(" nj") ||
-            lowercased.contains(",nj") ||
-            lowercased.contains("new jersey") ||
-            lowercased.contains("morristown") ||
-            lowercased.contains("morris township") ||
-            lowercased.contains("morris twp") {
-            return trimmed
-        }
-
-        let cleanCity = city?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanState = state?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if let cleanCity, !cleanCity.isEmpty {
-            return [
-                trimmed,
-                cleanCity,
-                cleanState?.isEmpty == false ? cleanState : "NJ"
-            ]
-            .compactMap { $0 }
-            .joined(separator: ", ")
-        }
-
-        return "\(trimmed), Morris Township, NJ"
+        // Do not trust dispatch city for preview fallback. Bad geocodes have shown Allentown.
+        return "\(trimmed), Morristown, NJ"
     }
+
 }
 
 private struct LookAroundDetailControllerPreview: UIViewControllerRepresentable {

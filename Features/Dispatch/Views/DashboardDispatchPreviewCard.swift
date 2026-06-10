@@ -2,6 +2,34 @@ import SwiftUI
 import MapKit
 import UIKit
 
+
+private func constrainedIncidentAddress(_ address: String) -> String {
+    let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+    let lower = trimmed.lowercased()
+
+    if lower.contains("morris township") ||
+        lower.contains("morristown") ||
+        lower.contains("morris county") {
+        return trimmed
+    }
+
+    return "\(trimmed), Morristown, NJ"
+}
+
+private func isLikelyMorrisArea(_ coordinate: CLLocationCoordinate2D) -> Bool {
+    coordinate.latitude >= 40.70 &&
+    coordinate.latitude <= 40.95 &&
+    coordinate.longitude >= -74.75 &&
+    coordinate.longitude <= -74.30
+}
+
+private func morrisSearchRegion() -> MKCoordinateRegion {
+    MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
+        span: MKCoordinateSpan(latitudeDelta: 0.25, longitudeDelta: 0.35)
+    )
+}
+
 struct DashboardDispatchPreviewCard: View {
     let dispatch: DispatchNotificationPayload
     let isHighlighted: Bool
@@ -19,7 +47,7 @@ struct DashboardDispatchPreviewCard: View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "bell.and.waves.left.and.right.fill")
+                    AppIcon(.dispatch)
                         .font(.system(size: 23, weight: .bold))
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(.red, .orange)
@@ -117,14 +145,9 @@ struct DispatchMapPreview: View {
 
         do {
             let request = MKLocalSearch.Request()
-            let searchAddress = address.localizedCaseInsensitiveContains("NJ")
-                ? address
-                : "\(address), Morristown, NJ"
+            let searchAddress = constrainedIncidentAddress(address)
             request.naturalLanguageQuery = searchAddress
-            request.region = MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
-                span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
-            )
+            request.region = morrisSearchRegion()
 
             let search = MKLocalSearch(request: request)
             let response = try await search.start()
@@ -134,6 +157,11 @@ struct DispatchMapPreview: View {
             }
 
             let newCoordinate = item.placemark.coordinate
+
+            guard isLikelyMorrisArea(newCoordinate) else {
+                print("❌ Rejecting out-of-area dispatch map coordinate:", newCoordinate.latitude, newCoordinate.longitude)
+                return
+            }
 
             await MainActor.run {
                 coordinate = newCoordinate
@@ -221,9 +249,12 @@ private struct DispatchLookAroundCardPreview: View {
         }
 
         do {
-            let placemarks = try await CLGeocoder().geocodeAddressString(trimmedAddress)
+            let lookupAddress = constrainedIncidentAddress(trimmedAddress)
+            print("🗺️ LookAround lookup:", lookupAddress)
+            let placemarks = try await CLGeocoder().geocodeAddressString(lookupAddress)
 
-            guard let coordinate = placemarks.first?.location?.coordinate else {
+            guard let coordinate = placemarks.first?.location?.coordinate,
+                  isLikelyMorrisArea(coordinate) else {
                 await MainActor.run {
                     scene = nil
                     isLoading = false
@@ -250,22 +281,20 @@ private struct DispatchLookAroundCardPreview: View {
         let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmed.isEmpty else {
+            return "Unknown Location"
+        }
+
+        let lowerAddress = trimmed.lowercased()
+
+        if lowerAddress.contains("morristown") ||
+            lowerAddress.contains("morris township") ||
+            lowerAddress.contains("morris county") {
             return trimmed
         }
 
-        let lowercased = trimmed.lowercased()
-
-        if lowercased.contains(" nj") ||
-            lowercased.contains(",nj") ||
-            lowercased.contains("new jersey") ||
-            lowercased.contains("morristown") ||
-            lowercased.contains("morris township") ||
-            lowercased.contains("morris twp") {
-            return trimmed
-        }
-
-        return "\(trimmed), Morris Township, NJ"
+        return "\(trimmed), Morristown, NJ"
     }
+
 }
 
 private struct LookAroundCardControllerPreview: UIViewControllerRepresentable {

@@ -1,13 +1,47 @@
 import SwiftUI
 import UIKit
 
-enum DashboardEmoji {
-    static let dispatch = "🚨"
-    static let messages = "📨"
+import SwiftUI
+
+enum AppIconKey: String {
+    case dispatch
+    case messages
+    case training
+    case schedule
+    case staffing
+    case apparatus
+    case workOrders
+    case documents
+    case fire
+    case ems
+    case department
+    case warning
+    case unread
+    case progress
+    case inbox
+    case profile
+    case settings
+    case uniform
+    case announcement
+    case location
+    case station
+    case officer
+    case chief
+    case volunteer
+    case career
+    case calls
+    case stats
+    case unknown
+}
+
+enum AppIconCatalog {
+    static let dispatch = "🚒"
+    static let messages = "📬"
     static let training = "🎓"
-    static let schedule = "🗓️"
+    static let schedule = "📅"
     static let staffing = "👥"
     static let apparatus = "🛠️"
+    static let workOrders = "🛠️"
     static let documents = "📄"
     static let fire = "🔥"
     static let ems = "🚑"
@@ -16,10 +50,108 @@ enum DashboardEmoji {
     static let unread = "🔔"
     static let progress = "📈"
     static let inbox = "📥"
-    static let announcements = "📣"
-    static let member = "👤"
+    static let profile = "👤"
     static let settings = "⚙️"
-    static let shield = "🛡️"
+    static let uniform = "👕"
+    static let announcement = "📣"
+    static let location = "📍"
+    static let station = "🏠"
+    static let officer = "🧑‍🚒"
+    static let chief = "🧑‍🚒"
+    static let volunteer = "🙋"
+    static let career = "🧑‍🚒"
+    static let calls = "📟"
+    static let stats = "📊"
+    static let unknown = ""
+
+    static func emoji(for key: AppIconKey) -> String {
+        switch key {
+        case .dispatch: return "🚒"
+        case .messages: return "📬"
+        case .training: return "🎓"
+        case .schedule: return "📅"
+        case .staffing: return "👥"
+        case .apparatus: return "🛠️"
+        case .workOrders: return "🛠️"
+        case .documents: return "📄"
+        case .fire: return "🔥"
+        case .ems: return "🚑"
+        case .department: return "🏢"
+        case .warning: return "⚠️"
+        case .unread: return "🔔"
+        case .progress: return "📈"
+        case .inbox: return "📥"
+        case .profile: return "👤"
+        case .settings: return "⚙️"
+        case .uniform: return "👕"
+        case .announcement: return "📣"
+        case .location: return "📍"
+        case .station: return "🏠"
+        case .officer: return "🧑‍🚒"
+        case .chief: return "🧑‍🚒"
+        case .volunteer: return "🙋"
+        case .career: return "🧑‍🚒"
+        case .calls: return "📟"
+        case .stats: return "📊"
+        case .unknown: return ""
+        }
+    }
+
+    static func key(forSystemImage systemImage: String) -> AppIconKey {
+        switch systemImage {
+        case "bell.and.waves.left.and.right.fill", "firetruck.fill": return .dispatch
+        case "flame.fill": return .fire
+        case "cross.case.fill", "heart.text.square.fill": return .ems
+        case "envelope.badge.fill", "envelope.fill", "message.fill", "bubble.left.and.bubble.right.fill": return .messages
+        case "megaphone.fill", "megaphone": return .announcement
+        case "checkmark.seal.fill", "graduationcap.fill", "checkmark.circle.fill", "play.circle.fill": return .training
+        case "calendar", "calendar.badge.clock", "clock.fill": return .schedule
+        case "person.2.fill", "person.3.fill": return .staffing
+        case "wrench.and.screwdriver.fill", "gearshape.fill": return .workOrders
+        case "checklist.checked", "book.closed.fill", "paperplane.fill", "plus.rectangle.on.folder.fill": return .training
+        case "clock.badge.checkmark.fill", "circle.dashed": return .training
+        case "text.bubble.fill", "bell.fill": return .messages
+        case "tshirt.fill": return .uniform
+        case "person.badge.shield.checkmark.fill", "person.crop.circle.badge.checkmark": return .officer
+        case "car.fill": return .dispatch
+        case "building.2.crop.circle.fill": return .department
+        case "doc.text.fill", "folder.fill", "doc.fill": return .documents
+        case "building.2.fill", "building.columns.fill": return .department
+        case "house.and.flag.fill": return .station
+        case "exclamationmark.triangle.fill": return .warning
+        case "tray.fill", "tray": return .inbox
+        case "chart.line.uptrend.xyaxis", "chart.bar.fill": return .progress
+        case "person.crop.circle.fill", "person.fill": return .profile
+        case "gearshape", "slider.horizontal.3": return .settings
+        case "mappin.and.ellipse", "location.fill": return .location
+        default: return .unknown
+        }
+    }
+}
+
+struct AppIcon: View {
+    let key: AppIconKey
+    var size: CGFloat = 30
+    var frameSize: CGFloat? = nil
+
+    init(_ key: AppIconKey, size: CGFloat = 30, frameSize: CGFloat? = nil) {
+        self.key = key
+        self.size = size
+        self.frameSize = frameSize
+    }
+
+    init(systemImage: String, size: CGFloat = 30, frameSize: CGFloat? = nil) {
+        self.key = AppIconCatalog.key(forSystemImage: systemImage)
+        self.size = size
+        self.frameSize = frameSize
+    }
+
+    var body: some View {
+        Text(AppIconCatalog.emoji(for: key))
+            .font(.system(size: size))
+            .frame(width: frameSize ?? size + 8, height: frameSize ?? size + 8)
+            .accessibilityLabel(Text(key.rawValue))
+    }
 }
 
 
@@ -220,7 +352,7 @@ private struct GlobalDispatchBanner: View {
                         .fill(Color.red.opacity(0.16))
                         .frame(width: 44, height: 44)
 
-                    Image(systemName: "bell.and.waves.left.and.right.fill")
+                    AppIcon(.dispatch)
                         .font(.system(size: 21, weight: .bold))
                         .foregroundStyle(.red)
                 }
@@ -290,35 +422,35 @@ private struct ChiefCommandView: View {
                 CommandTileData(
                     title: "Department Schedule",
                     subtitle: "View department events, signups, training-linked items, and upcoming operational dates.",
-                    emoji: DashboardEmoji.schedule
+                    emoji: AppIconCatalog.schedule
                 ),
                 CommandTileData(
                     title: "Staffing",
                     subtitle: "Review today’s staffing, vacancies, relief driver coverage, and department schedule status.",
-                    emoji: DashboardEmoji.staffing,
+                    emoji: AppIconCatalog.staffing,
                     destination: .staffing
                 ),
                 CommandTileData(
                     title: "Training",
                     subtitle: "Track assigned training, overdue members, JPR progress, and evaluator sign-offs.",
-                    emoji: DashboardEmoji.training,
+                    emoji: AppIconCatalog.training,
                     destination: .training
                 ),
                 CommandTileData(
                     title: "Messages",
                     subtitle: "Prepare department-wide messages, announcements, and operational updates.",
-                    emoji: DashboardEmoji.messages,
+                    emoji: AppIconCatalog.messages,
                     destination: .messages
                 ),
                 CommandTileData(
                     title: "Documents / SOPs",
                     subtitle: "Review SOP acknowledgements, missing signatures, and document completion status.",
-                    emoji: DashboardEmoji.documents
+                    emoji: AppIconCatalog.documents
                 ),
                 CommandTileData(
                     title: "Apparatus",
                     subtitle: "Review apparatus work orders, unit readiness, and future GPS location tools.",
-                    emoji: DashboardEmoji.apparatus
+                    emoji: AppIconCatalog.apparatus
                 )
             ]
         )
@@ -335,35 +467,35 @@ private struct LieutenantCommandView: View {
                 CommandTileData(
                     title: "Station Schedule",
                     subtitle: "View station events, company assignments, training-linked items, and upcoming operational dates.",
-                    emoji: DashboardEmoji.schedule
+                    emoji: AppIconCatalog.schedule
                 ),
                 CommandTileData(
                     title: "Staffing",
                     subtitle: "Review station/company schedule, vacancies, assigned members, and relief driver coverage.",
-                    emoji: DashboardEmoji.staffing,
+                    emoji: AppIconCatalog.staffing,
                     destination: .staffing
                 ),
                 CommandTileData(
                     title: "Training",
                     subtitle: "Track assigned member training, JPR completion, skill checkoffs, and sign-offs.",
-                    emoji: DashboardEmoji.training,
+                    emoji: AppIconCatalog.training,
                     destination: .training
                 ),
                 CommandTileData(
                     title: "Messages",
                     subtitle: "Prepare station or company-specific messages and updates.",
-                    emoji: DashboardEmoji.messages,
+                    emoji: AppIconCatalog.messages,
                     destination: .messages
                 ),
                 CommandTileData(
                     title: "Documents / SOPs",
                     subtitle: "Review SOPs, station documents, acknowledgements, and required signatures.",
-                    emoji: DashboardEmoji.documents
+                    emoji: AppIconCatalog.documents
                 ),
                 CommandTileData(
                     title: "Members",
                     subtitle: "View assigned member status, profiles, roles, and readiness information.",
-                    emoji: DashboardEmoji.staffing
+                    emoji: AppIconCatalog.staffing
                 )
             ]
         )
@@ -559,7 +691,7 @@ private struct CommandWorkspaceView: View {
 
                 commandInlineTotal(
                     value: commandCallTotalValue(.fire),
-                    label: "\(DashboardEmoji.fire) Fire"
+                    label: "\(AppIconCatalog.fire) Fire"
                 )
 
                 Divider()
@@ -568,7 +700,7 @@ private struct CommandWorkspaceView: View {
 
                 commandInlineTotal(
                     value: commandCallTotalValue(.ems),
-                    label: "\(DashboardEmoji.ems) EMS"
+                    label: "\(AppIconCatalog.ems) EMS"
                 )
             }
             .frame(maxWidth: .infinity)
@@ -640,13 +772,13 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "Loading apparatus issues",
                     message: "Checking open apparatus work orders...",
-                    emoji: DashboardEmoji.apparatus
+                    emoji: AppIconCatalog.apparatus
                 )
             } else if dashboardViewModel.state.apparatusWorkOrders.isEmpty {
                 commandInfoCard(
                     title: "No open work orders",
                     message: dashboardViewModel.state.apparatusWorkOrdersMessage ?? "No open apparatus work orders.",
-                    emoji: DashboardEmoji.apparatus
+                    emoji: AppIconCatalog.apparatus
                 )
             } else {
                 DashboardApparatusWorkOrdersCard(
@@ -804,7 +936,7 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "No messages",
                     message: messageViewModel.errorMessage ?? "Department, station, and training messages will appear here.",
-                    emoji: DashboardEmoji.messages
+                    emoji: AppIconCatalog.messages
                 )
             } else {
                 VStack(spacing: 10) {
@@ -830,7 +962,7 @@ private struct CommandWorkspaceView: View {
 
     private func commandMessageRow(_ message: MobileMessage) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: messageIcon(for: message))
+            AppIcon(systemImage: messageIcon(for: message))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(message.isRead ? AppTheme.gold : .red)
                 .frame(width: 30, height: 30)
@@ -936,7 +1068,7 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "No active assigned training",
                     message: "Assigned training, JPR readiness, and evaluator sign-offs will appear here as they become available.",
-                    emoji: DashboardEmoji.training
+                    emoji: AppIconCatalog.training
                 )
             } else {
                 VStack(spacing: 10) {
@@ -957,7 +1089,7 @@ private struct CommandWorkspaceView: View {
 
     private func commandTrainingRow(_ item: DashboardTrainingPreviewItem) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: trainingStatusIcon(for: item))
+            AppIcon(systemImage: trainingStatusIcon(for: item))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(trainingStatusColor(for: item))
                 .frame(width: 28, height: 28)
@@ -1085,20 +1217,20 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "No staffing entries",
                     message: scheduleViewModel.errorMessage ?? "No schedule entries were returned for today.",
-                    emoji: DashboardEmoji.schedule
+                    emoji: AppIconCatalog.schedule
                 )
             } else {
                 HStack(spacing: 10) {
                     commandMetricCard(
                         title: "Assignments",
                         value: "\(scheduleFilledCount)",
-                        emoji: DashboardEmoji.staffing
+                        emoji: AppIconCatalog.staffing
                     )
 
                     commandMetricCard(
                         title: "Vacancies",
                         value: "\(scheduleVacancyCount)",
-                        emoji: DashboardEmoji.warning
+                        emoji: AppIconCatalog.warning
                     )
                 }
 
@@ -1160,7 +1292,7 @@ private struct CommandWorkspaceView: View {
             } else {
                 ForEach(Array(entry.staffing.prefix(3).enumerated()), id: \.offset) { _, staff in
                     HStack(spacing: 8) {
-                        Image(systemName: staff.lowercased().contains("vacant") ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
+                        AppIcon(systemImage: staff.lowercased().contains("vacant") ? "exclamationmark.triangle.fill" : "person.crop.circle.fill")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(staff.lowercased().contains("vacant") ? .orange : AppTheme.gold)
                             .frame(width: 16)
@@ -1256,7 +1388,7 @@ private struct CommandWorkspaceView: View {
                 commandInfoCard(
                     title: "No active dispatches",
                     message: "Active department dispatches will appear here when available.",
-                    emoji: DashboardEmoji.dispatch
+                    emoji: AppIconCatalog.dispatch
                 )
             } else if let primaryDispatch = dashboardViewModel.activeDispatches.first {
                 DashboardDispatchPreviewCard(
@@ -1560,13 +1692,13 @@ private struct CommandStaffingDetailView: View {
                             metricCard(
                                 title: "Filled",
                                 value: "\(filledCount)",
-                                emoji: DashboardEmoji.staffing
+                                emoji: AppIconCatalog.staffing
                             )
 
                             metricCard(
                                 title: "Vacant",
                                 value: "\(vacancyCount)",
-                                emoji: DashboardEmoji.warning,
+                                emoji: AppIconCatalog.warning,
                                 isWarning: vacancyCount > 0
                             )
                         }
@@ -1611,7 +1743,7 @@ private struct CommandStaffingDetailView: View {
 
     private var emptyCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "calendar.badge.exclamationmark")
+            AppIcon(.schedule)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.orange)
 
@@ -1696,7 +1828,7 @@ private struct CommandStaffingDetailView: View {
                         HStack(alignment: .top, spacing: 10) {
                             let isVacant = staff.lowercased().contains("vacant")
 
-                            Image(systemName: isVacant ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
+                            AppIcon(systemImage: isVacant ? "exclamationmark.triangle.fill" : "person.crop.circle.fill")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(isVacant ? .orange : AppTheme.gold)
                                 .frame(width: 22)
@@ -1754,13 +1886,13 @@ private struct CommandTrainingDetailView: View {
                             metricCard(
                                 title: "Assigned",
                                 value: "\(items.count)",
-                                emoji: DashboardEmoji.training
+                                emoji: AppIconCatalog.training
                             )
 
                             metricCard(
                                 title: "Overdue",
                                 value: "\(overdueCount)",
-                                emoji: DashboardEmoji.warning,
+                                emoji: AppIconCatalog.warning,
                                 isWarning: overdueCount > 0
                             )
                         }
@@ -1769,13 +1901,13 @@ private struct CommandTrainingDetailView: View {
                             metricCard(
                                 title: "Completed",
                                 value: "\(completedCount)",
-                                emoji: DashboardEmoji.training
+                                emoji: AppIconCatalog.training
                             )
 
                             metricCard(
                                 title: "Avg. progress",
                                 value: "\(averageProgress)%",
-                                emoji: DashboardEmoji.progress
+                                emoji: AppIconCatalog.progress
                             )
                         }
 
@@ -1821,7 +1953,7 @@ private struct CommandTrainingDetailView: View {
 
     private var jprReadinessCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "signature")
+            AppIcon(.documents)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppTheme.gold)
 
@@ -1849,7 +1981,7 @@ private struct CommandTrainingDetailView: View {
 
     private var emptyCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "checkmark.seal.fill")
+            AppIcon(.training)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppTheme.gold)
 
@@ -1901,7 +2033,7 @@ private struct CommandTrainingDetailView: View {
     private func trainingDetailCard(_ item: DashboardTrainingPreviewItem) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: trainingStatusIcon(for: item))
+                AppIcon(systemImage: trainingStatusIcon(for: item))
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(trainingStatusColor(for: item))
                     .frame(width: 30, height: 30)
@@ -2040,13 +2172,13 @@ private struct CommandMessagesDetailView: View {
                             metricCard(
                                 title: "Messages",
                                 value: "\(displayedMessages.count)",
-                                emoji: DashboardEmoji.messages
+                                emoji: AppIconCatalog.messages
                             )
 
                             metricCard(
                                 title: "Unread",
                                 value: "\(unreadVisibleCount)",
-                                emoji: DashboardEmoji.unread,
+                                emoji: AppIconCatalog.unread,
                                 isWarning: unreadVisibleCount > 0
                             )
                         }
@@ -2055,13 +2187,13 @@ private struct CommandMessagesDetailView: View {
                             metricCard(
                                 title: "Read",
                                 value: "\(readCount)",
-                                emoji: DashboardEmoji.training
+                                emoji: AppIconCatalog.training
                             )
 
                             metricCard(
                                 title: "App unread",
                                 value: "\(unreadCount)",
-                                emoji: DashboardEmoji.inbox,
+                                emoji: AppIconCatalog.inbox,
                                 isWarning: unreadCount > 0
                             )
                         }
@@ -2130,7 +2262,7 @@ private struct CommandMessagesDetailView: View {
 
     private var futureActionsCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "megaphone.fill")
+            AppIcon(.announcement)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppTheme.gold)
 
@@ -2158,7 +2290,7 @@ private struct CommandMessagesDetailView: View {
 
     private var emptyCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "tray")
+            AppIcon(.inbox)
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(AppTheme.gold)
 
@@ -2209,7 +2341,7 @@ private struct CommandMessagesDetailView: View {
 
     private func messageDetailCard(_ message: MobileMessage) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: messageIcon(for: message))
+            AppIcon(systemImage: messageIcon(for: message))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(message.isRead ? AppTheme.gold : .red)
                 .frame(width: 30, height: 30)
