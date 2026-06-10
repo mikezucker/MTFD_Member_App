@@ -149,8 +149,6 @@ final class DashboardViewModel: ObservableObject {
 
             activeDispatches = dashboard.activeDispatches ?? []
 
-            print("🧑‍🚒 volunteerContext:", dashboard.volunteerContext as Any)
-            print("🧑‍🚒 volunteer officer:", dashboard.volunteerContext?.officer as Any)
 
             let departmentYtd: Int? = nil
             let stationYtd: Int? = nil
