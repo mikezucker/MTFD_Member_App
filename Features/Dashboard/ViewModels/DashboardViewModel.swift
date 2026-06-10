@@ -7,6 +7,7 @@ final class DashboardViewModel: ObservableObject {
     @Published var activeDispatches: [APIClient.ActiveDispatch] = []
 
     private var hasLoaded = false
+    private var cachedVolunteerContext: APIClient.VolunteerContext?
     private var isLoadingDashboard = false
     private var lastLoadedAt: Date?
     private let minimumRefreshInterval: TimeInterval = 60
@@ -107,7 +108,7 @@ final class DashboardViewModel: ObservableObject {
             dashboardDepartment: state.dashboardDepartment,
             dashboardStation: state.dashboardStation,
             dashboardStations: state.dashboardStations,
-            volunteerContext: state.volunteerContext,
+            volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
             lastUpdated: state.lastUpdated,
             recentDepartmentCalls: state.recentDepartmentCalls,
             apparatusWorkOrders: state.apparatusWorkOrders,
@@ -149,6 +150,11 @@ final class DashboardViewModel: ObservableObject {
 
             activeDispatches = dashboard.activeDispatches ?? []
 
+            let resolvedVolunteerContext = mergedVolunteerContext(
+                incoming: dashboard.volunteerContext,
+                existing: cachedVolunteerContext ?? state.volunteerContext
+            )
+            cachedVolunteerContext = resolvedVolunteerContext
 
             let departmentYtd: Int? = nil
             let stationYtd: Int? = nil
@@ -169,7 +175,7 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: nil,
                 dashboardStation: nil,
                 dashboardStations: nil,
-                volunteerContext: dashboard.volunteerContext,
+                volunteerContext: resolvedVolunteerContext,
                 lastUpdated: nil,
                 recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
                 apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
@@ -212,8 +218,8 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: nil,
                 dashboardStation: nil,
                 dashboardStations: nil,
-                volunteerContext: nil,
-                lastUpdated: nil,
+                volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
+                lastUpdated: state.lastUpdated,
                 recentDepartmentCalls: [],
                 apparatusWorkOrders: [],
                 apparatusWorkOrdersMessage: nil,
@@ -226,6 +232,28 @@ final class DashboardViewModel: ObservableObject {
 
             print("Dashboard load failed: \(error.localizedDescription)")
         }
+    }
+
+
+    private func mergedVolunteerContext(
+        incoming: APIClient.VolunteerContext?,
+        existing: APIClient.VolunteerContext?
+    ) -> APIClient.VolunteerContext? {
+        guard let incoming else {
+            return existing
+        }
+
+        guard incoming.officer == nil, let existingOfficer = existing?.officer else {
+            return incoming
+        }
+
+        return APIClient.VolunteerContext(
+            company: incoming.company ?? existing?.company,
+            station: incoming.station ?? existing?.station,
+            officer: existingOfficer,
+            apparatus: incoming.apparatus ?? existing?.apparatus,
+            stationApparatus: incoming.stationApparatus ?? existing?.stationApparatus
+        )
     }
 
     private func loadUnreadNonDispatchMessageCount() async {
@@ -254,7 +282,7 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: state.dashboardDepartment,
                 dashboardStation: state.dashboardStation,
                 dashboardStations: state.dashboardStations,
-                volunteerContext: state.volunteerContext,
+                volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
                 lastUpdated: state.lastUpdated,
                 recentDepartmentCalls: state.recentDepartmentCalls,
                 apparatusWorkOrders: state.apparatusWorkOrders,
@@ -324,6 +352,7 @@ final class DashboardViewModel: ObservableObject {
                 dashboardDepartment: statsResponse.department,
                 dashboardStation: statsResponse.station,
                 dashboardStations: statsResponse.stations,
+                volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
                 lastUpdated: statsResponse.lastUpdated,
                 recentDepartmentCalls: state.recentDepartmentCalls,
                 apparatusWorkOrders: state.apparatusWorkOrders,
