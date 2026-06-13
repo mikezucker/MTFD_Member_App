@@ -109,6 +109,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 let resolvedActiveDispatches = response.activeDispatches
 
                 await MainActor.run {
+                    let hadKnownDispatches = !self.knownActiveDispatchIds.isEmpty
+
                     let newDispatches = resolvedActiveDispatches.filter {
                         !self.knownActiveDispatchIds.contains($0.id)
                     }
@@ -117,7 +119,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     self.recentDispatches = Array(response.historicalDispatches.prefix(12))
                     self.knownActiveDispatchIds = Set(resolvedActiveDispatches.map(\.id))
 
-                    if let newest = newDispatches.first, !self.knownActiveDispatchIds.isEmpty {
+                    if let newest = newDispatches.first, hadKnownDispatches {
                         self.presentNewDispatchAlert(newest)
                     }
                     self.isLoading = false
