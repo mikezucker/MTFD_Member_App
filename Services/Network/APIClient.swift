@@ -800,6 +800,7 @@ extension APIClient {
         let station: String?
         let officer: VolunteerOfficer?
         let apparatus: VolunteerApparatus?
+        let stationApparatus: [VolunteerApparatus]?
     }
 
     struct VolunteerOfficer: Decodable {
