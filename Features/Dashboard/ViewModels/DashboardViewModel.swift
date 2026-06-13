@@ -40,26 +40,10 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    func addActiveDispatch(from dispatch: DispatchNotificationPayload) {
-        let activeDispatch = APIClient.ActiveDispatch(
-            id: dispatch.id,
-            callType: dispatch.callType ?? dispatch.title,
-            address: dispatch.address,
-            address2: nil,
-            placeName: nil,
-            city: nil,
-            state: nil,
-            latitude: nil,
-            longitude: nil,
-            message: dispatch.address,
-            units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units),
-            dispatchedAt: Date(),
-            priority: "HIGH",
-            isWorkingFire: isLikelyWorkingFire(dispatch)
-        )
-
-        activeDispatches.removeAll { $0.id == activeDispatch.id }
-        activeDispatches.insert(activeDispatch, at: 0)
+    func refreshAfterDispatchNotification(role: UserRole) {
+        Task {
+            await loadDashboard(role: role, force: true)
+        }
     }
 
     private func timedDashboardRequest<T>(_ label: String, operation: () async throws -> T) async throws -> T {
@@ -148,7 +132,7 @@ final class DashboardViewModel: ObservableObject {
 
             let departmentScheduleEntries = await departmentScheduleEntriesResponse
 
-            activeDispatches = dispatchHistory.activeDispatches
+            activeDispatches = dashboard.activeDispatches ?? dispatchHistory.activeDispatches
 
             let resolvedVolunteerContext = mergedVolunteerContext(
                 incoming: dashboard.volunteerContext,
@@ -372,22 +356,7 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    private func isLikelyWorkingFire(_ dispatch: DispatchNotificationPayload) -> Bool {
-        let combinedText = [
-            dispatch.title,
-            dispatch.callType,
-            dispatch.body
-        ]
-        .compactMap { $0 }
-        .joined(separator: " ")
-        .lowercased()
 
-        return combinedText.contains("working fire") ||
-            combinedText.contains("structure fire") ||
-            combinedText.contains("confirmed fire") ||
-            combinedText.contains("2nd alarm") ||
-            combinedText.contains("second alarm")
-    }
 
     private func mapBulletins(from updates: [APIClient.DashboardUpdate]) -> [DashboardBulletin] {
         updates.map {

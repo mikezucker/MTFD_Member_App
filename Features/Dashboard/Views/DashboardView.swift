@@ -56,7 +56,7 @@ struct DashboardView: View {
                         onTapAlert: handleHeaderAlertTap
                     )
 
-                    Group {
+                    VStack(spacing: 0) {
 
                         switch dashboardRole {
 
@@ -137,11 +137,17 @@ struct DashboardView: View {
                         case .memberVolunteer:
                             VolunteerMemberDashboardView(
                                 volunteerContext: viewModel.state.volunteerContext,
+                                stationDisplayName: stationDisplayName,
                                 stationStats: viewModel.state.dashboardStation,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 workOrdersMessage: viewModel.state.apparatusWorkOrdersMessage,
                                 assignedTrainingPreview: viewModel.state.assignedTrainingPreview,
-                                isLoading: viewModel.state.isLoading
+                                stationUpdates: viewModel.state.stationUpdates,
+                                departmentUpdates: viewModel.state.departmentUpdates,
+                                isLoading: viewModel.state.isLoading,
+                                onRefresh: {
+                                    await refreshDashboard()
+                                }
                             )
                         }
 }
@@ -191,7 +197,7 @@ struct DashboardView: View {
                 print("🔔 Dispatch RECEIVED:", dispatch.id)
 
                 latestDispatch = dispatch
-                viewModel.addActiveDispatch(from: dispatch)
+                viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
 
                 if dashboardHapticsEnabled {
                     let hapticGenerator = UINotificationFeedbackGenerator()
@@ -210,7 +216,7 @@ struct DashboardView: View {
                 print("🧭 Dashboard opening dispatch:", dispatch.id)
 
                 latestDispatch = dispatch
-                viewModel.addActiveDispatch(from: dispatch)
+                viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
 
                 selectedDispatch = dispatch
 

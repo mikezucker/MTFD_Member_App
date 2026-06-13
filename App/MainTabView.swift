@@ -604,7 +604,7 @@ private struct CommandWorkspaceView: View {
 
             print("🔔 Command dashboard dispatch received:", dispatch.id)
 
-            dashboardViewModel.addActiveDispatch(from: dispatch)
+            dashboardViewModel.refreshAfterDispatchNotification(role: mappedCommandUserRole)
             selectedDispatch = dispatch
         }
         .sheet(item: $selectedDispatch) { dispatch in
