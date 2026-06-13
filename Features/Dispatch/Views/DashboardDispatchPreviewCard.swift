@@ -49,8 +49,6 @@ struct DashboardDispatchPreviewCard: View {
                 HStack(alignment: .top, spacing: 12) {
                     AppIcon(.dispatch)
                         .font(.system(size: 23, weight: .bold))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.red, .orange)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(callType)
