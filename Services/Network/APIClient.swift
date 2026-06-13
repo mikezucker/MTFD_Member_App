@@ -1,5 +1,32 @@
 import Foundation
 
+enum DispatchUnitFilter {
+    static func visibleRespondingUnits(from units: [String]) -> [String] {
+        units.filter { unit in
+            let normalized = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            guard !normalized.isEmpty else { return false }
+
+            let blockedUnits = [
+                "hq",
+                "oem",
+                "station",
+                "station 1",
+                "station 2",
+                "station 3",
+                "station 4",
+                "station 5"
+            ]
+
+            if blockedUnits.contains(normalized) { return false }
+            if normalized.hasPrefix("station ") { return false }
+
+            return true
+        }
+    }
+}
+
+
 final class APIClient {
     static let shared = APIClient()
 

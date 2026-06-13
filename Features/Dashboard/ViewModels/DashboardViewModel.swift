@@ -52,7 +52,7 @@ final class DashboardViewModel: ObservableObject {
             latitude: nil,
             longitude: nil,
             message: dispatch.address,
-            units: dispatch.units,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units),
             dispatchedAt: Date(),
             priority: "HIGH",
             isWorkingFire: isLikelyWorkingFire(dispatch)
@@ -148,7 +148,7 @@ final class DashboardViewModel: ObservableObject {
 
             let departmentScheduleEntries = await departmentScheduleEntriesResponse
 
-            activeDispatches = dashboard.activeDispatches ?? []
+            activeDispatches = dispatchHistory.activeDispatches
 
             let resolvedVolunteerContext = mergedVolunteerContext(
                 incoming: dashboard.volunteerContext,

@@ -102,16 +102,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             guard let self else { return }
 
             do {
-                async let dashboardResponse = APIClient.shared.fetchDashboard()
                 async let dispatchHistoryResponse = APIClient.shared.fetchDispatchHistory(window: "24h")
 
-                let dashboard = try await dashboardResponse
                 let response = try await dispatchHistoryResponse
 
-                let dashboardActiveDispatches = dashboard.activeDispatches ?? []
-                let resolvedActiveDispatches = response.activeDispatches.isEmpty
-                    ? dashboardActiveDispatches
-                    : response.activeDispatches
+                let resolvedActiveDispatches = response.activeDispatches
 
                 await MainActor.run {
                     let newDispatches = resolvedActiveDispatches.filter {

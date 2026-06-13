@@ -1474,7 +1474,7 @@ private struct CommandWorkspaceView: View {
             body: activeDispatch.message ?? activeDispatch.address,
             callType: activeDispatch.callType,
             address: activeDispatch.address,
-            units: activeDispatch.units,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: activeDispatch.units),
             isWorkingFire: activeDispatch.isWorkingFire ?? false,
             activeCallCount: activeCallCount,
             stationId: nil,

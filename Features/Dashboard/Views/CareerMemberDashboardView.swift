@@ -509,7 +509,7 @@ private func selectNextTotalsWindow() {
             body: activeDispatch.address ?? activeDispatch.message ?? "Dispatch details available",
             callType: activeDispatch.callType,
             address: activeDispatch.address,
-            units: activeDispatch.units,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: activeDispatch.units),
             isWorkingFire: activeDispatch.isWorkingFire ?? false,
             activeCallCount: activeDispatches.count,
             stationId: nil,

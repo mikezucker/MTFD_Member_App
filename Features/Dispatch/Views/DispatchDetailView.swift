@@ -53,11 +53,15 @@ struct DispatchDetailView: View {
     }
 
     private var units: [String] {
+        let rawUnits: [String]
+
         if let liveUnits = liveDispatch?.units, !liveUnits.isEmpty {
-            return liveUnits
+            rawUnits = liveUnits
+        } else {
+            rawUnits = dispatch.units
         }
 
-        return dispatch.units
+        return DispatchUnitFilter.visibleRespondingUnits(from: rawUnits)
     }
 
     private var message: String? {
