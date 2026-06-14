@@ -88,10 +88,86 @@ struct DashboardView: View {
                             }
 
                         case .officerCareer:
-                            CareerOfficerDashboardView()
+                            CareerOfficerDashboardView(
+                                activeDispatches: viewModel.activeDispatches,
+                                departmentStats: viewModel.state.dashboardDepartment,
+                                stationStats: viewModel.state.dashboardStation,
+                                upcomingSchedule: viewModel.state.upcomingSchedule,
+                                workOrders: viewModel.state.apparatusWorkOrders,
+                                recentCalls: viewModel.state.recentDepartmentCalls,
+                                assignedTraining: viewModel.state.assignedTrainingPreview,
+                                pendingDocuments: viewModel.state.pendingDocumentSignatures,
+                                departmentUpdates: viewModel.state.departmentUpdates,
+                                stationUpdates: viewModel.state.stationUpdates,
+                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                onRefresh: {
+                                    await refreshDashboard()
+                                },
+                                onOpenDispatch: { dispatch in
+                                    latestDispatch = dispatch
+
+                                    selectedDispatch = dispatch
+                                },
+                                onOpenMessages: {
+                                    openMessageCenter(mode: .messagesOnly)
+                                },
+                                onOpenWorkOrders: {
+                                    showApparatusWorkOrders = true
+                                },
+                                onOpenSchedule: {
+                                    router.selectedTab = .schedule
+                                },
+                                onOpenTraining: {
+                                    handleNavigation(to: .trainingAssigned)
+                                },
+                                onOpenDocuments: {
+                                    handleNavigation(to: .documents)
+                                },
+                                onOpenPastDispatches: {
+                                    openMessageCenter(mode: .dispatchesOnly)
+                                }
+                            )
 
                         case .officerVolunteer:
-                            VolunteerOfficerDashboardView()
+                            VolunteerOfficerDashboardView(
+                                activeDispatches: viewModel.activeDispatches,
+                                departmentStats: viewModel.state.dashboardDepartment,
+                                stationStats: viewModel.state.dashboardStation,
+                                upcomingSchedule: viewModel.state.upcomingSchedule,
+                                workOrders: viewModel.state.apparatusWorkOrders,
+                                recentCalls: viewModel.state.recentDepartmentCalls,
+                                assignedTraining: viewModel.state.assignedTrainingPreview,
+                                pendingDocuments: viewModel.state.pendingDocumentSignatures,
+                                departmentUpdates: viewModel.state.departmentUpdates,
+                                stationUpdates: viewModel.state.stationUpdates,
+                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                onRefresh: {
+                                    await refreshDashboard()
+                                },
+                                onOpenDispatch: { dispatch in
+                                    latestDispatch = dispatch
+
+                                    selectedDispatch = dispatch
+                                },
+                                onOpenMessages: {
+                                    openMessageCenter(mode: .messagesOnly)
+                                },
+                                onOpenWorkOrders: {
+                                    showApparatusWorkOrders = true
+                                },
+                                onOpenSchedule: {
+                                    router.selectedTab = .schedule
+                                },
+                                onOpenTraining: {
+                                    handleNavigation(to: .trainingAssigned)
+                                },
+                                onOpenDocuments: {
+                                    handleNavigation(to: .documents)
+                                },
+                                onOpenPastDispatches: {
+                                    openMessageCenter(mode: .dispatchesOnly)
+                                }
+                            )
 
                         case .memberCareer:
                             CareerMemberDashboardView(
