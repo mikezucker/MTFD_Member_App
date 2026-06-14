@@ -326,16 +326,56 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
         }
     }
 
+    private var resolvedApparatusStation: String? {
+        let station = upcomingSchedule?.nextShift?.station?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return station?.isEmpty == false ? station : nil
+    }
+
+    private var stationScopedWorkOrders: [DashboardApparatusWorkOrder] {
+        guard let station = resolvedApparatusStation?.lowercased() else {
+            return workOrders
+        }
+
+        let stationNumber = station
+            .replacingOccurrences(of: "station", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return workOrders.filter { order in
+            let apparatus = order.apparatusName.lowercased()
+
+            return apparatus.contains(station) ||
+                (!stationNumber.isEmpty && apparatus.contains(" \(stationNumber)")) ||
+                (!stationNumber.isEmpty && apparatus.contains(stationNumber))
+        }
+    }
+
+    private var apparatusStatusSubtitle: String {
+        if let station = resolvedApparatusStation {
+            return "Current or next shift apparatus for \(station)."
+        }
+
+        return "Current or next shift apparatus."
+    }
+
     private var workOrdersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Apparatus Work Orders", systemImage: "wrench.and.screwdriver.fill")
+            sectionTitle("Apparatus Status", systemImage: "wrench.and.screwdriver.fill")
 
-            if isLoading && workOrders.isEmpty {
+            if isLoading && stationScopedWorkOrders.isEmpty {
                 loadingCard("Loading apparatus work orders...")
-            } else if workOrders.isEmpty {
+            } else if stationScopedWorkOrders.isEmpty {
                 emptyCard("No open apparatus work orders.")
             } else {
-                DashboardApparatusWorkOrdersCard(workOrders: workOrders) {
+                DashboardApparatusWorkOrdersCard(
+                    workOrders: stationScopedWorkOrders,
+                    title: "Apparatus Status",
+                    subtitle: apparatusStatusSubtitle,
+                    emptyMessage: resolvedApparatusStation == nil
+                        ? "No open apparatus issues."
+                        : "No open apparatus issues for \(resolvedApparatusStation!)."
+                ) {
                     onOpenWorkOrders()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -710,7 +710,7 @@ private func selectNextScheduleDay() {
 
     private var apparatusWorkOrdersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Apparatus Work Orders", systemImage: "wrench.and.screwdriver.fill")
+            sectionTitle("Apparatus Status", systemImage: "wrench.and.screwdriver.fill")
 
             if workOrders.isEmpty {
                 Text("No open apparatus work orders.")
@@ -726,7 +726,10 @@ private func selectNextScheduleDay() {
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             } else {
                 DashboardApparatusWorkOrdersCard(
-                    workOrders: workOrders
+                    workOrders: workOrders,
+                    title: "Apparatus Status",
+                    subtitle: "Department-wide apparatus overview.",
+                    emptyMessage: "No open apparatus issues."
                 ) {
                     onOpenWorkOrders()
                 }

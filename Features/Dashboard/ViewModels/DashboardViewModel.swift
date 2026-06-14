@@ -9,6 +9,7 @@ final class DashboardViewModel: ObservableObject {
     private var hasLoaded = false
     private var cachedVolunteerContext: APIClient.VolunteerContext?
     private var isLoadingDashboard = false
+    private var pendingForceRefresh = false
     private var lastLoadedAt: Date?
     private let minimumRefreshInterval: TimeInterval = 60
 
@@ -42,8 +43,18 @@ final class DashboardViewModel: ObservableObject {
 
     func refreshAfterDispatchNotification(role: UserRole) {
         Task {
-            await loadDashboard(role: role, force: true)
+            await refreshActiveDispatchesAfterNotification(role: role)
         }
+    }
+
+    private func refreshActiveDispatchesAfterNotification(role: UserRole) async {
+        await loadDashboard(role: role, force: true)
+
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        await loadDashboard(role: role, force: true)
+
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        await loadDashboard(role: role, force: true)
     }
 
     private func timedDashboardRequest<T>(_ label: String, operation: () async throws -> T) async throws -> T {
@@ -61,7 +72,12 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func loadDashboard(role: UserRole, force: Bool) async {
-        guard !isLoadingDashboard else { return }
+        if isLoadingDashboard {
+            if force {
+                pendingForceRefresh = true
+            }
+            return
+        }
 
         let dashboardLoadStartedAt = Date()
         print("⏱️ Dashboard load started. force=\(force), role=\(role.rawValue)")
@@ -74,6 +90,14 @@ final class DashboardViewModel: ObservableObject {
         defer {
             isLoadingDashboard = false
             print("⏱️ Dashboard load finished in \(String(format: "%.2f", Date().timeIntervalSince(dashboardLoadStartedAt)))s")
+
+            if pendingForceRefresh {
+                pendingForceRefresh = false
+
+                Task {
+                    await loadDashboard(role: role, force: true)
+                }
+            }
         }
 
         state = DashboardState(
