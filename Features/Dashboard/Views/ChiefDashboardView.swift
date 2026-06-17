@@ -76,13 +76,7 @@ struct ChiefDashboardView: View {
     }
 
     var body: some View {
-        NonBouncingVerticalScrollView(
-            showsIndicators: false,
-            onRefresh: {
-                await onRefresh()
-                await scheduleViewModel.loadOutlookDays(count: 4)
-            }
-        ) {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
 
@@ -99,6 +93,12 @@ struct ChiefDashboardView: View {
             .padding(.bottom, 120)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .refreshable {
+            await onRefresh()
+            await scheduleViewModel.loadOutlookDays(count: 4)
+        }
+        .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+        .clipped()
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task {
             if scheduleViewModel.outlookDays.isEmpty {
