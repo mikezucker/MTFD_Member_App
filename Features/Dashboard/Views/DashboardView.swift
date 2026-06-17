@@ -55,6 +55,7 @@ struct DashboardView: View {
                         isBellRinging: isDispatchBellRinging,
                         onTapAlert: handleHeaderAlertTap
                     )
+                    .zIndex(1)
 
                     VStack(spacing: 0) {
 
@@ -228,6 +229,8 @@ struct DashboardView: View {
                         }
 }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .clipped()
+                    .zIndex(0)
                 }
             }
             .navigationBarTitleDisplayMode(.inline)
