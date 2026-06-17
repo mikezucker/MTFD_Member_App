@@ -5,6 +5,7 @@
 
 import SwiftUI
 import Combine
+import WatchKit
 
 struct WatchDispatch: Identifiable {
     let id: String
@@ -368,6 +369,11 @@ private struct WatchDispatchDetailView: View {
         dispatch.isCritical ? .red : .orange
     }
 
+    private var canNavigate: Bool {
+        let address = dispatch.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !address.isEmpty && address != "Address unavailable"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
@@ -414,6 +420,15 @@ private struct WatchDispatchDetailView: View {
                     }
                 }
 
+                if canNavigate {
+                    Button {
+                        openNavigation()
+                    } label: {
+                        Label("Navigate", systemImage: "location.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+
                 VStack(alignment: .leading, spacing: 4) {
                     Label("Updated", systemImage: "clock")
                         .font(.caption.weight(.bold))
@@ -423,7 +438,7 @@ private struct WatchDispatchDetailView: View {
                         .font(.body.weight(.semibold))
                 }
 
-                Text("Open the iPhone app for map and full incident details.")
+                Text("Open the iPhone app for full incident details.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .padding(.top, 2)
@@ -432,6 +447,15 @@ private struct WatchDispatchDetailView: View {
             .padding()
         }
         .navigationTitle("Dispatch")
+    }
+
+    private func openNavigation() {
+        guard let encodedAddress = dispatch.address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "http://maps.apple.com/?daddr=\(encodedAddress)&dirflg=d") else {
+            return
+        }
+
+        WKExtension.shared().openSystemURL(url)
     }
 }
 
