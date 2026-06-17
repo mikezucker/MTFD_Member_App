@@ -438,10 +438,12 @@ private struct WatchDispatchDetailView: View {
                         .font(.body.weight(.semibold))
                 }
 
-                Text("Open the iPhone app for full incident details.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
+                if !canNavigate {
+                    Text("Navigation unavailable until a dispatch address is provided.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
