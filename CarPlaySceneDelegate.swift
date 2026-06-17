@@ -96,6 +96,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func refreshDispatches(updateVisibleScreen: Bool) {
         guard !isLoading else { return }
 
+        if APIClient.shared.authToken?.isEmpty != false,
+           let token = KeychainService.shared.loadToken(),
+           !token.isEmpty {
+            APIClient.shared.authToken = token
+        }
+
         isLoading = true
 
         Task { [weak self] in
@@ -149,6 +155,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     print("🚗 CarPlay dispatch refresh failed: \(error.localizedDescription)")
 
                     guard updateVisibleScreen else { return }
+
+                    if self.activeDispatches.isEmpty && self.recentDispatches.isEmpty {
+                        self.interfaceController?.setRootTemplate(
+                            self.makeRootTemplate(isLoading: false, errorMessage: error.localizedDescription),
+                            animated: false,
+                            completion: nil
+                        )
+                        return
+                    }
 
                     self.interfaceController?.setRootTemplate(
                         self.makeRootTemplate(isLoading: false, errorMessage: error.localizedDescription),

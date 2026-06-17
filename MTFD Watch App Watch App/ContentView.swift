@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct WatchDispatch: Identifiable {
     let id: String
@@ -15,26 +16,191 @@ struct WatchDispatch: Identifiable {
     let updatedAt: Date
 }
 
-struct ContentView: View {
-    @State private var dispatches: [WatchDispatch] = [
+private struct WatchDispatchFeedResponse: Decodable {
+    let activeDispatches: [WatchActiveDispatch]
+}
+
+private struct WatchActiveDispatch: Decodable {
+    let id: String
+    let callType: String
+    let message: String?
+    let address: String?
+    let city: String?
+    let state: String?
+    let units: [String]
+    let priority: String?
+    let isWorkingFire: Bool?
+    let dispatchedAt: Date?
+    let lastActivityAt: Date?
+}
+
+@MainActor
+private final class WatchDispatchViewModel: ObservableObject {
+    @Published var dispatches: [WatchDispatch] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+
+    private let feedURL = URL(string: "https://new-mtfd-site.vercel.app/api/shared/active-dispatches")!
+
+    func loadDispatches() async {
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            let (data, response) = try await URLSession.shared.data(from: feedURL)
+
+            guard let http = response as? HTTPURLResponse else {
+                throw URLError(.badServerResponse)
+            }
+
+            guard 200...299 ~= http.statusCode else {
+                throw URLError(.badServerResponse)
+            }
+
+            let decoded = try Self.decoder.decode(WatchDispatchFeedResponse.self, from: data)
+            dispatches = decoded.activeDispatches.map(Self.mapDispatch)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isLoading = false
+    }
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+
+            let withMilliseconds = ISO8601DateFormatter()
+            withMilliseconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+            if let date = withMilliseconds.date(from: value) {
+                return date
+            }
+
+            let withoutMilliseconds = ISO8601DateFormatter()
+            withoutMilliseconds.formatOptions = [.withInternetDateTime]
+
+            if let date = withoutMilliseconds.date(from: value) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO8601 date: \(value)"
+            )
+        }
+        return decoder
+    }()
+
+    private static func mapDispatch(_ dispatch: WatchActiveDispatch) -> WatchDispatch {
         WatchDispatch(
-            id: "preview-1",
-            callType: "Structure Fire",
-            address: "123 Test Street",
-            units: ["E2", "T1", "C1"],
-            isCritical: true,
-            isWorkingFire: true,
-            updatedAt: Date()
+            id: dispatch.id,
+            callType: displayCallType(callType: dispatch.callType, message: dispatch.message, isWorkingFire: dispatch.isWorkingFire),
+            address: formattedAddress(address: dispatch.address, city: dispatch.city, state: dispatch.state),
+            units: visibleRespondingUnits(dispatch.units),
+            isCritical: dispatch.priority == "CRITICAL" || dispatch.isWorkingFire == true,
+            isWorkingFire: dispatch.isWorkingFire == true,
+            updatedAt: dispatch.lastActivityAt ?? dispatch.dispatchedAt ?? Date()
         )
-    ]
+    }
+
+    private static func formattedAddress(address: String?, city: String?, state: String?) -> String {
+        let parts = [address, city, state]
+            .compactMap { value -> String? in
+                guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+                    return nil
+                }
+                return value
+            }
+
+        return parts.isEmpty ? "Address unavailable" : parts.joined(separator: ", ")
+    }
+
+    private static func visibleRespondingUnits(_ units: [String]) -> [String] {
+        var seen = Set<String>()
+
+        return units.filter { unit in
+            let normalized = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard !normalized.isEmpty else { return false }
+
+            let blockedUnits = [
+                "hq",
+                "oem",
+                "station",
+                "station 1",
+                "station 2",
+                "station 3",
+                "station 4",
+                "station 5",
+                "f22man1",
+                "f22man2",
+                "f22man3",
+                "f22man4",
+                "f22man5"
+            ]
+
+            guard !blockedUnits.contains(normalized), !normalized.hasPrefix("station ") else {
+                return false
+            }
+
+            guard !seen.contains(normalized) else {
+                return false
+            }
+
+            seen.insert(normalized)
+            return true
+        }
+    }
+
+    private static func displayCallType(callType: String, message: String?, isWorkingFire: Bool?) -> String {
+        if isWorkingFire == true {
+            return "Working Fire"
+        }
+
+        let combined = "\(callType) \(message ?? "")".lowercased()
+
+        if combined.contains("cardiac") {
+            return "Cardiac Arrest"
+        }
+
+        if combined.contains("ems") || combined.contains("medical") || combined.contains("difficulty breathing") {
+            return "EMS Dispatch"
+        }
+
+        if combined.contains("mva") || combined.contains("motor vehicle") || combined.contains("accident") || combined.contains("crash") {
+            return "Motor Vehicle Accident"
+        }
+
+        if combined.contains("alarm") {
+            return "Fire Alarm"
+        }
+
+        if combined.contains("structure") || combined.contains("building fire") {
+            return "Structure Fire"
+        }
+
+        if combined.contains("gas") || combined.contains("odor") || combined.contains("hazmat") {
+            return "Hazardous Condition"
+        }
+
+        return callType
+    }
+}
+
+struct ContentView: View {
+    @StateObject private var viewModel = WatchDispatchViewModel()
 
     var body: some View {
         NavigationStack {
             Group {
-                if dispatches.isEmpty {
+                if viewModel.isLoading && viewModel.dispatches.isEmpty {
+                    ProgressView("Loading")
+                } else if viewModel.dispatches.isEmpty {
                     noDispatchesView
                 } else {
-                    List(dispatches) { dispatch in
+                    List(viewModel.dispatches) { dispatch in
                         NavigationLink {
                             WatchDispatchDetailView(dispatch: dispatch)
                         } label: {
@@ -45,6 +211,12 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("MTFD")
+            .task {
+                await viewModel.loadDispatches()
+            }
+            .refreshable {
+                await viewModel.loadDispatches()
+            }
         }
     }
 
@@ -61,6 +233,13 @@ struct ContentView: View {
             Text("You’re clear right now.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
         }
         .padding()
     }
