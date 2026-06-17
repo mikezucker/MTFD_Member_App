@@ -46,6 +46,7 @@ struct VolunteerOfficerDashboardView: View {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
                 callTotalsSection
+                volunteerOfficerOverviewSection
 
                 ForEach(supportedDashboardCards, id: \.rawValue) { card in
                     dashboardSection(for: card)
@@ -61,7 +62,66 @@ struct VolunteerOfficerDashboardView: View {
 
     
     private var supportedDashboardCards: [DashboardCardID] {
-        DashboardCardID.allCases.filter(isSupportedDashboardCard)
+        [
+            .stationUpdates,
+            .apparatusWorkOrders,
+            .assignedTraining,
+            .messages,
+            .documents,
+            .recentCalls,
+            .departmentUpdates,
+            .scheduleEvents
+        ].filter(isSupportedDashboardCard)
+    }
+
+    private var volunteerOfficerOverviewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Volunteer Officer Overview")
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text("🚒")
+                        .font(.title2)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("Station Leadership")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+
+                        Text("Volunteer officer dashboard focused on assigned station readiness, apparatus issues, member communication, training, documents, and recent station activity.")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.74))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                HStack(spacing: 8) {
+                    officerContextPill("Assigned Station")
+                    officerContextPill("Volunteer Officer")
+                    officerContextPill("Station View")
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+    }
+
+    private func officerContextPill(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.bold())
+            .foregroundStyle(AppTheme.navy)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(AppTheme.gold)
+            .clipShape(Capsule())
     }
 
 private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {

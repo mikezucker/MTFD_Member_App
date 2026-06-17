@@ -24,7 +24,7 @@ struct CareerOfficerDashboardView: View {
     let onOpenPastDispatches: () -> Void
 
     @AppStorage("careerOfficerDashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
-    @State private var selectedTotalsScope: TotalsScope = .station
+    @State private var selectedTotalsScope: TotalsScope = .department
 
     private var selectedTotalsWindow: DashboardTotalsWindow {
         DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
@@ -46,6 +46,7 @@ struct CareerOfficerDashboardView: View {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
                 callTotalsSection
+                careerOfficerOverviewSection
 
                 ForEach(supportedDashboardCards, id: \.rawValue) { card in
                     dashboardSection(for: card)
@@ -61,7 +62,66 @@ struct CareerOfficerDashboardView: View {
 
     
     private var supportedDashboardCards: [DashboardCardID] {
-        DashboardCardID.allCases.filter(isSupportedDashboardCard)
+        [
+            .scheduleEvents,
+            .apparatusWorkOrders,
+            .assignedTraining,
+            .messages,
+            .recentCalls,
+            .documents,
+            .departmentUpdates,
+            .stationUpdates
+        ].filter(isSupportedDashboardCard)
+    }
+
+    private var careerOfficerOverviewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Career Officer Overview")
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text("🏢")
+                        .font(.title2)
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("HQ Operations")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+
+                        Text("Career officer dashboard focused on department activity, staffing awareness, apparatus readiness, training, messages, and recent dispatch follow-up.")
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.74))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+
+                HStack(spacing: 8) {
+                    officerContextPill("HQ")
+                    officerContextPill("Career Officer")
+                    officerContextPill("Department View")
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            }
+        }
+    }
+
+    private func officerContextPill(_ text: String) -> some View {
+        Text(text)
+            .font(.caption.bold())
+            .foregroundStyle(AppTheme.navy)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(AppTheme.gold)
+            .clipShape(Capsule())
     }
 
 private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
@@ -352,29 +412,23 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
     }
 
     private var apparatusStatusSubtitle: String {
-        if let station = resolvedApparatusStation {
-            return "Current or next shift apparatus for \(station)."
-        }
-
-        return "Current or next shift apparatus."
+        "All open apparatus work orders."
     }
 
     private var workOrdersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Apparatus Status", systemImage: "wrench.and.screwdriver.fill")
 
-            if isLoading && stationScopedWorkOrders.isEmpty {
+            if isLoading && workOrders.isEmpty {
                 loadingCard("Loading apparatus work orders...")
-            } else if stationScopedWorkOrders.isEmpty {
+            } else if workOrders.isEmpty {
                 emptyCard("No open apparatus work orders.")
             } else {
                 DashboardApparatusWorkOrdersCard(
-                    workOrders: stationScopedWorkOrders,
+                    workOrders: workOrders,
                     title: "Apparatus Status",
                     subtitle: apparatusStatusSubtitle,
-                    emptyMessage: resolvedApparatusStation == nil
-                        ? "No open apparatus issues."
-                        : "No open apparatus issues for \(resolvedApparatusStation!)."
+                    emptyMessage: "No open apparatus issues."
                 ) {
                     onOpenWorkOrders()
                 }
