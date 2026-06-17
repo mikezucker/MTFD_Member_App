@@ -263,6 +263,73 @@ final class APIClient {
             throw error
         }
     }
+
+    func fetchTrainingManageCourses() async throws -> MobileTrainingManageCoursesResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training/manage/courses",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileTrainingManageCoursesResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+
+    func createTrainingCourse(
+        request payload: CreateTrainingCourseRequest
+    ) async throws -> CreateTrainingCourseResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/manage/courses",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(CreateTrainingCourseResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func assignTrainingCourse(
+        courseId: String,
+        request payload: AssignTrainingCourseRequest
+    ) async throws -> AssignTrainingCourseResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)/assignments",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(AssignTrainingCourseResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     
     // MARK: - Session Helpers
 

@@ -151,3 +151,149 @@ private extension ISO8601DateFormatter {
 //  Created by Michael Zucker on 5/21/26.
 //
 
+
+// MARK: - Training Assignment / Management Models
+
+struct MobileTrainingManageCoursesResponse: Codable, Equatable {
+    let success: Bool
+    let courses: [MobileTrainingManageCourse]
+    let error: String?
+}
+
+struct MobileTrainingManageCourse: Codable, Identifiable, Equatable {
+    let id: String
+    let title: String
+    let description: String?
+    let status: String
+    let updatedAt: Date?
+    let moduleCount: Int
+    let lessonCount: Int
+    let objectiveCount: Int
+
+    var detailLine: String {
+        "\(moduleCount) modules · \(lessonCount) lessons · \(objectiveCount) objectives"
+    }
+}
+
+struct CreateTrainingCourseRequest: Codable, Equatable {
+    let title: String
+    let description: String?
+    let publish: Bool
+    let trainingType: String
+    let allowMemberObjectiveSelfCheckoff: Bool
+    let objectiveFeedbackToMessages: Bool
+    let enableInstructorDashboard: Bool
+    let targetRole: String?
+}
+
+struct CreateTrainingCourseResponse: Codable, Equatable {
+    let success: Bool
+    let message: String?
+    let error: String?
+}
+
+enum TrainingCourseType: String, CaseIterable, Identifiable {
+    case selfPaced = "SELF_PACED"
+    case practicalHandsOn = "PRACTICAL_HANDS_ON"
+    case classroom = "CLASSROOM"
+    case hybrid = "HYBRID"
+    case policyReview = "POLICY_REVIEW"
+    case emsCompetency = "EMS_COMPETENCY"
+    case jprSkill = "JPR_SKILL"
+    case drill = "DRILL"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .selfPaced: return "Self-paced"
+        case .practicalHandsOn: return "Practical / Hands-on"
+        case .classroom: return "Classroom"
+        case .hybrid: return "Hybrid"
+        case .policyReview: return "Policy / SOG Review"
+        case .emsCompetency: return "EMS Competency"
+        case .jprSkill: return "JPR / Skill Evaluation"
+        case .drill: return "Drill / Company Training"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .selfPaced: return "📚"
+        case .practicalHandsOn: return "🧤"
+        case .classroom: return "🏫"
+        case .hybrid: return "🔀"
+        case .policyReview: return "📋"
+        case .emsCompetency: return "🚑"
+        case .jprSkill: return "✅"
+        case .drill: return "🚒"
+        }
+    }
+}
+
+struct AssignTrainingCourseRequest: Codable, Equatable {
+    let targetType: String
+    let targetRole: String?
+    let targetUserId: String?
+    let targetUserIds: [String]?
+    let dueAt: Date?
+
+    static func role(targetRole: String, dueAt: Date?) -> AssignTrainingCourseRequest {
+        AssignTrainingCourseRequest(
+            targetType: "ROLE",
+            targetRole: targetRole,
+            targetUserId: nil,
+            targetUserIds: nil,
+            dueAt: dueAt
+        )
+    }
+}
+
+struct AssignTrainingCourseResponse: Codable, Equatable {
+    let success: Bool
+    let createdCount: Int?
+    let skippedCount: Int?
+    let assignmentIds: [String]?
+    let message: String?
+    let error: String?
+}
+
+enum AssignTrainingTargetRole: String, CaseIterable, Identifiable {
+    case battalionChief = "BATTALION_CHIEF"
+    case officerCareer = "OFFICER_CAREER"
+    case officerVolunteer = "OFFICER_VOLUNTEER"
+    case memberCareer = "MEMBER_CAREER"
+    case memberVolunteer = "MEMBER_VOLUNTEER"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .battalionChief:
+            return "Battalion Chief"
+        case .officerCareer:
+            return "Career Officer"
+        case .officerVolunteer:
+            return "Volunteer Officer"
+        case .memberCareer:
+            return "Career Member"
+        case .memberVolunteer:
+            return "Volunteer Member"
+        }
+    }
+
+    var emoji: String {
+        switch self {
+        case .battalionChief:
+            return "🛡️"
+        case .officerCareer:
+            return "🏢"
+        case .officerVolunteer:
+            return "🚒"
+        case .memberCareer:
+            return "👨‍🚒"
+        case .memberVolunteer:
+            return "🙋"
+        }
+    }
+}

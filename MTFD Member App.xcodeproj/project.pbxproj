@@ -733,7 +733,6 @@
 		4089111A2F9014F10035C355 /* Training */ = {
 			isa = PBXGroup;
 			children = (
-				4089112E2F9015F30035C355 /* Components */,
 				4089112D2F9015EA0035C355 /* Models */,
 				4089112C2F9015DF0035C355 /* ViewModels */,
 				4089112B2F9015D80035C355 /* Views */,
@@ -895,13 +894,6 @@
 				408691782FBF7AB100A40828 /* MobileTrainingResponse.swift */,
 			);
 			path = Models;
-			sourceTree = "<group>";
-		};
-		4089112E2F9015F30035C355 /* Components */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Components;
 			sourceTree = "<group>";
 		};
 		4089112F2F90160A0035C355 /* Views */ = {
