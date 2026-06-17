@@ -39,10 +39,13 @@ private final class WatchDispatchViewModel: ObservableObject {
     @Published var dispatches: [WatchDispatch] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var lastLoadedAt: Date?
 
     private let feedURL = URL(string: "https://new-mtfd-site.vercel.app/api/shared/active-dispatches")!
 
     func loadDispatches() async {
+        guard !isLoading else { return }
+
         isLoading = true
         errorMessage = nil
 
@@ -59,6 +62,7 @@ private final class WatchDispatchViewModel: ObservableObject {
 
             let decoded = try Self.decoder.decode(WatchDispatchFeedResponse.self, from: data)
             dispatches = decoded.activeDispatches.map(Self.mapDispatch)
+            lastLoadedAt = Date()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -196,11 +200,15 @@ struct ContentView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && viewModel.dispatches.isEmpty {
-                    ProgressView("Loading")
+                    loadingView
                 } else if viewModel.dispatches.isEmpty {
                     noDispatchesView
                 } else {
                     List(viewModel.dispatches) { dispatch in
+                        if dispatch.id == viewModel.dispatches.first?.id {
+                            feedStatusRow
+                        }
+
                         NavigationLink {
                             WatchDispatchDetailView(dispatch: dispatch)
                         } label: {
@@ -220,6 +228,53 @@ struct ContentView: View {
         }
     }
 
+    private var loadingView: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+
+            Text("Checking Dispatches")
+                .font(.headline)
+
+            Text("Loading the active MTFD feed.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    private var feedStatusRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "dot.radiowaves.left.and.right")
+                    .foregroundStyle(.green)
+
+                Text(activeDispatchCountText)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.green)
+            }
+
+            if let lastLoadedAt = viewModel.lastLoadedAt {
+                Text("Updated \(lastLoadedAt, style: .relative) ago")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let errorMessage = viewModel.errorMessage {
+                Text(errorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var activeDispatchCountText: String {
+        let count = viewModel.dispatches.count
+        return count == 1 ? "1 active dispatch" : "\(count) active dispatches"
+    }
+
     private var noDispatchesView: some View {
         VStack(spacing: 10) {
             Image(systemName: "checkmark.shield.fill")
@@ -234,12 +289,28 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            if let lastLoadedAt = viewModel.lastLoadedAt {
+                Text("Updated \(lastLoadedAt, style: .relative) ago")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
+
+            Button {
+                Task {
+                    await viewModel.loadDispatches()
+                }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isLoading)
         }
         .padding()
     }
@@ -275,11 +346,16 @@ private struct WatchDispatchRow: View {
                 .lineLimit(2)
 
             if !dispatch.units.isEmpty {
-                Text(dispatch.units.joined(separator: " • "))
+                Text(dispatch.units.prefix(4).joined(separator: " • "))
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+
+            Text("Updated \(dispatch.updatedAt, style: .relative) ago")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
         .padding(.vertical, 4)
     }
@@ -338,13 +414,19 @@ private struct WatchDispatchDetailView: View {
                     }
                 }
 
-                Button {
-                    // Later: hand off to iPhone dispatch detail.
-                } label: {
-                    Label("Open on iPhone", systemImage: "iphone")
+                VStack(alignment: .leading, spacing: 4) {
+                    Label("Updated", systemImage: "clock")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+
+                    Text(dispatch.updatedAt, style: .relative)
+                        .font(.body.weight(.semibold))
                 }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 4)
+
+                Text("Open the iPhone app for map and full incident details.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
