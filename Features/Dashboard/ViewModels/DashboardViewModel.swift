@@ -156,7 +156,11 @@ final class DashboardViewModel: ObservableObject {
 
             let departmentScheduleEntries = await departmentScheduleEntriesResponse
 
-            activeDispatches = dashboard.activeDispatches ?? dispatchHistory.activeDispatches
+            activeDispatches = dispatchHistory.activeDispatches
+            logActiveDispatches(
+                sourceLabel: dispatchHistory.sourceLabel,
+                activeDispatches: dispatchHistory.activeDispatches
+            )
 
             let resolvedVolunteerContext = mergedVolunteerContext(
                 incoming: dashboard.volunteerContext,
@@ -262,6 +266,32 @@ final class DashboardViewModel: ObservableObject {
             apparatus: incoming.apparatus ?? existing?.apparatus,
             stationApparatus: incoming.stationApparatus ?? existing?.stationApparatus
         )
+    }
+
+    private func logActiveDispatches(
+        sourceLabel: String?,
+        activeDispatches: [APIClient.ActiveDispatch]
+    ) {
+        #if DEBUG
+        print("🚒 Active dispatch source: /api/mobile/dispatches source=\(sourceLabel ?? "unknown") count=\(activeDispatches.count)")
+
+        for dispatch in activeDispatches {
+            print(
+                """
+                🚒 Active dispatch normalized:
+                  id=\(dispatch.id)
+                  incidentType=\(dispatch.callType)
+                  address=\(dispatch.address ?? "nil")
+                  city=\(dispatch.city ?? "nil")
+                  category=\(dispatch.priority ?? "nil")
+                  assignedUnits=\(dispatch.units.joined(separator: ", "))
+                  activeStatus=active
+                  receivedAt=\(dispatch.dispatchedAt?.description ?? "nil")
+                  updatedAt=not provided
+                """
+            )
+        }
+        #endif
     }
 
     private func loadUnreadNonDispatchMessageCount() async {

@@ -68,16 +68,14 @@ final class MessageCenterViewModel: ObservableObject {
 
         do {
             async let messagesResponse = APIClient.shared.fetchMessages()
-            async let dashboardResponse = APIClient.shared.fetchDashboard()
             async let dispatchHistoryResponse = APIClient.shared.fetchDispatchHistory(window: selectedDispatchWindow)
 
             let resolvedMessages = try await messagesResponse
-            let resolvedDashboard = try await dashboardResponse
             let resolvedDispatchHistory = try await dispatchHistoryResponse
 
             messages = resolvedMessages.messages
             unreadCount = resolvedMessages.unreadCount
-            activeDispatches = resolvedDashboard.activeDispatches ?? []
+            activeDispatches = resolvedDispatchHistory.activeDispatches
             historicalDispatches = resolvedDispatchHistory.historicalDispatches
 
             pruneOldReadDispatchIds()
