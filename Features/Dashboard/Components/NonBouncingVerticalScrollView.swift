@@ -76,6 +76,7 @@ struct NonBouncingVerticalScrollView<Content: View>: UIViewRepresentable {
             super.init(frame: .zero)
 
             backgroundColor = .clear
+            clipsToBounds = true
             bounces = false
             alwaysBounceVertical = false
             alwaysBounceHorizontal = false
@@ -142,7 +143,9 @@ struct NonBouncingVerticalScrollView<Content: View>: UIViewRepresentable {
 
             let isUserPullingOrRefreshing = isTracking || isDragging || isDecelerating || refreshControl?.isRefreshing == true
 
-            if !allowsPullToRefresh && contentOffset.y < 0 {
+            if contentOffset.y < 0 && !isUserPullingOrRefreshing {
+                contentOffset.y = 0
+            } else if !allowsPullToRefresh && contentOffset.y < 0 {
                 contentOffset.y = 0
             } else if !isUserPullingOrRefreshing && contentOffset.y > maxOffsetY {
                 contentOffset.y = maxOffsetY
