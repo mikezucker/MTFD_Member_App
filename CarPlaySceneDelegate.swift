@@ -9,16 +9,19 @@ import MapKit
 import CoreLocation
 import UIKit
 
-final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate {
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPInterfaceControllerDelegate {
     private weak var interfaceController: CPInterfaceController?
 
     private var hasConfiguredRootTemplate = false
     private var refreshTimer: Timer?
     private var isLoading = false
+    private var lastRefreshAt: Date?
+    private var lastErrorMessage: String?
 
     private var activeDispatches: [APIClient.ActiveDispatch] = []
     private var recentDispatches: [APIClient.DispatchHistoryItem] = []
     private var knownActiveDispatchIds = Set<String>()
+    private var selectedActiveDispatchId: String?
 
     private enum CarPlayScreen {
         case root
@@ -45,6 +48,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func configureCarPlay(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
+        interfaceController.delegate = self
         currentScreen = .root
 
         guard !hasConfiguredRootTemplate else {
@@ -67,6 +71,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         stopRefreshTimer()
 
         if self.interfaceController === interfaceController {
+            interfaceController.delegate = nil
             self.interfaceController = nil
         }
 
@@ -76,6 +81,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         recentDispatches = []
         knownActiveDispatchIds = []
         isLoading = false
+        lastRefreshAt = nil
+        lastErrorMessage = nil
+        selectedActiveDispatchId = nil
     }
 
     // MARK: - Refresh
@@ -124,6 +132,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     self.activeDispatches = resolvedActiveDispatches
                     self.recentDispatches = Array(response.historicalDispatches.prefix(12))
                     self.knownActiveDispatchIds = Set(resolvedActiveDispatches.map(\.id))
+                    self.lastRefreshAt = response.fetchedAt ?? Date()
+                    self.lastErrorMessage = nil
 
                     if let newest = newDispatches.first, hadKnownDispatches {
                         self.presentNewDispatchAlert(newest)
@@ -146,30 +156,31 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     case .recent:
                         self.replaceTopTemplate(with: self.makeRecentDispatchesTemplate())
                     case .detail:
-                        break
+                        self.updateVisibleDetailAfterRefresh()
                     }
                 }
             } catch {
                 await MainActor.run {
                     self.isLoading = false
-                    print("🚗 CarPlay dispatch refresh failed: \(error.localizedDescription)")
+                    self.lastErrorMessage = self.dispatchErrorMessage(error)
+                    print("🚗 CarPlay dispatch refresh failed: \(self.lastErrorMessage ?? error.localizedDescription)")
 
                     guard updateVisibleScreen else { return }
 
-                    if self.activeDispatches.isEmpty && self.recentDispatches.isEmpty {
+                    switch self.currentScreen {
+                    case .root:
                         self.interfaceController?.setRootTemplate(
-                            self.makeRootTemplate(isLoading: false, errorMessage: error.localizedDescription),
+                            self.makeRootTemplate(isLoading: false),
                             animated: false,
                             completion: nil
                         )
-                        return
+                    case .active:
+                        self.replaceTopTemplate(with: self.makeActiveDispatchesTemplate())
+                    case .recent:
+                        self.replaceTopTemplate(with: self.makeRecentDispatchesTemplate())
+                    case .detail:
+                        break
                     }
-
-                    self.interfaceController?.setRootTemplate(
-                        self.makeRootTemplate(isLoading: false, errorMessage: error.localizedDescription),
-                        animated: false,
-                        completion: nil
-                    )
                 }
             }
         }
@@ -205,6 +216,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             }
 
             self.currentScreen = .active
+            self.selectedActiveDispatchId = nil
             self.interfaceController?.pushTemplate(
                 self.makeActiveDispatchesTemplate(),
                 animated: true,
@@ -226,6 +238,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             }
 
             self.currentScreen = .recent
+            self.selectedActiveDispatchId = nil
             self.interfaceController?.pushTemplate(
                 self.makeRecentDispatchesTemplate(),
                 animated: true,
@@ -236,7 +249,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
         let refreshItem = CPListItem(
             text: isLoading ? "Refreshing…" : "Refresh Dispatch Feed",
-            detailText: isLoading ? "Checking MTFD dispatches" : "Update active and recent calls"
+            detailText: refreshDetailText(isLoading: isLoading)
         )
         refreshItem.setImage(carPlayIcon("arrow.clockwise"))
 
@@ -253,9 +266,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
         var items: [CPListItem] = [headerItem, activeItem, recentItem, refreshItem]
 
-        if let errorMessage {
+        if let errorMessage = errorMessage ?? lastErrorMessage {
             let errorItem = CPListItem(
-                text: "Dispatch Feed Error",
+                text: dispatchErrorTitle(errorMessage),
                 detailText: errorMessage
             )
             errorItem.setImage(carPlayIcon("exclamationmark.triangle.fill"))
@@ -297,6 +310,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     }
 
                     self.currentScreen = .detail
+                    self.selectedActiveDispatchId = dispatch.id
                     self.interfaceController?.pushTemplate(
                         self.makeActiveDispatchDetailTemplate(dispatch),
                         animated: true,
@@ -319,6 +333,18 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func makeActiveDispatchDetailTemplate(_ dispatch: APIClient.ActiveDispatch) -> CPListTemplate {
         var items: [CPListItem] = []
+
+        if let lastRefreshAt {
+            let statusItem = CPListItem(
+                text: "Active Dispatch",
+                detailText: "Updated \(formatDate(lastRefreshAt))"
+            )
+            statusItem.setImage(carPlayIcon("checkmark.shield.fill"))
+            statusItem.handler = { _, completion in
+                completion()
+            }
+            items.append(statusItem)
+        }
 
         let typeItem = CPListItem(
             text: activeTitle(dispatch),
@@ -411,6 +437,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     }
 
                     self.currentScreen = .detail
+                    self.selectedActiveDispatchId = nil
                     self.interfaceController?.pushTemplate(
                         self.makeRecentDispatchDetailTemplate(dispatch),
                         animated: true,
@@ -676,6 +703,76 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         formatter.dateStyle = .none
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+
+    private func refreshDetailText(isLoading: Bool) -> String {
+        if isLoading {
+            return "Checking MTFD dispatches"
+        }
+
+        if let lastRefreshAt {
+            return "Last updated \(formatDate(lastRefreshAt))"
+        }
+
+        return "Update active and recent calls"
+    }
+
+    private func dispatchErrorMessage(_ error: Error) -> String {
+        if let apiError = error as? APIClient.APIError {
+            switch apiError {
+            case .missingAuthToken, .sessionExpired, .unauthorized:
+                return "Open the MTFD app on iPhone and sign in again."
+            case .networkError:
+                return "Network unavailable. CarPlay will keep showing the last dispatches it loaded."
+            default:
+                return apiError.localizedDescription
+            }
+        }
+
+        return error.localizedDescription
+    }
+
+    private func dispatchErrorTitle(_ message: String) -> String {
+        if message.localizedCaseInsensitiveContains("sign in") {
+            return "Sign In Required"
+        }
+
+        return "Dispatch Feed Warning"
+    }
+
+    private func updateVisibleDetailAfterRefresh() {
+        guard let selectedActiveDispatchId else { return }
+
+        if let updatedDispatch = activeDispatches.first(where: { $0.id == selectedActiveDispatchId }) {
+            replaceTopTemplate(with: makeActiveDispatchDetailTemplate(updatedDispatch))
+            return
+        }
+
+        self.selectedActiveDispatchId = nil
+        currentScreen = .active
+        replaceTopTemplate(with: makeActiveDispatchesTemplate())
+    }
+
+    // MARK: - CPInterfaceControllerDelegate
+
+    func templateDidAppear(_ aTemplate: CPTemplate, animated: Bool) {
+        if let listTemplate = aTemplate as? CPListTemplate {
+            switch listTemplate.title {
+            case "MTFD":
+                currentScreen = .root
+                selectedActiveDispatchId = nil
+            case "Active Incidents":
+                currentScreen = .active
+                selectedActiveDispatchId = nil
+            case "Recent Dispatches":
+                currentScreen = .recent
+                selectedActiveDispatchId = nil
+            case "Incident Details", "Dispatch Details":
+                currentScreen = .detail
+            default:
+                break
+            }
+        }
     }
 
     // MARK: - CarPlay Actions
