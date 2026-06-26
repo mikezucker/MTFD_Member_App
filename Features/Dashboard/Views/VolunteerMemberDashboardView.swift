@@ -94,33 +94,37 @@ struct VolunteerMemberDashboardView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
-                    ForEach(assignedTrainingPreview.prefix(4)) { item in
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(alignment: .top, spacing: 8) {
-                                AppIcon(systemImage: item.isOverdue ? "exclamationmark.triangle.fill" : "play.circle.fill")
-                                    .foregroundStyle(item.isOverdue ? .orange : AppTheme.gold)
+                    DashboardScrollableList(itemCount: assignedTrainingPreview.count, maxHeight: 360) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(Array(assignedTrainingPreview.enumerated()), id: \.element.id) { index, item in
+                                VStack(alignment: .leading, spacing: 5) {
+                                    HStack(alignment: .top, spacing: 8) {
+                                        AppIcon(systemImage: item.isOverdue ? "exclamationmark.triangle.fill" : "play.circle.fill")
+                                            .foregroundStyle(item.isOverdue ? .orange : AppTheme.gold)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(2)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(item.title)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.white)
+                                                .lineLimit(2)
 
-                                    Text(trainingSubtitle(for: item))
-                                        .font(.caption)
-                                        .foregroundStyle(.white.opacity(0.64))
+                                            Text(trainingSubtitle(for: item))
+                                                .font(.caption)
+                                                .foregroundStyle(.white.opacity(0.64))
+                                        }
+
+                                        Spacer()
+
+                                        Text("\(item.progressPercent)%")
+                                            .font(.caption.bold())
+                                            .foregroundStyle(AppTheme.gold)
+                                    }
                                 }
 
-                                Spacer()
-
-                                Text("\(item.progressPercent)%")
-                                    .font(.caption.bold())
-                                    .foregroundStyle(AppTheme.gold)
+                                if index < assignedTrainingPreview.count - 1 {
+                                    Divider().background(Color.white.opacity(0.14))
+                                }
                             }
-                        }
-
-                        if item.id != assignedTrainingPreview.prefix(4).last?.id {
-                            Divider().background(Color.white.opacity(0.14))
                         }
                     }
                 }
@@ -148,27 +152,31 @@ struct VolunteerMemberDashboardView: View {
                 if updates.isEmpty {
                     emptyText("No station or department announcements right now.")
                 } else {
-                    ForEach(updates.prefix(4)) { update in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(update.title)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(2)
+                    DashboardScrollableList(itemCount: updates.count, maxHeight: 420) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(Array(updates.enumerated()), id: \.element.id) { index, update in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(update.title)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(2)
 
-                            Text(update.message)
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.64))
-                                .lineLimit(3)
+                                    Text(update.message)
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.64))
+                                        .lineLimit(3)
 
-                            if let updatedAt = update.updatedAt, !updatedAt.isEmpty {
-                                Text(updatedAt)
-                                    .font(.caption2.weight(.medium))
-                                    .foregroundStyle(AppTheme.gold.opacity(0.9))
+                                    if let updatedAt = update.updatedAt, !updatedAt.isEmpty {
+                                        Text(updatedAt)
+                                            .font(.caption2.weight(.medium))
+                                            .foregroundStyle(AppTheme.gold.opacity(0.9))
+                                    }
+                                }
+
+                                if index < updates.count - 1 {
+                                    Divider().background(Color.white.opacity(0.14))
+                                }
                             }
-                        }
-
-                        if update.id != updates.prefix(4).last?.id {
-                            Divider().background(Color.white.opacity(0.14))
                         }
                     }
                 }
@@ -198,36 +206,40 @@ struct VolunteerMemberDashboardView: View {
                 } else if orders.isEmpty {
                     emptyText("No open trouble reports for \(selectedApparatusName).")
                 } else {
-                    ForEach(orders.prefix(5)) { order in
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(alignment: .top) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(order.apparatusName)
-                                        .font(.caption.bold())
-                                        .foregroundStyle(AppTheme.gold)
+                    DashboardScrollableList(itemCount: orders.count, maxHeight: 380) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(Array(orders.enumerated()), id: \.element.id) { index, order in
+                                VStack(alignment: .leading, spacing: 5) {
+                                    HStack(alignment: .top) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(order.apparatusName)
+                                                .font(.caption.bold())
+                                                .foregroundStyle(AppTheme.gold)
 
-                                    Text(order.title)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(3)
+                                            Text(order.title)
+                                                .font(.subheadline.weight(.semibold))
+                                                .foregroundStyle(.white)
+                                                .lineLimit(3)
+                                        }
+
+                                        Spacer()
+
+                                        if let status = order.status, !status.isEmpty {
+                                            Text(status)
+                                                .font(.caption2.bold())
+                                                .foregroundStyle(AppTheme.navy)
+                                                .padding(.horizontal, 8)
+                                                .padding(.vertical, 4)
+                                                .background(AppTheme.gold)
+                                                .clipShape(Capsule())
+                                        }
+                                    }
                                 }
 
-                                Spacer()
-
-                                if let status = order.status, !status.isEmpty {
-                                    Text(status)
-                                        .font(.caption2.bold())
-                                        .foregroundStyle(AppTheme.navy)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(AppTheme.gold)
-                                        .clipShape(Capsule())
+                                if index < orders.count - 1 {
+                                    Divider().background(Color.white.opacity(0.14))
                                 }
                             }
-                        }
-
-                        if order.id != orders.prefix(5).last?.id {
-                            Divider().background(Color.white.opacity(0.14))
                         }
                     }
                 }

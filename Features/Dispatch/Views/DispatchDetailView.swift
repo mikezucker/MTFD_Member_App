@@ -84,23 +84,25 @@ struct DispatchDetailView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-            AppDetailHeader(
-                title: "Dispatch",
-                subtitle: dispatch.callType ?? dispatch.title,
-                systemImage: "bell.and.waves.left.and.right.fill"
-            )
+            VStack(spacing: 0) {
+                AppScreenHeader(
+                    title: "Dispatch",
+                    subtitle: dispatch.callType ?? dispatch.title,
+                    systemImage: "bell.and.waves.left.and.right.fill"
+                )
 
-                VStack(spacing: 16) {
-                    headerCard
-                    locationCard
-                    arrivalPreviewCard
-                    unitsCard
-                    notesCard
-                    metadataCard
-                    actionButtons
+                ScrollView {
+                    VStack(spacing: 16) {
+                        headerCard
+                        locationCard
+                        arrivalPreviewCard
+                        unitsCard
+                        notesCard
+                        metadataCard
+                        actionButtons
+                    }
+                    .padding()
                 }
-                .padding()
             }
             .background(AppTheme.navy.ignoresSafeArea())
             .navigationTitle("Dispatch")

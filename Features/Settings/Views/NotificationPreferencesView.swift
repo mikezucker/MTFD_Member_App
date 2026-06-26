@@ -8,6 +8,7 @@ struct NotificationPreferencesView: View {
     @StateObject private var unitCatalog = UnitCatalog()
     @State private var tonePreviewPlayer: AVAudioPlayer?
     @State private var tonePreviewStopTask: Task<Void, Never>?
+    @State private var scheduleLinkStatus = ScheduleLinkStatus.idle
 
     private var canUseScheduleBasedNotifications: Bool {
         let role = session.currentUser?.role
@@ -63,7 +64,7 @@ struct NotificationPreferencesView: View {
 
     private var scheduleDescriptionSuffix: String {
         if canUseScheduleBasedNotifications {
-            return "Always means whether you are working or not. Only while working means only when you are listed on the department schedule."
+            return "Only while scheduled checks your FirstDue schedule before dispatch alerts are sent."
         }
 
         return "Always means dispatch alerts are sent when your other filters match. Off disables this alert type."
@@ -115,6 +116,10 @@ struct NotificationPreferencesView: View {
                     Toggle("Dispatch Alerts", isOn: $vm.preferences.dispatchAlertsEnabled)
 
                     if vm.preferences.dispatchAlertsEnabled {
+                        if canUseScheduleBasedNotifications {
+                            scheduleLinkCard
+                        }
+
                         settingPicker(
                             title: "Normal Dispatch Alerts",
                             description: "Choose when routine dispatch notifications are sent. \(scheduleDescriptionSuffix)",
@@ -269,6 +274,7 @@ struct NotificationPreferencesView: View {
             await unitCatalog.loadUnits()
             await vm.loadRemote()
             sanitizeScheduleModesIfNeeded()
+            await refreshScheduleLinkStatus()
         }
         .onChange(of: vm.preferences) { _, _ in
             UserDefaults.standard.set(vm.preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
@@ -289,6 +295,9 @@ struct NotificationPreferencesView: View {
         }
         .onChange(of: session.currentUser?.role) { _, _ in
             sanitizeScheduleModesIfNeeded()
+            Task {
+                await refreshScheduleLinkStatus()
+            }
         }
         .onDisappear {
             stopTonePreview()
@@ -319,6 +328,31 @@ struct NotificationPreferencesView: View {
 
         if vm.preferences.criticalAlertScheduleMode == .onlyWhenWorking {
             vm.preferences.criticalAlertScheduleMode = .always
+        }
+    }
+
+    private func refreshScheduleLinkStatus() async {
+        guard canUseScheduleBasedNotifications else {
+            scheduleLinkStatus = .unavailable("Schedule-based dispatch alerts are not enabled for this role.")
+            return
+        }
+
+        scheduleLinkStatus = .loading
+
+        do {
+            let response = try await APIClient.shared.fetchMobileUpcomingSchedule()
+
+            if response.isWorkingNow {
+                scheduleLinkStatus = .workingNow
+            } else if let nextShift = response.nextShift {
+                scheduleLinkStatus = .nextShift(nextShift)
+            } else if response.isScheduleTrackedUser {
+                scheduleLinkStatus = .notScheduled
+            } else {
+                scheduleLinkStatus = .unavailable("FirstDue did not return a schedule match for this member.")
+            }
+        } catch {
+            scheduleLinkStatus = .unavailable(error.localizedDescription)
         }
     }
 
@@ -382,6 +416,48 @@ struct NotificationPreferencesView: View {
         } header: {
             Text("Haptics")
         }
+    }
+
+    private var scheduleLinkCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: scheduleLinkStatus.systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(scheduleLinkStatus.tint)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("FirstDue Schedule Link")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text(scheduleLinkStatus.title)
+                        .font(.caption.weight(.semibold))
+
+                    Text(scheduleLinkStatus.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                if scheduleLinkStatus.isLoading {
+                    ProgressView()
+                } else {
+                    Button {
+                        Task {
+                            await refreshScheduleLinkStatus()
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.weight(.bold))
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Refresh FirstDue schedule link")
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func settingToggle(
@@ -461,5 +537,103 @@ struct NotificationPreferencesView: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         )
+    }
+}
+
+private enum ScheduleLinkStatus {
+    case idle
+    case loading
+    case workingNow
+    case nextShift(APIClient.MobileUpcomingShift)
+    case notScheduled
+    case unavailable(String)
+
+    var isLoading: Bool {
+        if case .loading = self {
+            return true
+        }
+
+        return false
+    }
+
+    var title: String {
+        switch self {
+        case .idle:
+            return "Schedule status not checked yet"
+        case .loading:
+            return "Checking FirstDue schedule..."
+        case .workingNow:
+            return "You are listed as scheduled now"
+        case .nextShift:
+            return "You are not scheduled right now"
+        case .notScheduled:
+            return "No upcoming scheduled shift found"
+        case .unavailable:
+            return "Schedule link unavailable"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .idle:
+            return "Only while scheduled uses FirstDue to decide whether dispatch alerts should be sent."
+        case .loading:
+            return "The app is checking your current and upcoming schedule."
+        case .workingNow:
+            return "Only while scheduled will allow matching dispatch alerts while FirstDue shows you working."
+        case .nextShift(let shift):
+            return nextShiftDetail(shift)
+        case .notScheduled:
+            return "Only while scheduled will suppress dispatch alerts until FirstDue lists you on the schedule."
+        case .unavailable(let message):
+            return message
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .idle:
+            return "calendar.badge.clock"
+        case .loading:
+            return "arrow.clockwise"
+        case .workingNow:
+            return "checkmark.circle.fill"
+        case .nextShift:
+            return "calendar"
+        case .notScheduled:
+            return "moon.zzz.fill"
+        case .unavailable:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .idle, .loading, .nextShift:
+            return .blue
+        case .workingNow:
+            return .green
+        case .notScheduled:
+            return .secondary
+        case .unavailable:
+            return .orange
+        }
+    }
+
+    private func nextShiftDetail(_ shift: APIClient.MobileUpcomingShift) -> String {
+        let parts = [
+            shift.date,
+            shift.timeRange,
+            shift.station,
+            shift.assignment
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if parts.isEmpty {
+            return "Only while scheduled will allow matching dispatch alerts during your next FirstDue shift."
+        }
+
+        return "Next FirstDue shift: \(parts.joined(separator: " • "))."
     }
 }

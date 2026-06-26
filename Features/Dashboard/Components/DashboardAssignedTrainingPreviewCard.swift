@@ -4,43 +4,36 @@ struct DashboardAssignedTrainingPreviewCard: View {
     let items: [DashboardTrainingPreviewItem]
     let onTap: () -> Void
 
-    private var visibleItems: [DashboardTrainingPreviewItem] {
-        Array(items.prefix(3))
-    }
-
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 16) {
-                header
+        VStack(alignment: .leading, spacing: 16) {
+            header
 
+            DashboardScrollableList(itemCount: items.count, maxHeight: 500) {
                 VStack(spacing: 12) {
-                    ForEach(visibleItems) { item in
+                    ForEach(items) { item in
                         trainingRow(item)
                     }
                 }
-
-                if items.count > visibleItems.count {
-                    moreAssignmentsFooter
-                }
-            }
-            .padding(16)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.14),
-                        Color.white.opacity(0.075)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(AppTheme.gold.opacity(0.18), lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .padding(16)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.14),
+                    Color.white.opacity(0.075)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(AppTheme.gold.opacity(0.18), lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
     }
 
     private var header: some View {
@@ -140,33 +133,6 @@ struct DashboardAssignedTrainingPreviewCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(color.opacity(0.25), lineWidth: 1)
         }
-    }
-
-    private var moreAssignmentsFooter: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "ellipsis.circle.fill")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(AppTheme.gold)
-
-            Text("+ \(items.count - visibleItems.count) more assignment\(items.count - visibleItems.count == 1 ? "" : "s")")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.gold)
-
-            Spacer()
-
-            Text("View all")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(AppTheme.gold.opacity(0.9))
-
-            Image(systemName: "arrow.right")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(AppTheme.gold.opacity(0.9))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(AppTheme.gold.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding(.top, 2)
     }
 
     private func displayedProgress(for item: DashboardTrainingPreviewItem) -> Double {

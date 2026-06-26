@@ -12,7 +12,7 @@ enum NotificationScheduleMode: String, Codable, CaseIterable, Identifiable {
         case .always:
             return "Always"
         case .onlyWhenWorking:
-            return "Only while working"
+            return "Only while scheduled"
         case .never:
             return "Off"
         }
@@ -23,7 +23,7 @@ enum NotificationScheduleMode: String, Codable, CaseIterable, Identifiable {
         case .always:
             return "Send these alerts whether you are working or not, as long as your other filters match."
         case .onlyWhenWorking:
-            return "Send these alerts only when you are listed as working on the department schedule."
+            return "Send these alerts only when FirstDue lists you as scheduled."
         case .never:
             return "Do not send this type of dispatch alert."
         }

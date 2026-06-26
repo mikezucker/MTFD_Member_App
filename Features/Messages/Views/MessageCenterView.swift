@@ -97,11 +97,13 @@ struct MessageCenterView: View {
     }
 
     var body: some View {
-        AppScreen(title: screenTitle) {
+        AppScreen(
+            title: screenTitle,
+            subtitle: introText,
+            systemImage: mode == .dispatchesOnly ? "bell.and.waves.left.and.right.fill" : "envelope.fill"
+        ) {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    introHeader
-
                     if mode == .combined {
                         tabSelector
                     }

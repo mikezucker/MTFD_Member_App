@@ -109,7 +109,9 @@ struct TrainingObjectiveDetail: Decodable, Identifiable {
     let instructions: String?
     let contentMd: String?
     let videoUrl: String?
+    let videoFilePath: String?
     let videoFileName: String?
+    let contentFilePath: String?
     let contentFileName: String?
     let objectiveType: String
     let jprEnabled: Bool
@@ -162,6 +164,35 @@ struct TrainingJPRStepDetail: Decodable, Identifiable {
         safetyCritical = try container.decodeIfPresent(Bool.self, forKey: .safetyCritical)
         autoFailOnFail = try container.decodeIfPresent(Bool.self, forKey: .autoFailOnFail)
     }
+}
+
+struct TrainingProgressUpdateRequest: Encodable, Equatable {
+    let itemType: String
+    let itemId: String
+    let status: String
+
+    static func completeLesson(id: String) -> TrainingProgressUpdateRequest {
+        TrainingProgressUpdateRequest(
+            itemType: "LESSON",
+            itemId: id,
+            status: "COMPLETED"
+        )
+    }
+
+    static func completeObjective(id: String) -> TrainingProgressUpdateRequest {
+        TrainingProgressUpdateRequest(
+            itemType: "OBJECTIVE",
+            itemId: id,
+            status: "COMPLETED"
+        )
+    }
+}
+
+struct TrainingProgressUpdateResponse: Decodable, Equatable {
+    let success: Bool
+    let status: String?
+    let completedAt: Date?
+    let error: String?
 }
 
 extension MobileTrainingCourseDetail {

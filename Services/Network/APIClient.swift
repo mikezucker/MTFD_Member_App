@@ -85,6 +85,20 @@ final class APIClient {
         environment.baseURL
     }
 
+    func absoluteURL(from pathOrURL: String?) -> URL? {
+        guard let rawValue = pathOrURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return nil
+        }
+
+        if let url = URL(string: rawValue), url.scheme != nil {
+            return url
+        }
+
+        let normalizedPath = rawValue.hasPrefix("/") ? rawValue : "/\(rawValue)"
+        return URL(string: baseURL + normalizedPath)
+    }
+
     // MARK: - Auth
 
     var authToken: String?
@@ -287,6 +301,30 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(MobileTrainingCourseDetailResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateTrainingProgress(
+        courseId: String,
+        request payload: TrainingProgressUpdateRequest
+    ) async throws -> TrainingProgressUpdateResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)/progress",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingProgressUpdateResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -559,6 +597,45 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(NotificationPreferencesResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func fetchUniforms() async throws -> MobileUniformsResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/uniforms",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileUniformsResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func submitUniformRequest(_ payload: UniformRequestSubmissionRequest) async throws -> MobileUniformsResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/uniforms",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileUniformsResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -892,6 +969,19 @@ extension APIClient {
         let email: String
         let type: String
     }
+
+    struct UniformRequestSubmissionRequest: Encodable {
+        let comments: String?
+        let replacementAcknowledged: Bool
+        let items: [UniformRequestSubmissionItem]
+    }
+
+    struct UniformRequestSubmissionItem: Encodable {
+        let sectionId: String
+        let style: String
+        let quantity: Int
+        let size: String
+    }
 }
 
 // MARK: - Response Models
@@ -949,6 +1039,65 @@ extension APIClient {
         let title: String
         let message: String
         let publishedAt: String?
+    }
+
+    struct MobileUniformsResponse: Decodable {
+        let success: Bool
+        let canSubmit: Bool
+        let memberType: String?
+        let badgeNumber: String?
+        let catalog: [UniformCatalogSection]
+        let requests: [UniformRequest]
+        let request: UniformRequest?
+        let error: String?
+    }
+
+    struct UniformCatalogSection: Decodable, Identifiable {
+        let id: String
+        let title: String
+        let note: String
+        let items: [UniformCatalogItem]
+    }
+
+    struct UniformCatalogItem: Decodable, Identifiable {
+        let style: String
+        let description: String
+
+        var id: String { style }
+    }
+
+    struct UniformRequest: Decodable, Identifiable {
+        let id: String
+        let referenceCode: String
+        let memberType: String
+        let badgeNumber: String?
+        let comments: String?
+        let totalItems: Int
+        let status: String
+        let statusLabel: String
+        let reviewNote: String?
+        let requestedAt: Date?
+        let reviewedAt: Date?
+        let updatedAt: Date?
+        let assignedTo: UniformRequestPerson?
+        let reviewedBy: UniformRequestPerson?
+        let items: [UniformRequestItem]
+    }
+
+    struct UniformRequestPerson: Decodable {
+        let id: String
+        let name: String?
+        let email: String?
+    }
+
+    struct UniformRequestItem: Decodable, Identifiable {
+        let id: String
+        let sectionId: String
+        let sectionTitle: String
+        let style: String
+        let description: String
+        let quantity: Int
+        let size: String
     }
 
     struct DashboardResponse: Decodable {

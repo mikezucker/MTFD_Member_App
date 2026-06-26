@@ -51,48 +51,45 @@ struct DashboardApparatusWorkOrdersCard: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 14) {
-                header
+        VStack(alignment: .leading, spacing: 14) {
+            header
 
-                if showsFilters && apparatusNames.count > 2 {
-                    filterChips
-                }
+            if showsFilters && apparatusNames.count > 2 {
+                filterChips
+            }
 
-                if workOrders.isEmpty {
-                    emptyState(emptyMessage)
-                } else if filteredWorkOrders.isEmpty {
-                    emptyState("No open apparatus issues for \(selectedApparatusName).")
-                } else {
+            if workOrders.isEmpty {
+                emptyState(emptyMessage)
+            } else if filteredWorkOrders.isEmpty {
+                emptyState("No open apparatus issues for \(selectedApparatusName).")
+            } else {
+                DashboardScrollableList(
+                    itemCount: groupedStatusRows.count,
+                    maxHeight: 350
+                ) {
                     VStack(spacing: 0) {
-                        ForEach(Array(groupedStatusRows.prefix(5).enumerated()), id: \.element.apparatusName) { index, group in
+                        ForEach(Array(groupedStatusRows.enumerated()), id: \.element.apparatusName) { index, group in
                             apparatusStatusRow(group)
 
-                            if index < min(groupedStatusRows.count, 5) - 1 {
+                            if index < groupedStatusRows.count - 1 {
                                 Divider()
                                     .background(Color.white.opacity(0.14))
                                     .padding(.vertical, 10)
                             }
                         }
                     }
-
-                    if filteredWorkOrders.count > 5 || groupedStatusRows.count > 5 {
-                        Text("View all \(filteredWorkOrders.count) open issue\(filteredWorkOrders.count == 1 ? "" : "s")")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(AppTheme.gold)
-                            .padding(.top, 2)
-                    }
                 }
             }
-            .padding(14)
-            .background(Color.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
-            }
         }
-        .buttonStyle(.plain)
+        .padding(14)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
         .onChange(of: workOrders) { _, _ in
             if !apparatusNames.contains(selectedApparatusName) {
                 selectedApparatusName = "All"

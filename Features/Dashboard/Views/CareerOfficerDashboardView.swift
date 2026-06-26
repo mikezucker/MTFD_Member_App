@@ -350,9 +350,11 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
             } else if updates.isEmpty {
                 emptyCard(emptyMessage)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(updates) { update in
-                        bulletinRow(update)
+                DashboardScrollableList(itemCount: updates.count, maxHeight: 500) {
+                    VStack(spacing: 10) {
+                        ForEach(updates) { update in
+                            bulletinRow(update)
+                        }
                     }
                 }
             }

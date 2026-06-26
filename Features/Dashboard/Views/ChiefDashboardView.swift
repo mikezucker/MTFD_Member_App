@@ -171,23 +171,104 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Chief Brief", systemImage: "shield.lefthalf.filled")
 
-            VStack(alignment: .leading, spacing: 10) {
-                Text(chiefBriefHeadline)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .center, spacing: 10) {
+                    Text(chiefBriefDateLabel)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(AppTheme.navy)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(AppTheme.gold)
+                        .clipShape(Capsule())
 
-                Text(chiefBriefSummary)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
+                    Text("MTFD Command Desk")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.62))
+                        .textCase(.uppercase)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    chiefBriefDetailRow(label: "Today", value: todayStaffingCountText)
-                    chiefBriefDetailRow(label: "Recent Calls", value: recentCalls.isEmpty ? "None listed" : "\(recentCalls.count)")
-                    chiefBriefDetailRow(label: "Notable", value: notableRecentCallTypes.isEmpty ? "None listed" : notableRecentCallTypes.prefix(2).joined(separator: ", "))
-                    chiefBriefDetailRow(label: "Work Orders", value: workOrders.isEmpty ? "None open" : "\(workOrders.count) open")
+                    Spacer(minLength: 0)
                 }
-                .padding(.top, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(chiefBriefHeadline)
+                        .font(.system(size: 23, weight: .black, design: .serif))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.78)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(chiefBriefSubheadline)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.gold)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Divider()
+                    .background(Color.white.opacity(0.18))
+
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(chiefBriefLeadParagraph)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .lineSpacing(2)
+
+                        Text(chiefBriefOperationsParagraph)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.76))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .lineSpacing(2)
+
+                        Text(chiefBriefReadinessParagraph)
+                            .font(.subheadline)
+                            .foregroundStyle(.white.opacity(0.76))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .lineSpacing(2)
+
+                        VStack(alignment: .leading, spacing: 9) {
+                            chiefBriefArticleNote(
+                                title: "Incident Watch",
+                                detail: chiefBriefIncidentNote,
+                                tint: activeDispatches.isEmpty ? AppTheme.gold : .orange
+                            )
+
+                            chiefBriefArticleNote(
+                                title: "Apparatus Readiness",
+                                detail: chiefBriefWorkOrderNote,
+                                tint: workOrders.isEmpty ? .green : .orange
+                            )
+
+                            chiefBriefArticleNote(
+                                title: "Coverage Picture",
+                                detail: chiefBriefStaffingNote,
+                                tint: todayVacancyCount > 0 ? .orange : AppTheme.gold
+                            )
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 250)
+
+                HStack(spacing: 8) {
+                    chiefBriefStatusPill(
+                        title: activeDispatches.isEmpty ? "Calls" : "Active",
+                        value: activeDispatches.isEmpty ? "\(recentCalls.count)" : "\(activeDispatches.count)",
+                        tint: activeDispatches.isEmpty ? AppTheme.gold : .orange
+                    )
+
+                    chiefBriefStatusPill(
+                        title: "Work Orders",
+                        value: "\(workOrders.count)",
+                        tint: workOrders.isEmpty ? .green : .orange
+                    )
+
+                    chiefBriefStatusPill(
+                        title: "Staffing",
+                        value: todayVacancyCount > 0 ? "\(todayScheduledMemberCount) / \(todayVacancyCount) vac" : "\(todayScheduledMemberCount)",
+                        tint: todayVacancyCount > 0 ? .orange : AppTheme.gold
+                    )
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
@@ -200,141 +281,391 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
         }
     }
 
-    private func chiefBriefDetailRow(label: String, value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label.uppercased())
-                .font(.caption2.weight(.black))
-                .foregroundStyle(AppTheme.gold)
-                .tracking(0.5)
-                .frame(width: 92, alignment: .leading)
+    private func chiefBriefArticleNote(
+        title: String,
+        detail: String,
+        tint: Color
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Rectangle()
+                .fill(tint)
+                .frame(width: 3)
+                .clipShape(Capsule())
 
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.78))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .textCase(.uppercase)
 
-            Spacer(minLength: 0)
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .lineSpacing(2)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 2)
     }
 
-    private var todayStaffingCountText: String {
-        guard let today = outlookDays.first else {
-            return "Unavailable"
-        }
+    private func chiefBriefStatusPill(
+        title: String,
+        value: String,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(value)
+                .font(.caption.weight(.black))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
 
-        let count = today.entries
+            Text(title)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white.opacity(0.72))
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity)
+        .background(tint.opacity(0.13))
+        .clipShape(Capsule())
+    }
+
+    private var todayScheduleEntries: [APIClient.MobileScheduleEntry] {
+        outlookDays.first?.entries ?? []
+    }
+
+    private var todayScheduledMemberCount: Int {
+        todayScheduleEntries
             .flatMap(\.staffingDetails)
             .filter { !$0.isVacant }
             .compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .count
+    }
 
-        return count == 1 ? "1 working" : "\(count) working"
+    private var todayVacancyCount: Int {
+        todayScheduleEntries.reduce(0) { total, entry in
+            total + entry.staffingDetails.filter { $0.isVacant }.count
+        }
+    }
+
+    private var todayAssignmentCount: Int {
+        todayScheduleEntries.count
     }
 
     private var chiefBriefHeadline: String {
         if !activeDispatches.isEmpty {
-            return "Active Operations Underway"
+            return dailyHeadline(from: [
+                "Active Operations Require Command Awareness",
+                "Live Incidents Lead Today’s Operational Picture",
+                "Command Focus: Active Dispatch Activity"
+            ])
         }
 
         if !notableRecentCallTypes.isEmpty {
-            return "Notable Activity Logged Across the Department"
+            return dailyHeadline(from: [
+                "Recent Call Activity Sets Today’s Tempo",
+                "Department Activity Trending Beyond Routine",
+                "Notable Calls Deserve Follow-Up"
+            ])
         }
 
         if !workOrders.isEmpty {
-            return "Apparatus Readiness Items Remain Open"
+            return dailyHeadline(from: [
+                "Apparatus Readiness Needs Attention",
+                "Open Work Orders Shape Today’s Readiness",
+                "Fleet Status Is the Watch Item"
+            ])
         }
 
-        return "Steady Operations Continue Across the Department"
+        return dailyHeadline(from: [
+            "Department Posture Looks Steady",
+            "Today’s Operations Are in Good Shape",
+            "Coverage and Readiness Are Holding"
+        ])
     }
 
-    private var chiefBriefSummary: String {
-        chiefBriefParts.joined(separator: " ")
+    private var chiefBriefDateLabel: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE"
+        return formatter.string(from: Date()).uppercased()
     }
 
-    private var chiefBriefParts: [String] {
-        var parts: [String] = []
-
-        parts.append(todayStaffingSummary)
-
+    private var chiefBriefSubheadline: String {
         if !activeDispatches.isEmpty {
-            let count = activeDispatches.count
-            parts.append(count == 1
-                ? "One active dispatch is currently visible for command review."
-                : "\(count) active dispatches are currently visible for command review."
-            )
-        } else if !recentCalls.isEmpty {
-            let count = recentCalls.count
-            parts.append(count == 1
-                ? "One recent department call is listed in the current feed."
-                : "\(count) recent department calls are listed in the current feed."
-            )
-        }
-
-        if !notableRecentCallTypes.isEmpty {
-            parts.append("Notable recent call types include \(notableRecentCallTypes.joined(separator: ", ")).")
+            return "\(activeDispatches.count) active dispatch\(activeDispatches.count == 1 ? "" : "es") on the board"
         }
 
         if !workOrders.isEmpty {
-            let count = workOrders.count
-            let apparatus = workOrders
-                .map(\.apparatusName)
-                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-                .prefix(3)
-                .joined(separator: ", ")
+            return "\(workOrders.count) apparatus work order\(workOrders.count == 1 ? "" : "s") open"
+        }
+
+        if todayVacancyCount > 0 {
+            return "\(todayVacancyCount) staffing vacanc\(todayVacancyCount == 1 ? "y" : "ies") showing for today"
+        }
+
+        return "Calls, readiness, and coverage in one command snapshot"
+    }
+
+    private var chiefBriefLeadParagraph: String {
+        if let active = activeDispatches.first {
+            let callType = trimmedOrFallback(active.callType, fallback: "Active dispatch")
+            let location = trimmedOptional(active.address)
+            let unitText = active.units.isEmpty
+                ? "assigned units"
+                : active.units.prefix(4).joined(separator: ", ")
+
+            if let location {
+                return "\(callType) is setting the tone for the current operational period, with \(unitText) committed at \(location). Command should keep the incident visible while monitoring any backfill, move-up, or apparatus availability impacts."
+            }
+
+            return "\(callType) is setting the tone for the current operational period, with \(unitText) committed. Command should keep the incident visible while monitoring any backfill, move-up, or apparatus availability impacts."
+        }
+
+        if let notable = notableRecentCallTypes.first {
+            return "\(notable) stands out in the recent call picture, giving today’s brief a more incident-focused posture than a routine staffing snapshot. The dashboard is showing \(recentCalls.count) recent dispatch\(recentCalls.count == 1 ? "" : "es") available for review."
+        }
+
+        if recentCalls.isEmpty {
+            return "The incident board is quiet in the current feed, which gives command room to stay ahead of readiness items before the next dispatch changes the tempo."
+        }
+
+        return "The current feed shows \(recentCalls.count) recent dispatch\(recentCalls.count == 1 ? "" : "es"), giving command a quick read on department activity without pulling attention away from readiness and coverage."
+    }
+
+    private var chiefBriefOperationsParagraph: String {
+        let callSentence: String
+        if activeDispatches.count > 1 {
+            callSentence = "\(activeDispatches.count - 1) additional active dispatch\(activeDispatches.count - 1 == 1 ? "" : "es") should remain on the command radar."
+        } else if recentCalls.count > 1 {
+            callSentence = "Recent dispatches include \(chiefBriefRecentCallSummary), which gives context beyond the latest incident alone."
+        } else {
+            callSentence = chiefBriefCallsSentence
+        }
+
+        let workOrderSentence: String
+        if workOrders.isEmpty {
+            workOrderSentence = "Apparatus readiness is clean from the work-order feed, with no open items currently listed."
+        } else {
+            workOrderSentence = "\(workOrders.count) work order\(workOrders.count == 1 ? "" : "s") remain open, led by \(chiefBriefDetailedWorkOrderSummary)."
+        }
+
+        return "\(callSentence) \(workOrderSentence)"
+    }
+
+    private var chiefBriefReadinessParagraph: String {
+        let staffing = chiefBriefStaffingSentence
+
+        if todayVacancyCount > 0 {
+            return "\(staffing) That does not need to crowd out the rest of the brief, but it should stay visible while command weighs call volume, apparatus status, and any expected coverage changes."
+        }
+
+        if !workOrders.isEmpty || !activeDispatches.isEmpty {
+            return "\(staffing) With staffing summarized, the higher-value watch items are incident movement and whether the open apparatus items affect response posture."
+        }
+
+        return "\(staffing) With no active dispatch pressure and no open work-order load, today’s command posture reads steady while the schedule and recent call feed continue to refresh."
+    }
+
+    private var chiefBriefIncidentNote: String {
+        if let active = activeDispatches.first {
+            let callType = trimmedOrFallback(active.callType, fallback: "Active dispatch")
+            let location = trimmedOptional(active.address)
+            let unitText = active.units.isEmpty ? "units not listed" : active.units.prefix(5).joined(separator: ", ")
+
+            if let location {
+                return "\(callType) at \(location). Units: \(unitText)."
+            }
+
+            return "\(callType). Units: \(unitText)."
+        }
+
+        if recentCalls.isEmpty {
+            return "No recent dispatches are highlighted in the current feed."
+        }
+
+        return "Recent feed: \(chiefBriefRecentCallSummary)."
+    }
+
+    private var chiefBriefWorkOrderNote: String {
+        if workOrders.isEmpty {
+            return "No apparatus work orders are currently open."
+        }
+
+        return chiefBriefDetailedWorkOrderSummary
+    }
+
+    private var chiefBriefStaffingNote: String {
+        if todayScheduledMemberCount == 0 && todayAssignmentCount == 0 {
+            return "Schedule outlook has not loaded yet."
+        }
+
+        if todayVacancyCount > 0 {
+            return "\(todayScheduledMemberCount) scheduled, \(todayVacancyCount) vacant across \(todayAssignmentCount) assignment\(todayAssignmentCount == 1 ? "" : "s")."
+        }
+
+        return "\(todayScheduledMemberCount) scheduled across \(todayAssignmentCount) assignment\(todayAssignmentCount == 1 ? "" : "s"); no vacancies shown."
+    }
+
+    private var chiefBriefRecentCallSummary: String {
+        let titles = recentCalls
+            .map { $0.title.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !titles.isEmpty else {
+            return "no recent dispatch titles listed"
+        }
+
+        let preview = titles.prefix(2)
+        let joined = preview.joined(separator: ", ")
+        let remaining = titles.count - preview.count
+
+        return remaining > 0 ? "\(joined), and \(remaining) more" : joined
+    }
+
+    private var chiefBriefDetailedWorkOrderSummary: String {
+        let summaries = workOrders.prefix(2).map { order in
+            let apparatus = order.apparatusName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = shortenedChiefBriefText(
+                order.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                limit: 48
+            )
 
             if apparatus.isEmpty {
-                parts.append(count == 1
-                    ? "One apparatus work order remains open."
-                    : "\(count) apparatus work orders remain open."
-                )
-            } else {
-                parts.append(count == 1
-                    ? "One apparatus work order remains open for \(apparatus)."
-                    : "\(count) apparatus work orders remain open, including \(apparatus)."
-                )
+                return title.isEmpty ? "untitled work order" : title
             }
+
+            if title.isEmpty {
+                return apparatus
+            }
+
+            return "\(apparatus): \(title)"
         }
-        return parts
+
+        guard !summaries.isEmpty else {
+            return "no open work orders"
+        }
+
+        let remaining = workOrders.count - summaries.count
+        let joined = summaries.joined(separator: "; ")
+
+        return remaining > 0 ? "\(joined); +\(remaining) more" : joined
     }
 
-    private var todayStaffingSummary: String {
-        guard let today = outlookDays.first else {
-            return "Today’s staffing outlook is available for review."
+    private func shortenedChiefBriefText(_ value: String, limit: Int) -> String {
+        guard value.count > limit else {
+            return value
         }
 
-        let staffedDetails = today.entries
-            .flatMap(\.staffingDetails)
-            .filter { !$0.isVacant }
+        let index = value.index(value.startIndex, offsetBy: limit)
+        return "\(value[..<index])..."
+    }
 
-        let names = staffedDetails
-            .compactMap { detail -> String? in
-                guard let name = detail.name?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !name.isEmpty else {
-                    return nil
-                }
+    private var chiefBriefCallsSentence: String {
+        if let active = activeDispatches.first {
+            let title = active.callType.trimmingCharacters(in: .whitespacesAndNewlines)
+            let address = active.address?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                if let qualifier = detail.qualifier?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   !qualifier.isEmpty {
-                    return "\(name) (\(qualifier))"
-                }
-
-                return name
+            if let address, !address.isEmpty {
+                return "\(title.isEmpty ? "Active dispatch" : title) is active at \(address)."
             }
 
-        if names.isEmpty {
-            return "Today’s schedule is available for command review."
+            return "\(title.isEmpty ? "Active dispatch" : title) is currently active."
         }
 
-        let preview = names.prefix(4).joined(separator: ", ")
-        let remaining = max(0, names.count - 4)
-
-        if remaining > 0 {
-            return "Today’s staffing shows \(names.count) scheduled members, including \(preview), and \(remaining) more."
+        if let notable = notableRecentCallTypes.first {
+            return "Recent call activity includes \(notable), with \(recentCalls.count) dispatch\(recentCalls.count == 1 ? "" : "es") in the current feed."
         }
 
-        return "Today’s staffing shows \(names.count) scheduled members: \(preview)."
+        if recentCalls.isEmpty {
+            return "No recent dispatches are highlighted in the current feed."
+        }
+
+        return "\(recentCalls.count) recent dispatch\(recentCalls.count == 1 ? " is" : "es are") listed for review."
+    }
+
+    private var chiefBriefWorkOrdersSentence: String {
+        if !workOrders.isEmpty {
+            return workOrders.count == 1
+                ? "One apparatus work order remains open for \(chiefBriefWorkOrderSubtitle)."
+                : "\(workOrders.count) apparatus work orders remain open, led by \(chiefBriefWorkOrderSubtitle)."
+        }
+
+        return "No apparatus work orders are open."
+    }
+
+    private var chiefBriefStaffingSentence: String {
+        if todayScheduledMemberCount == 0 && todayAssignmentCount == 0 {
+            return "Staffing has not loaded yet."
+        }
+
+        if todayVacancyCount > 0 {
+            return "Today’s staffing shows \(todayScheduledMemberCount) scheduled and \(todayVacancyCount) vacanc\(todayVacancyCount == 1 ? "y" : "ies")."
+        }
+
+        return "Today’s staffing shows \(todayScheduledMemberCount) scheduled across \(todayAssignmentCount) assignment\(todayAssignmentCount == 1 ? "" : "s")."
+    }
+
+    private func trimmedOptional(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func trimmedOrFallback(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    private var todayStaffingShortText: String {
+        if todayScheduledMemberCount == 0 && todayAssignmentCount == 0 {
+            return "not loaded yet"
+        }
+
+        if todayVacancyCount > 0 {
+            return "\(todayScheduledMemberCount) scheduled with \(todayVacancyCount) vacant"
+        }
+
+        return "\(todayScheduledMemberCount) scheduled"
+    }
+
+    private var chiefBriefWorkOrderSubtitle: String {
+        guard !workOrders.isEmpty else {
+            return "none open"
+        }
+
+        var seenApparatus = Set<String>()
+        let apparatus = workOrders.compactMap { order -> String? in
+            let name = order.apparatusName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, seenApparatus.insert(name).inserted else {
+                return nil
+            }
+
+            return name
+        }
+
+        guard let first = apparatus.first else {
+            return workOrders.count == 1 ? "1 open item" : "\(workOrders.count) open items"
+        }
+
+        if apparatus.count == 1 {
+            return first
+        }
+
+        return "\(first) +\(apparatus.count - 1)"
+    }
+
+    private func dailyHeadline(from options: [String]) -> String {
+        guard !options.isEmpty else {
+            return "Chief Brief"
+        }
+
+        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        return options[day % options.count]
     }
 
     private var notableRecentCallTypes: [String] {
@@ -597,16 +928,14 @@ private func selectNextTotalsWindow() {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.66))
                 } else {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(displayEntries.prefix(3)) { entry in
-                            scheduleEntryRow(entry)
+                    DashboardScrollableList(itemCount: displayEntries.count, maxHeight: 360) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            ForEach(displayEntries) { entry in
+                                scheduleEntryRow(entry)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text("Showing first staffing items. View full Schedule for more.")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.52))
                 }
 
                 if totalVacancies > 0 {

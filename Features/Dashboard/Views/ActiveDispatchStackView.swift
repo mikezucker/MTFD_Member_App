@@ -26,13 +26,17 @@ struct ActiveDispatchStackView: View {
                         .clipShape(Capsule())
                 }
 
-                ForEach(dispatches) { dispatch in
-                    Button {
-                        onSelect(dispatch)
-                    } label: {
-                        ActiveDispatchCard(dispatch: dispatch)
+                DashboardScrollableList(itemCount: dispatches.count, maxHeight: 430) {
+                    VStack(spacing: 12) {
+                        ForEach(dispatches) { dispatch in
+                            Button {
+                                onSelect(dispatch)
+                            } label: {
+                                ActiveDispatchCard(dispatch: dispatch)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }

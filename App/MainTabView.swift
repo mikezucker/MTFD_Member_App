@@ -792,71 +792,72 @@ private struct CommandWorkspaceView: View {
     }
 
     private var compactDailyStaffingSection: some View {
-        Button {
-            selectedCommandDestination = .staffing
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Daily Staffing")
-                            .font(.headline)
-                            .foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Daily Staffing")
+                        .font(.headline)
+                        .foregroundStyle(.white)
 
-                        Text(scheduleViewModel.date ?? "Today and next shift coverage")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.62))
-                    }
-
-                    Spacer()
-
-                    if scheduleVacancyCount > 0 {
-                        Text("\(scheduleVacancyCount) vacant")
-                            .font(.caption.bold())
-                            .foregroundStyle(.orange)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Color.orange.opacity(0.16))
-                            .clipShape(Capsule())
-                    } else if !scheduleViewModel.entries.isEmpty {
-                        Text("Covered")
-                            .font(.caption.bold())
-                            .foregroundStyle(AppTheme.gold)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(AppTheme.gold.opacity(0.16))
-                            .clipShape(Capsule())
-                    }
-
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.38))
+                    Text(scheduleViewModel.date ?? "Today and next shift coverage")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
                 }
 
-                if scheduleViewModel.isLoading && scheduleViewModel.entries.isEmpty {
-                    Text("Loading staffing...")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.62))
-                } else if scheduleViewModel.entries.isEmpty {
-                    Text("No staffing entries available.")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.62))
-                } else {
+                Spacer()
+
+                if scheduleVacancyCount > 0 {
+                    Text("\(scheduleVacancyCount) vacant")
+                        .font(.caption.bold())
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.orange.opacity(0.16))
+                        .clipShape(Capsule())
+                } else if !scheduleViewModel.entries.isEmpty {
+                    Text("Covered")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(AppTheme.gold.opacity(0.16))
+                        .clipShape(Capsule())
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white.opacity(0.38))
+            }
+
+            if scheduleViewModel.isLoading && scheduleViewModel.entries.isEmpty {
+                Text("Loading staffing...")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.62))
+            } else if scheduleViewModel.entries.isEmpty {
+                Text("No staffing entries available.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.62))
+            } else {
+                DashboardScrollableList(itemCount: scheduleViewModel.entries.count, maxHeight: 280) {
                     VStack(alignment: .leading, spacing: 6) {
-                        ForEach(scheduleViewModel.entries.prefix(2)) { entry in
+                        ForEach(scheduleViewModel.entries) { entry in
                             compactStaffingLine(entry)
                         }
                     }
                 }
             }
-            .padding(14)
-            .background(.white.opacity(0.08))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(.white.opacity(0.10), lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .buttonStyle(.plain)
+        .padding(14)
+        .background(.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.white.opacity(0.10), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedCommandDestination = .staffing
+        }
     }
 
     private func compactStaffingLine(_ entry: APIClient.MobileScheduleEntry) -> some View {
@@ -940,9 +941,11 @@ private struct CommandWorkspaceView: View {
                     emoji: AppIconCatalog.messages
                 )
             } else {
-                VStack(spacing: 10) {
-                    ForEach(commandPreviewMessages) { message in
-                        commandMessageRow(message)
+                DashboardScrollableList(itemCount: commandPreviewMessages.count, maxHeight: 440) {
+                    VStack(spacing: 10) {
+                        ForEach(commandPreviewMessages) { message in
+                            commandMessageRow(message)
+                        }
                     }
                 }
             }
@@ -950,7 +953,7 @@ private struct CommandWorkspaceView: View {
     }
 
     private var commandPreviewMessages: [MobileMessage] {
-        Array(commandPreviewAllMessages.prefix(3))
+        commandPreviewAllMessages
     }
 
     private var commandPreviewAllMessages: [MobileMessage] {
@@ -1072,17 +1075,15 @@ private struct CommandWorkspaceView: View {
                     emoji: AppIconCatalog.training
                 )
             } else {
-                VStack(spacing: 10) {
-                    ForEach(Array(dashboardViewModel.state.assignedTrainingPreview.prefix(3))) { item in
-                        commandTrainingRow(item)
+                DashboardScrollableList(
+                    itemCount: dashboardViewModel.state.assignedTrainingPreview.count,
+                    maxHeight: 470
+                ) {
+                    VStack(spacing: 10) {
+                        ForEach(dashboardViewModel.state.assignedTrainingPreview) { item in
+                            commandTrainingRow(item)
+                        }
                     }
-                }
-
-                if dashboardViewModel.state.assignedTrainingPreview.count > 3 {
-                    Text("+ \(dashboardViewModel.state.assignedTrainingPreview.count - 3) more training assignment\(dashboardViewModel.state.assignedTrainingPreview.count - 3 == 1 ? "" : "s")")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.56))
-                        .padding(.leading, 4)
                 }
             }
         }
@@ -1235,17 +1236,15 @@ private struct CommandWorkspaceView: View {
                     )
                 }
 
-                VStack(spacing: 10) {
-                    ForEach(schedulePreviewEntries) { entry in
-                        commandScheduleRow(entry)
+                DashboardScrollableList(itemCount: scheduleViewModel.entries.count, maxHeight: 430) {
+                    VStack(spacing: 10) {
+                        ForEach(scheduleViewModel.entries) { entry in
+                            commandScheduleRow(entry)
+                        }
                     }
                 }
             }
         }
-    }
-
-    private var schedulePreviewEntries: [APIClient.MobileScheduleEntry] {
-        Array(scheduleViewModel.entries.prefix(4))
     }
 
     private var scheduleFilledCount: Int {

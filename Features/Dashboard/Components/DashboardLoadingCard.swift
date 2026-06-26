@@ -32,3 +32,22 @@ struct DashboardLoadingCard: View {
         }
     }
 }
+
+struct DashboardScrollableList<Content: View>: View {
+    let itemCount: Int
+    var visibleItemLimit: Int = 4
+    var maxHeight: CGFloat = 360
+    var showsIndicators: Bool = true
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if itemCount > visibleItemLimit {
+            ScrollView(.vertical, showsIndicators: showsIndicators) {
+                content()
+            }
+            .frame(maxHeight: maxHeight)
+        } else {
+            content()
+        }
+    }
+}

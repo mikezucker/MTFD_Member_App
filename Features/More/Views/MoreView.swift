@@ -6,13 +6,11 @@ struct MoreView: View {
 
     var body: some View {
         NavigationStack {
-            AppScreen(title: "More") {
-                AppDetailHeader(
-                    title: "More",
-                    subtitle: "Settings, profile, and additional tools.",
-                    systemImage: "gearshape.fill"
-                )
-
+            AppScreen(
+                title: "More",
+                subtitle: "Settings, profile, and additional tools.",
+                systemImage: "gearshape.fill"
+            ) {
                 ScrollView {
                     VStack(spacing: 18) {
                         if let member = sessionManager.currentUser {

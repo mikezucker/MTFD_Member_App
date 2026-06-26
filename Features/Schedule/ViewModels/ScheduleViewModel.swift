@@ -40,7 +40,6 @@ final class ScheduleViewModel: ObservableObject {
     }
 
     func loadOutlookDays(count: Int = 4) async {
-        print("🧪 loadOutlookDays START")
         isLoading = true
         errorMessage = nil
 
@@ -92,10 +91,7 @@ final class ScheduleViewModel: ObservableObject {
                     errorMessage = response.message ?? "Schedule unavailable."
                 }
 
-                print("🗓️ Schedule outlook \(label) \(dateString): \(response.entries.count) entries")
             } catch {
-                print("🧨 Schedule outlook failed for \(dateString):", error.localizedDescription)
-
                 days.append(
                     ScheduleOutlookDay(
                         id: dateString,
@@ -111,12 +107,14 @@ final class ScheduleViewModel: ObservableObject {
             }
         }
 
-        print("🧪 assigning outlookDays =", days.count)
         outlookDays = days
-        print("🗓️ Schedule outlook days loaded:", outlookDays.map { "\($0.label)=\($0.entries.count)" }.joined(separator: ", "))
     }
 
     func refresh() async {
-        await load()
+        if outlookDays.isEmpty {
+            await load()
+        } else {
+            await loadOutlookDays(count: max(outlookDays.count, 7))
+        }
     }
 }

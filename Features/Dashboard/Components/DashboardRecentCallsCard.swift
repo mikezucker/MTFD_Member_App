@@ -5,68 +5,73 @@ struct DashboardRecentCallsCard: View {
     let onTap: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Text("Latest dispatches")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.white)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text("Latest dispatches")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.white)
 
-                    Spacer()
+                Spacer()
 
-                    Text("View")
-                        .font(.caption.bold())
-                        .foregroundStyle(AppTheme.gold)
+                Text("View")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.gold)
 
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(AppTheme.gold.opacity(0.9))
-                }
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(AppTheme.gold.opacity(0.9))
+            }
 
+            DashboardScrollableList(itemCount: calls.count, maxHeight: 410) {
                 VStack(spacing: 10) {
-                    ForEach(calls.prefix(3)) { call in
-                        VStack(alignment: .leading, spacing: 5) {
-                            HStack(alignment: .top, spacing: 8) {
-                                Text(call.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .lineLimit(2)
-
-                                Spacer()
-
-                                Text(call.timestamp)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.52))
-                                    .lineLimit(1)
-                            }
-
-                            Text(call.address)
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.66))
-                                .lineLimit(1)
-
-                            if let incidentNumber = call.incidentNumber,
-                               !incidentNumber.isEmpty {
-                                Text(incidentNumber)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.42))
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
-                        .background(Color.white.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    ForEach(calls) { call in
+                        callRow(call)
                     }
                 }
             }
-            .padding(16)
-            .background(Color.white.opacity(0.09))
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+
+    private func callRow(_ call: RecentDepartmentCall) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(call.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+
+                Spacer()
+
+                Text(call.timestamp)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.52))
+                    .lineLimit(1)
+            }
+
+            Text(call.address)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.66))
+                .lineLimit(1)
+
+            if let incidentNumber = call.incidentNumber,
+               !incidentNumber.isEmpty {
+                Text(incidentNumber)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.42))
             }
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.white.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }

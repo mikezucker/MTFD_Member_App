@@ -9,25 +9,20 @@ struct TrainingView: View {
     var body: some View {
         NavigationStack {
             AppScreen(title: "") {
-                ZStack {
+                VStack(spacing: 0) {
+                    headerSection
+
                     if viewModel.isLoading && !viewModel.hasCachedData {
                         loadingState
                     } else {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 18) {
-                                headerSection
-                                trainingHomeActions
-
-                                if let capabilities = viewModel.capabilities,
-                                   let scope = viewModel.response?.scope {
-                                    accessExplanationSection(capabilities: capabilities, scope: scope)
+                                if let errorMessage = viewModel.errorMessage {
+                                    trainingDataWarning(errorMessage)
                                 }
 
-                                if let errorMessage = viewModel.errorMessage, !viewModel.hasCachedData {
-                                    errorState(errorMessage)
-                                } else {
-                                    footerSection
-                                }
+                                trainingMainMenuSection
+                                footerSection
                             }
                             .padding(.horizontal, 16)
                             .padding(.vertical, 14)
@@ -64,68 +59,56 @@ struct TrainingView: View {
     @ViewBuilder
     private func trainingSectionDestination(_ section: TrainingHomeSection) -> some View {
         AppScreen(title: "") {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    trainingSectionHeader(section)
+            VStack(spacing: 0) {
+                trainingSectionHeader(section)
 
-        switch section {
-        case .create:
-            CreateTrainingToolView(
-                viewer: viewModel.response?.viewer,
-                scope: viewModel.response?.scope,
-                managedMembers: viewModel.managedMembers
-            )
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 18) {
+                        switch section {
+                        case .myTraining:
+                            if activeTrainingItems.isEmpty {
+                                emptyTrainingSection
+                            } else {
+                                assignedTrainingSection
+                            }
 
-        case .manage:
-            if let response = viewModel.response {
-                manageTrainingSection(response: response)
-            }
+                        case .completed:
+                            completedTrainingSection
 
-        case .progress:
-            progressDashboardSection
+                        case .create:
+                            CreateTrainingToolView(
+                                viewer: viewModel.response?.viewer,
+                                scope: viewModel.response?.scope,
+                                managedMembers: viewModel.managedMembers
+                            )
 
-            if viewModel.myTraining.isEmpty {
-                emptyTrainingSection
-            } else {
-                assignedTrainingSection
-            }
-        }
+                        case .manage:
+                            if let response = viewModel.response {
+                                manageTrainingSection(response: response)
+                            }
+
+                        case .progress:
+                            progressDashboardSection
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-            }
-            .refreshable {
-                await viewModel.refresh()
+                .refreshable {
+                    await viewModel.refresh()
+                }
             }
         }
     }
 
     private func trainingSectionHeader(_ section: TrainingHomeSection) -> some View {
-        HStack(alignment: .center, spacing: 14) {
-            Text(section.emoji)
-                .font(.system(size: 44))
-                .frame(width: 58, height: 58)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(section.screenTitle)
-                    .font(.largeTitle.bold())
-                    .foregroundStyle(.white)
-
-                Text(section.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer()
-        }
-        .padding(16)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
-        }
+        TrainingScreenHeader(
+            title: section.screenTitle,
+            subtitle: section.subtitle,
+            systemImage: section.systemImage,
+            isRefreshing: viewModel.isRefreshing,
+            stats: headerStats(for: section)
+        )
     }
 
     private var loadingState: some View {
@@ -143,57 +126,17 @@ struct TrainingView: View {
     }
 
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 14) {
-                Text("🎓")
-                    .font(.system(size: 44))
-                    .frame(width: 58, height: 58)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Training")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(.white)
-
-                    Text("Assigned courses, JPRs, evaluations, and member progress.")
-                        .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.72))
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(headerSubtitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.58))
-                }
-
-                Spacer()
-
-                if viewModel.isRefreshing {
-                    ProgressView()
-                        .tint(AppTheme.gold)
-                }
-            }
-
-            HStack(spacing: 8) {
-                TrainingPill(
-                    title: scopeTitle,
-                    systemImage: "person.crop.circle.badge.checkmark"
-                )
-
-                if let capabilities = viewModel.capabilities,
-                   capabilities.hasTrainingManagementAccess(viewer: viewModel.response?.viewer) {
-                    TrainingPill(
-                        title: "Tools Enabled",
-                        systemImage: "wrench.and.screwdriver.fill"
-                    )
-                }
-            }
-        }
-        .padding(16)
-        .background(Color.white.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
-        }
+        TrainingScreenHeader(
+            title: "Training",
+            subtitle: headerSubtitle,
+            systemImage: "graduationcap.fill",
+            isRefreshing: viewModel.isRefreshing,
+            stats: [
+                TrainingHeaderStat(label: "Active", value: "\(activeTrainingItems.count)"),
+                TrainingHeaderStat(label: "Done", value: "\(completedTrainingItems.count)"),
+                TrainingHeaderStat(label: "Overdue", value: "\(viewModel.summary?.overdueCount ?? 0)", isWarning: (viewModel.summary?.overdueCount ?? 0) > 0)
+            ]
+        )
     }
 
     private var trainingHomeActions: some View {
@@ -209,6 +152,111 @@ struct TrainingView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    private var trainingMainMenuSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Training Menu")
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible())
+                ],
+                spacing: 10
+            ) {
+                ForEach(visibleTrainingMenuSections) { section in
+                    NavigationLink(value: section) {
+                        TrainingHomeActionButton(
+                            section: section,
+                            badgeText: badgeText(for: section)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private var visibleTrainingMenuSections: [TrainingHomeSection] {
+        var sections: [TrainingHomeSection] = [.myTraining, .completed]
+
+        guard let response = viewModel.response else {
+            return sections
+        }
+
+        let capabilities = response.capabilities
+
+        if capabilities.canEvaluateTraining ||
+            capabilities.canCreateTraining ||
+            capabilities.canAssignTraining {
+            sections.append(.manage)
+        }
+
+        if capabilities.canViewManagedProgress ||
+            capabilities.canViewDepartmentProgress ||
+            capabilities.canManageReporting {
+            sections.append(.progress)
+        }
+
+        return sections
+    }
+
+    private func badgeText(for section: TrainingHomeSection) -> String? {
+        switch section {
+        case .myTraining:
+            return "\(activeTrainingItems.count)"
+        case .completed:
+            return "\(completedTrainingItems.count)"
+        case .manage:
+            let count = viewModel.pendingEvaluations.count
+            return count > 0 ? "\(count)" : nil
+        case .progress:
+            let count = viewModel.managedMembers.count
+            return count > 0 ? "\(count)" : nil
+        case .create:
+            return nil
+        }
+    }
+
+    private func headerStats(for section: TrainingHomeSection) -> [TrainingHeaderStat] {
+        switch section {
+        case .myTraining:
+            return [
+                TrainingHeaderStat(label: "Active", value: "\(activeTrainingItems.count)"),
+                TrainingHeaderStat(label: "In Progress", value: "\(viewModel.summary?.inProgressCount ?? 0)"),
+                TrainingHeaderStat(label: "Overdue", value: "\(viewModel.summary?.overdueCount ?? 0)", isWarning: (viewModel.summary?.overdueCount ?? 0) > 0)
+            ]
+        case .completed:
+            return [
+                TrainingHeaderStat(label: "Completed", value: "\(completedTrainingItems.count)")
+            ]
+        case .manage:
+            return [
+                TrainingHeaderStat(label: "Evaluations", value: "\(viewModel.pendingEvaluations.count)"),
+                TrainingHeaderStat(label: "Tools", value: viewModel.capabilities?.hasTrainingManagementAccess(viewer: viewModel.response?.viewer) == true ? "On" : "Off")
+            ]
+        case .progress:
+            return [
+                TrainingHeaderStat(label: "Roster", value: "\(viewModel.managedMembers.count)"),
+                TrainingHeaderStat(label: "Pending", value: "\(viewModel.pendingEvaluations.count)")
+            ]
+        case .create:
+            return []
+        }
+    }
+
+    private var activeTrainingItems: [MobileTrainingItem] {
+        viewModel.myTraining.filter { item in
+            item.progressStatus != "COMPLETED" && item.completedAt == nil
+        }
+    }
+
+    private var completedTrainingItems: [MobileTrainingItem] {
+        viewModel.myTraining.filter { item in
+            item.progressStatus == "COMPLETED" || item.completedAt != nil
         }
     }
 
@@ -350,13 +398,13 @@ struct TrainingView: View {
     private var assignedTrainingSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("My Assignments")
+                Text("Assigned Training")
                     .font(.headline)
                     .foregroundStyle(.white)
 
                 Spacer()
 
-                Text("\(viewModel.myTraining.count)")
+                Text("\(activeTrainingItems.count)")
                     .font(.caption.bold())
                     .foregroundStyle(.black)
                     .padding(.horizontal, 9)
@@ -365,7 +413,7 @@ struct TrainingView: View {
                     .clipShape(Capsule())
             }
 
-            ForEach(viewModel.myTraining) { item in
+            ForEach(activeTrainingItems) { item in
                 NavigationLink {
                     TrainingCourseDetailView(item: item)
                 } label: {
@@ -376,16 +424,109 @@ struct TrainingView: View {
         }
     }
 
+    private var completedTrainingSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Completed Training")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Spacer()
+
+                Text("\(completedTrainingItems.count)")
+                    .font(.caption.bold())
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(AppTheme.gold)
+                    .clipShape(Capsule())
+            }
+
+            if completedTrainingItems.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No completed training yet.")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+
+                    Text("Completed courses will appear here with dates and course details.")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.64))
+                }
+                .padding(15)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            } else {
+                ForEach(completedTrainingItems) { item in
+                    NavigationLink {
+                        TrainingCourseDetailView(item: item)
+                    } label: {
+                        TrainingCompletedCard(item: item)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var managementGatewaySection: some View {
+        if let response = viewModel.response {
+            let capabilities = response.capabilities
+            let showManagedProgress = capabilities.canViewManagedProgress ||
+                capabilities.canViewDepartmentProgress ||
+                capabilities.canManageReporting
+            let showManagement = capabilities.hasTrainingManagementAccess(viewer: response.viewer)
+
+            if showManagement {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Evaluator Tools")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ],
+                        spacing: 10
+                    ) {
+                        if capabilities.canEvaluateTraining || capabilities.canCreateTraining || capabilities.canAssignTraining {
+                            NavigationLink(value: TrainingHomeSection.manage) {
+                                TrainingHomeActionButton(section: .manage)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if showManagedProgress {
+                            NavigationLink(value: TrainingHomeSection.progress) {
+                                TrainingHomeActionButton(section: .progress)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(16)
+                .background(Color.white.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(.white.opacity(0.08), lineWidth: 1)
+                }
+            }
+        }
+    }
+
     private var emptyTrainingSection: some View {
         VStack(spacing: 12) {
             Text("✅")
                 .font(.system(size: 38))
 
-            Text("No assigned training right now.")
+            Text("No active training right now.")
                 .font(.headline)
                 .foregroundStyle(.white)
 
-            Text("You’re clear for the moment. New assignments will show here automatically.")
+            Text("New assignments will show here automatically. Completed courses stay in your history below.")
                 .font(.subheadline)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.white.opacity(0.72))
@@ -435,7 +576,7 @@ struct TrainingView: View {
 
                     if capabilities.canViewManagedProgress {
                         TrainingToolTile(
-                            title: "Member Progress",
+                            title: "Training Roster",
                             subtitle: "Track completion and needs",
                             emoji: "📈"
                         ) {
@@ -558,7 +699,7 @@ struct TrainingView: View {
     private var managedMembersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Managed Members")
+                Text("Training Roster")
                     .font(.headline)
                     .foregroundStyle(.white)
 
@@ -652,6 +793,42 @@ struct TrainingView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
+    private func trainingDataWarning(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Training data could not refresh", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.bold())
+                .foregroundStyle(.orange)
+
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.68))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                Task {
+                    await viewModel.refresh()
+                }
+            } label: {
+                Label("Try Again", systemImage: "arrow.clockwise")
+                    .font(.caption.bold())
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(AppTheme.gold)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.orange.opacity(0.24), lineWidth: 1)
+        }
+    }
+
     private var headerSubtitle: String {
         if let viewer = viewModel.response?.viewer {
             return "\(viewer.roleDisplay) · \(viewer.companyDisplay)"
@@ -673,6 +850,8 @@ struct TrainingView: View {
 }
 
 private enum TrainingHomeSection: String, CaseIterable, Identifiable {
+    case myTraining
+    case completed
     case create
     case manage
     case progress
@@ -680,33 +859,45 @@ private enum TrainingHomeSection: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static var allCases: [TrainingHomeSection] {
-        [.manage, .progress]
+        [.myTraining, .completed, .manage, .progress]
     }
 
     var title: String {
         switch self {
+        case .myTraining:
+            return "My Training"
+        case .completed:
+            return "Completed"
         case .create:
             return "Create"
         case .manage:
-            return "Manage"
+            return "Evaluator Tools"
         case .progress:
-            return "Progress"
+            return "Training Roster"
         }
     }
 
     var screenTitle: String {
         switch self {
+        case .myTraining:
+            return "My Training"
+        case .completed:
+            return "Completed Training"
         case .create:
             return "Create Training"
         case .manage:
-            return "Manage Training"
+            return "Evaluator Tools"
         case .progress:
-            return "Training Progress"
+            return "Training Roster"
         }
     }
 
     var emoji: String {
         switch self {
+        case .myTraining:
+            return "📚"
+        case .completed:
+            return "✅"
         case .create:
             return "🧱"
         case .manage:
@@ -718,6 +909,10 @@ private enum TrainingHomeSection: String, CaseIterable, Identifiable {
 
     var systemImage: String {
         switch self {
+        case .myTraining:
+            return "play.circle.fill"
+        case .completed:
+            return "checkmark.seal.fill"
         case .create:
             return "plus.rectangle.on.folder.fill"
         case .manage:
@@ -729,18 +924,23 @@ private enum TrainingHomeSection: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .myTraining:
+            return "Start or continue assigned courses, lessons, and checkoffs."
+        case .completed:
+            return "Review completed courses and completion dates."
         case .create:
             return "Build a new course with modules, media, testing, and assignments."
         case .manage:
-            return "Edit existing training, assignments, and reporting settings."
+            return "Review evaluations and course tools based on your permissions."
         case .progress:
-            return "See completion, overdue work, skill checkoffs, and member status."
+            return "See completion, overdue work, checkoffs, and roster status."
         }
     }
 }
 
 private struct TrainingHomeActionButton: View {
     let section: TrainingHomeSection
+    var badgeText: String? = nil
 
     var body: some View {
         HStack(spacing: 14) {
@@ -763,6 +963,16 @@ private struct TrainingHomeActionButton: View {
 
             Spacer()
 
+            if let badgeText {
+                Text(badgeText)
+                    .font(.caption.bold())
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(AppTheme.gold)
+                    .clipShape(Capsule())
+            }
+
             Image(systemName: "chevron.right")
                 .font(.headline)
                 .foregroundStyle(.white.opacity(0.45))
@@ -774,6 +984,82 @@ private struct TrainingHomeActionButton: View {
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+}
+
+private struct TrainingHeaderStat: Identifiable {
+    let id = UUID()
+    let label: String
+    let value: String
+    var isWarning = false
+}
+
+private struct TrainingScreenHeader: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    var isRefreshing = false
+    var stats: [TrainingHeaderStat] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                AppDashboardIcon(systemImage: systemImage, size: 32)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .allowsTightening(true)
+
+                    Text(subtitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(2)
+                }
+                .layoutPriority(1)
+
+                Spacer(minLength: 8)
+
+                if isRefreshing {
+                    ProgressView()
+                        .tint(AppTheme.gold)
+                }
+            }
+
+            if !stats.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(stats) { stat in
+                            HStack(spacing: 6) {
+                                Text(stat.value)
+                                    .font(.caption.monospacedDigit().bold())
+                                    .foregroundStyle(stat.isWarning ? .orange : AppTheme.gold)
+
+                                Text(stat.label)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.72))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(Color.white.opacity(0.09))
+                            .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .background(AppTheme.navy)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.white.opacity(0.08))
+                .frame(height: 1)
         }
     }
 }
@@ -895,7 +1181,7 @@ private enum TrainingToolDestination: String, Identifiable {
         case .evaluate:
             return "Evaluate JPRs"
         case .progress:
-            return "Crew Progress"
+            return "Training Roster"
         }
     }
 
@@ -1648,11 +1934,11 @@ private struct TrainingToolDestinationView: View {
 
     private var managedMembersContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Managed Members")
+            sectionTitle("Training Roster")
 
             if managedMembers.isEmpty {
                 emptyStatusCard(
-                    title: "No managed members",
+                    title: "No roster members",
                     message: "Members assigned to your supervision or training scope will appear here."
                 )
             } else {
@@ -2677,7 +2963,7 @@ private struct TrainingCourseManageEditView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Edit Training")
-                    .font(.largeTitle.bold())
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(.white)
 
                 Text("Course details, modules, assignments, and enrolled users.")
@@ -3934,6 +4220,68 @@ private struct TrainingAssignmentCard: View {
         default:
             return .white.opacity(0.16)
         }
+    }
+}
+
+private struct TrainingCompletedCard: View {
+    let item: MobileTrainingItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Text("✅")
+                    .font(.system(size: 30))
+                    .frame(width: 40, height: 40)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.title)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+
+                    Text(item.detailLine)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.68))
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white.opacity(0.42))
+                    .padding(.top, 5)
+            }
+
+            HStack(spacing: 10) {
+                Label(completionText, systemImage: "calendar.badge.checkmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.gold)
+
+                Spacer()
+
+                if item.practicalObjectiveCount > 0 {
+                    Label("\(item.practicalObjectiveCount) practical", systemImage: "signature")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+            }
+        }
+        .padding(15)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+    }
+
+    private var completionText: String {
+        if let completedAt = item.completedAt {
+            return "Completed \(completedAt.formatted(date: .abbreviated, time: .omitted))"
+        }
+
+        return "Completed"
     }
 }
 
