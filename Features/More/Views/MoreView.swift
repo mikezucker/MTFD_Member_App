@@ -34,16 +34,18 @@ struct MoreView: View {
                                 )
                             }
                             .buttonStyle(.plain)
-                            NavigationLink {
-                                UniformsView()
-                            } label: {
-                                menuRow(
-                                    title: "Uniforms",
-                                    subtitle: "Uniform requests and gear information",
-                                    systemImage: "tshirt.fill"
-                                )
+                            if sessionManager.currentUser?.canAccessUniforms == true {
+                                NavigationLink {
+                                    UniformsView()
+                                } label: {
+                                    menuRow(
+                                        title: "Uniforms",
+                                        subtitle: "Uniform requests and gear information",
+                                        systemImage: "tshirt.fill"
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                             
                             NavigationLink {
                                 SettingsView()

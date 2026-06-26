@@ -1027,6 +1027,25 @@ extension APIClient {
                     || normalized == "RELIEFDRIVER"
             } == true
         }
+
+        var isFireHeadquarters: Bool {
+            let normalized = (company ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+
+            return normalized == "FIRE_HQ"
+                || normalized == "HQ"
+                || normalized == "FIRE_HEADQUARTERS"
+        }
+
+        var canAccessUniforms: Bool {
+            role == "MEMBER_CAREER"
+                || role == "OFFICER_CAREER"
+                || isFireHeadquarters
+                || isReliefDriver
+        }
     }
 
     struct AnnouncementsResponse: Decodable {

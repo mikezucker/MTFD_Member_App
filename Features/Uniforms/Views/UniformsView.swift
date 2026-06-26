@@ -117,7 +117,7 @@ struct UniformsView: View {
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
 
-                Text("Uniform requests are available to career staff and volunteer members who have been assigned uniform-request access.")
+                Text("Uniform requests are available to relief drivers, career staff, and Fire Headquarters.")
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.68))
                     .fixedSize(horizontal: false, vertical: true)
@@ -598,6 +598,8 @@ private extension APIClient.MobileUniformsResponse {
             return "Career Staff"
         case "WEEKEND_RELIEF_DRIVER":
             return "Relief Driver"
+        case "HQ_STAFF":
+            return "HQ"
         default:
             return canSubmit ? "Eligible" : "Status"
         }
