@@ -11,6 +11,7 @@ class NotificationPreferencesViewModel: ObservableObject {
 
     private let key = "notification_preferences"
     private var saveTask: Task<Void, Never>?
+    private var pendingRemotePreferences: NotificationPreferences?
     private var hasLoadedRemote = false
 
     init() {
@@ -65,6 +66,7 @@ class NotificationPreferencesViewModel: ObservableObject {
         saveLocal()
         successMessage = nil
         errorMessage = nil
+        pendingRemotePreferences = preferences
 
         saveTask?.cancel()
 
@@ -80,6 +82,8 @@ class NotificationPreferencesViewModel: ObservableObject {
     }
 
     func saveRemote(_ preferencesToSave: NotificationPreferences? = nil) async {
+        let preferencesForRequest = preferencesToSave ?? preferences
+
         isSaving = true
         errorMessage = nil
         successMessage = nil
@@ -88,10 +92,14 @@ class NotificationPreferencesViewModel: ObservableObject {
 
         do {
             let response = try await APIClient.shared.updateNotificationPreferences(
-                preferencesToSave ?? preferences
+                preferencesForRequest
             )
 
             if response.success {
+                pendingRemotePreferences = nil
+                if let serverPreferences = response.preferences {
+                    preferences = serverPreferences
+                }
                 saveLocal()
             } else if let error = response.error {
                 errorMessage = error
@@ -99,6 +107,26 @@ class NotificationPreferencesViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func flushPendingSave() async {
+        saveTask?.cancel()
+        saveTask = nil
+        saveLocal()
+
+        guard let pendingRemotePreferences else {
+            return
+        }
+
+        await saveRemote(pendingRemotePreferences)
+    }
+
+    func saveImmediately() async {
+        saveTask?.cancel()
+        saveTask = nil
+        pendingRemotePreferences = preferences
+        saveLocal()
+        await saveRemote(preferences)
     }
 
     func cancelPendingSave() {

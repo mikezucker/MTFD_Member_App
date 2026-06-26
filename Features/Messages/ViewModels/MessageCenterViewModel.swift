@@ -121,6 +121,20 @@ final class MessageCenterViewModel: ObservableObject {
         isLoadingDispatchHistory = false
     }
 
+    func refreshActiveDispatches() async {
+        do {
+            let response = try await APIClient.shared.fetchDispatchHistory(window: selectedDispatchWindow)
+
+            activeDispatches = response.activeDispatches
+            historicalDispatches = response.historicalDispatches
+
+            pruneOldReadDispatchIds()
+            updateBadgeCount()
+        } catch {
+            print("Message Center dispatch refresh failed: \(error.localizedDescription)")
+        }
+    }
+
     func markRead(_ message: MobileMessage) async {
         guard !message.isRead else {
             return

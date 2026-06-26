@@ -16,140 +16,150 @@ struct NonBouncingVerticalScrollView<Content: View>: UIViewRepresentable {
         self.content = content()
     }
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onRefresh: onRefresh)
+    func makeCoordinator() -> MTFDNonBouncingScrollCoordinator {
+        MTFDNonBouncingScrollCoordinator(onRefresh: onRefresh)
     }
 
-    func makeUIView(context: Context) -> ManualHostingScrollView<Content> {
-        let view = ManualHostingScrollView(rootView: content)
+    func makeUIView(context: Context) -> MTFDNonBouncingHostingScrollView {
+        let view = MTFDNonBouncingHostingScrollView(rootView: AnyView(content))
         view.showsVerticalScrollIndicator = showsIndicators
         view.configureRefreshControl(onRefresh == nil ? nil : context.coordinator.refreshControl)
         return view
     }
 
-    func updateUIView(_ scrollView: ManualHostingScrollView<Content>, context: Context) {
+    func updateUIView(_ scrollView: MTFDNonBouncingHostingScrollView, context: Context) {
         context.coordinator.onRefresh = onRefresh
 
-        scrollView.update(rootView: content)
+        scrollView.update(rootView: AnyView(content))
         scrollView.showsVerticalScrollIndicator = showsIndicators
         scrollView.configureRefreshControl(onRefresh == nil ? nil : context.coordinator.refreshControl)
     }
+}
 
-    final class Coordinator: NSObject {
-        var onRefresh: (() async -> Void)?
-        let refreshControl = UIRefreshControl()
+final class MTFDNonBouncingScrollCoordinator: NSObject {
+    var onRefresh: (() async -> Void)?
+    let refreshControl = UIRefreshControl()
 
-        init(onRefresh: (() async -> Void)?) {
-            self.onRefresh = onRefresh
-            super.init()
+    init(onRefresh: (() async -> Void)?) {
+        self.onRefresh = onRefresh
+        super.init()
 
-            refreshControl.tintColor = .white
-            refreshControl.addTarget(
-                self,
-                action: #selector(handleRefresh),
-                for: .valueChanged
-            )
-        }
-
-        @objc private func handleRefresh() {
-            print("🔄 NonBouncingVerticalScrollView refresh triggered")
-
-            guard let onRefresh else {
-                refreshControl.endRefreshing()
-                return
-            }
-
-            Task { @MainActor in
-                await onRefresh()
-                refreshControl.endRefreshing()
-            }
-        }
+        refreshControl.tintColor = .white
+        refreshControl.addTarget(
+            self,
+            action: #selector(handleRefresh),
+            for: .valueChanged
+        )
     }
 
-    final class ManualHostingScrollView<HostedContent: View>: UIScrollView {
-        private let hostingController: UIHostingController<HostedContent>
-        private var allowsPullToRefresh = false
+    deinit {
+        refreshControl.removeTarget(
+            self,
+            action: #selector(handleRefresh),
+            for: .valueChanged
+        )
+    }
 
-        init(rootView: HostedContent) {
-            self.hostingController = UIHostingController(rootView: rootView)
+    @objc private func handleRefresh() {
+        guard let onRefresh else {
+            refreshControl.endRefreshing()
+            return
+        }
 
-            super.init(frame: .zero)
+        Task { @MainActor [weak self] in
+            await onRefresh()
+            self?.refreshControl.endRefreshing()
+        }
+    }
+}
 
-            backgroundColor = .clear
-            clipsToBounds = true
+final class MTFDNonBouncingHostingScrollView: UIScrollView {
+    private let hostingController: UIHostingController<AnyView>
+    private var allowsPullToRefresh = false
+
+    init(rootView: AnyView) {
+        self.hostingController = UIHostingController(rootView: rootView)
+
+        super.init(frame: .zero)
+
+        backgroundColor = .clear
+        clipsToBounds = true
+        bounces = false
+        alwaysBounceVertical = false
+        alwaysBounceHorizontal = false
+        showsHorizontalScrollIndicator = false
+        contentInsetAdjustmentBehavior = .never
+
+        hostingController.view.backgroundColor = .clear
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(hostingController.view)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configureRefreshControl(_ control: UIRefreshControl?) {
+        refreshControl = control
+        allowsPullToRefresh = control != nil
+
+        if allowsPullToRefresh {
+            bounces = true
+            alwaysBounceVertical = true
+        } else {
             bounces = false
             alwaysBounceVertical = false
-            alwaysBounceHorizontal = false
-            showsHorizontalScrollIndicator = false
-            contentInsetAdjustmentBehavior = .never
-
-            hostingController.view.backgroundColor = .clear
-            hostingController.view.translatesAutoresizingMaskIntoConstraints = true
-            addSubview(hostingController.view)
         }
 
-        required init?(coder: NSCoder) {
-            fatalError("init(coder:) has not been implemented")
-        }
+        alwaysBounceHorizontal = false
+    }
 
-        func configureRefreshControl(_ control: UIRefreshControl?) {
-            refreshControl = control
-            allowsPullToRefresh = control != nil
+    func update(rootView: AnyView) {
+        hostingController.rootView = rootView
+        setNeedsLayout()
+        layoutIfNeeded()
+    }
 
-            if allowsPullToRefresh {
-                bounces = true
-                alwaysBounceVertical = true
-            } else {
-                bounces = false
-                alwaysBounceVertical = false
-            }
+    override func layoutSubviews() {
+        super.layoutSubviews()
 
-            alwaysBounceHorizontal = false
-        }
+        let targetWidth = bounds.width
+        guard targetWidth > 0 else { return }
 
-        func update(rootView: HostedContent) {
-            hostingController.rootView = rootView
-            setNeedsLayout()
-            layoutIfNeeded()
-        }
+        let fittingSize = CGSize(
+            width: targetWidth,
+            height: UIView.layoutFittingCompressedSize.height
+        )
 
-        override func layoutSubviews() {
-            super.layoutSubviews()
+        let measuredSize = hostingController.sizeThatFits(in: fittingSize)
+        let contentHeight = max(measuredSize.height, 1)
 
-            let targetWidth = bounds.width
-            guard targetWidth > 0 else { return }
+        hostingController.view.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: targetWidth,
+            height: contentHeight
+        )
 
-            let fittingSize = CGSize(
-                width: targetWidth,
-                height: UIView.layoutFittingCompressedSize.height
-            )
+        contentSize = CGSize(
+            width: targetWidth,
+            height: contentHeight
+        )
 
-            let measuredSize = hostingController.sizeThatFits(in: fittingSize)
-            let contentHeight = max(measuredSize.height, 1)
+        let maxOffsetY = max(0, contentSize.height - bounds.height)
 
-            hostingController.view.frame = CGRect(
-                x: 0,
-                y: 0,
-                width: targetWidth,
-                height: contentHeight
-            )
+        let isUserPullingOrRefreshing =
+            isTracking ||
+            isDragging ||
+            isDecelerating ||
+            refreshControl?.isRefreshing == true
 
-            contentSize = CGSize(
-                width: targetWidth,
-                height: contentHeight
-            )
-
-            let maxOffsetY = max(0, contentSize.height - bounds.height)
-
-            let isUserPullingOrRefreshing = isTracking || isDragging || isDecelerating || refreshControl?.isRefreshing == true
-
-            if contentOffset.y < 0 && !isUserPullingOrRefreshing {
-                contentOffset.y = 0
-            } else if !allowsPullToRefresh && contentOffset.y < 0 {
-                contentOffset.y = 0
-            } else if !isUserPullingOrRefreshing && contentOffset.y > maxOffsetY {
-                contentOffset.y = maxOffsetY
-            }
+        if contentOffset.y < 0 && !isUserPullingOrRefreshing {
+            contentOffset.y = 0
+        } else if !allowsPullToRefresh && contentOffset.y < 0 {
+            contentOffset.y = 0
+        } else if !isUserPullingOrRefreshing && contentOffset.y > maxOffsetY {
+            contentOffset.y = maxOffsetY
         }
     }
 }

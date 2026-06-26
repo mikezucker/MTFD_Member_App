@@ -26,10 +26,12 @@ final class SessionManager: ObservableObject {
         }
 
         APIClient.shared.authToken = token
+        KeychainService.shared.saveToken(token)
 
         do {
             let memberResponse = try await APIClient.shared.fetchCurrentUser()
             currentUser = memberResponse.member
+            NavigationRouter.shared.resetToHome()
             isLoggedIn = true
             await registerPushTokenIfAvailable()
         } catch {
@@ -68,6 +70,7 @@ final class SessionManager: ObservableObject {
             KeychainService.shared.saveToken(token)
 
             currentUser = member
+            NavigationRouter.shared.resetToHome()
             isLoggedIn = true
 
             print("✅ Login success")
@@ -81,6 +84,7 @@ final class SessionManager: ObservableObject {
     }
 
     func logout() {
+        NavigationRouter.shared.resetToHome()
         APIClient.shared.authToken = nil
         KeychainService.shared.deleteToken()
         currentUser = nil

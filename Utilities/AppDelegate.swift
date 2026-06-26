@@ -34,6 +34,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         AppDelegate.latestAPNsToken = token
 
         print("📲 APNs Token captured: \(token)")
+
+        Task { @MainActor in
+            await SessionManager.shared.registerPushTokenIfAvailable()
+        }
     }
 
     func application(

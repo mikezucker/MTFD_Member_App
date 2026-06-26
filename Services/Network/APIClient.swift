@@ -26,6 +26,37 @@ enum DispatchUnitFilter {
     }
 }
 
+private extension APIClient.ActiveDispatch {
+    var isVisibleActiveDispatch: Bool {
+        if isClosed == true {
+            return false
+        }
+
+        if let status,
+           status.range(of: "closed", options: .caseInsensitive) != nil ||
+            status.range(of: "clear", options: .caseInsensitive) != nil ||
+            status.range(of: "complete", options: .caseInsensitive) != nil ||
+            status.range(of: "cancel", options: .caseInsensitive) != nil {
+            return false
+        }
+
+        guard let latestTimestamp = [lastActivityAt, dispatchedAt]
+            .compactMap({ $0 })
+            .max() else {
+            return false
+        }
+
+        return Date().timeIntervalSince(latestTimestamp) <= 90 * 60
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
+        }
+    }
+}
 
 final class APIClient {
     static let shared = APIClient()
@@ -298,6 +329,81 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(CreateTrainingCourseResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateTrainingCourse(
+        courseId: String,
+        request payload: UpdateTrainingCourseRequest
+    ) async throws -> TrainingMutationResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)",
+            method: "PATCH",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingMutationResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func deleteTrainingCourse(courseId: String) async throws -> TrainingMutationResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingMutationResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func uploadTrainingContent(
+        data: Data,
+        fileName: String,
+        mimeType: String
+    ) async throws -> TrainingUploadResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n")
+        body.append("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+
+        var request = try makeRequest(
+            path: "/api/mobile/training/uploads",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingUploadResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -628,7 +734,15 @@ final class APIClient {
 
         do {
             let data = try await performRequest(request)
-            return try decode(DispatchHistoryResponse.self, from: data)
+            let response = try decode(DispatchHistoryResponse.self, from: data)
+            return DispatchHistoryResponse(
+                success: response.success,
+                window: response.window,
+                fetchedAt: response.fetchedAt,
+                sourceLabel: response.sourceLabel,
+                activeDispatches: response.activeDispatches.filter(\.isVisibleActiveDispatch),
+                historicalDispatches: response.historicalDispatches
+            )
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -907,8 +1021,11 @@ extension APIClient {
         let message: String?
         let units: [String]
         let dispatchedAt: Date?
+        let lastActivityAt: Date?
         let priority: String?
         let isWorkingFire: Bool?
+        let status: String?
+        let isClosed: Bool?
     }
 
     struct MessageSummary: Decodable {

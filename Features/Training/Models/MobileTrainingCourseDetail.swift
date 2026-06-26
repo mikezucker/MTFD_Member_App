@@ -17,6 +17,7 @@ struct MobileTrainingCourseDetail: Decodable, Identifiable {
     let title: String
     let description: String?
     let status: String
+    let trainingType: String?
     let progressStatus: String
     let progressPercent: Int
     let completedAt: Date?
@@ -26,7 +27,29 @@ struct MobileTrainingCourseDetail: Decodable, Identifiable {
     let completedItemCount: Int?
     let totalItemCount: Int?
     let modules: [TrainingModuleDetail]
+    let assignments: [TrainingCourseAssignmentDetail]?
+    let objectiveFeedbackToMessages: Bool?
+    let enableInstructorDashboard: Bool?
+    let allowMemberObjectiveSelfCheckoff: Bool?
     let lastUpdated: Date?
+}
+
+struct TrainingCourseAssignmentDetail: Decodable, Identifiable {
+    let id: String
+    let targetType: String
+    let targetRole: String?
+    let targetUserId: String?
+    let targetUser: TrainingCourseAssignedUser?
+    let dueAt: Date?
+    let assignedAt: Date?
+}
+
+struct TrainingCourseAssignedUser: Decodable, Identifiable {
+    let id: String
+    let name: String?
+    let email: String?
+    let role: String
+    let company: String?
 }
 
 struct TrainingModuleDetail: Decodable, Identifiable {
@@ -49,6 +72,7 @@ struct TrainingLessonDetail: Decodable, Identifiable {
     let order: Int
     let contentMd: String?
     let videoUrl: String?
+    let filePath: String?
     let fileName: String?
     let durationSeconds: Int?
     let progressStatus: String
@@ -76,6 +100,7 @@ struct TrainingSkillDetail: Decodable, Identifiable {
 struct TrainingQuizDetail: Decodable, Identifiable {
     let id: String
     let title: String?
+    let firstQuestionPrompt: String?
 }
 
 struct TrainingObjectiveDetail: Decodable, Identifiable {

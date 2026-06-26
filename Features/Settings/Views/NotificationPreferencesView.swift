@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 struct NotificationPreferencesView: View {
@@ -5,6 +6,8 @@ struct NotificationPreferencesView: View {
 
     @StateObject private var vm = NotificationPreferencesViewModel()
     @StateObject private var unitCatalog = UnitCatalog()
+    @State private var tonePreviewPlayer: AVAudioPlayer?
+    @State private var tonePreviewStopTask: Task<Void, Never>?
 
     private var canUseScheduleBasedNotifications: Bool {
         let role = session.currentUser?.role
@@ -132,30 +135,29 @@ struct NotificationPreferencesView: View {
                             isOn: $vm.preferences.criticalDispatchAlerts
                         )
 
+                        if vm.preferences.criticalDispatchAlerts {
+                            Picker("Critical Dispatch Alert Mode", selection: $vm.preferences.criticalDispatchAlertMode) {
+                                ForEach(CriticalDispatchAlertMode.allCases) { mode in
+                                    Text(mode.title).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
 
-                    if vm.preferences.criticalDispatchAlerts {
-                        Picker("Critical Dispatch Alert Mode", selection: $vm.preferences.criticalDispatchAlertMode) {
-                            ForEach(CriticalDispatchAlertMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
+                            Text(vm.preferences.criticalDispatchAlertMode.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Picker("Dispatch Alert Tone", selection: $vm.preferences.dispatchAlertTone) {
+                            ForEach(DispatchAlertTone.allCases) { tone in
+                                Text(tone.title).tag(tone)
                             }
                         }
-                        .pickerStyle(.segmented)
 
-                        Text(vm.preferences.criticalDispatchAlertMode.subtitle)
+                        Text(vm.preferences.dispatchAlertTone.subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
 
-                    Picker("Dispatch Alert Tone", selection: $vm.preferences.dispatchAlertTone) {
-                        ForEach(DispatchAlertTone.allCases) { tone in
-                            Text(tone.title).tag(tone)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Text(vm.preferences.dispatchAlertTone.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                         settingToggle(
                             title: "Working Fires Only",
                             description: "Only receive fire dispatch alerts for working, structure, building, or confirmed fires.",
@@ -272,13 +274,29 @@ struct NotificationPreferencesView: View {
             UserDefaults.standard.set(vm.preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
             vm.scheduleSave()
         }
+        .onChange(of: vm.preferences.criticalDispatchAlerts) { _, isEnabled in
+            guard isEnabled else { return }
+
+            Task {
+                await NotificationManager.shared.requestCriticalAlertPermission()
+            }
+        }
+        .onChange(of: vm.preferences.dispatchAlertTone) { _, tone in
+            previewDispatchAlertTone(tone)
+            Task {
+                await vm.saveImmediately()
+            }
+        }
         .onChange(of: session.currentUser?.role) { _, _ in
             sanitizeScheduleModesIfNeeded()
         }
         .onDisappear {
+            stopTonePreview()
             sanitizeScheduleModesIfNeeded()
-            vm.cancelPendingSave()
             vm.saveLocal()
+            Task {
+                await vm.flushPendingSave()
+            }
         }
     }
 
@@ -302,6 +320,56 @@ struct NotificationPreferencesView: View {
         if vm.preferences.criticalAlertScheduleMode == .onlyWhenWorking {
             vm.preferences.criticalAlertScheduleMode = .always
         }
+    }
+
+    private func previewDispatchAlertTone(_ tone: DispatchAlertTone) {
+        stopTonePreview()
+
+        guard let soundName = tone.previewSoundName else {
+            return
+        }
+
+        let resource = (soundName as NSString).deletingPathExtension
+        let extensionName = (soundName as NSString).pathExtension
+
+        guard let url = Bundle.main.url(
+            forResource: resource,
+            withExtension: extensionName.isEmpty ? nil : extensionName
+        ) else {
+            return
+        }
+
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.duckOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.prepareToPlay()
+            player.play()
+            tonePreviewPlayer = player
+            tonePreviewStopTask = Task {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    stopTonePreview()
+                }
+            }
+        } catch {
+            tonePreviewPlayer = nil
+            tonePreviewStopTask?.cancel()
+            tonePreviewStopTask = nil
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        }
+    }
+
+    private func stopTonePreview() {
+        tonePreviewStopTask?.cancel()
+        tonePreviewStopTask = nil
+        tonePreviewPlayer?.stop()
+        tonePreviewPlayer = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 
     private var hapticsSection: some View {

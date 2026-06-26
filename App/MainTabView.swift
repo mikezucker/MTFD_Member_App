@@ -592,6 +592,7 @@ private struct CommandWorkspaceView: View {
             }
 
             await messageViewModel.loadMessagesIfNeeded()
+            await commandActiveDispatchRefreshLoop()
         }
         .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
             syncLiveActivityWithActiveDispatches()
@@ -1447,6 +1448,18 @@ private struct CommandWorkspaceView: View {
             activeCallCount: dashboardViewModel.activeDispatches.count
         )
         DispatchLiveActivityManager.shared.startOrUpdate(from: payload)
+    }
+
+    private func commandActiveDispatchRefreshLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await dashboardViewModel.refreshDispatchFeed()
+        }
     }
 
     private var mappedCommandUserRole: UserRole {

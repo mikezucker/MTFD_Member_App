@@ -14,6 +14,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private var hasConfiguredRootTemplate = false
     private var refreshTimer: Timer?
+    private var dispatchNotificationObserver: NSObjectProtocol?
     private var isLoading = false
     private var lastRefreshAt: Date?
     private var lastErrorMessage: String?
@@ -63,12 +64,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             completion: nil
         )
 
+        startDispatchNotificationObserver()
         startRefreshTimer()
         refreshDispatches(updateVisibleScreen: true)
     }
 
     private func tearDownCarPlay(interfaceController: CPInterfaceController) {
         stopRefreshTimer()
+        stopDispatchNotificationObserver()
 
         if self.interfaceController === interfaceController {
             interfaceController.delegate = nil
@@ -99,6 +102,88 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func stopRefreshTimer() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+    }
+
+    private func startDispatchNotificationObserver() {
+        stopDispatchNotificationObserver()
+
+        dispatchNotificationObserver = NotificationCenter.default.addObserver(
+            forName: .didReceiveDispatchNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let payload = notification.object as? DispatchNotificationPayload else {
+                return
+            }
+
+            self?.handleDispatchNotification(payload)
+        }
+    }
+
+    private func stopDispatchNotificationObserver() {
+        if let dispatchNotificationObserver {
+            NotificationCenter.default.removeObserver(dispatchNotificationObserver)
+            self.dispatchNotificationObserver = nil
+        }
+    }
+
+    private func handleDispatchNotification(_ payload: DispatchNotificationPayload) {
+        guard payload.type == .dispatch || payload.type == .dispatchCritical else {
+            return
+        }
+
+        let dispatch = makeActiveDispatch(from: payload)
+        let isNewDispatch = !knownActiveDispatchIds.contains(dispatch.id)
+
+        if isNewDispatch {
+            activeDispatches.insert(dispatch, at: 0)
+            knownActiveDispatchIds.insert(dispatch.id)
+            lastRefreshAt = Date()
+            lastErrorMessage = nil
+            updateVisibleScreenAfterDispatchChange()
+            presentNewDispatchAlert(dispatch)
+        }
+
+        refreshDispatches(updateVisibleScreen: true)
+    }
+
+    private func makeActiveDispatch(from payload: DispatchNotificationPayload) -> APIClient.ActiveDispatch {
+        APIClient.ActiveDispatch(
+            id: payload.id,
+            callType: payload.callType ?? payload.title,
+            address: payload.address ?? payload.body,
+            address2: nil,
+            placeName: nil,
+            city: nil,
+            state: nil,
+            latitude: nil,
+            longitude: nil,
+            message: payload.body,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: payload.units),
+            dispatchedAt: Date(),
+            lastActivityAt: Date(),
+            priority: payload.type == .dispatchCritical ? "CRITICAL" : nil,
+            isWorkingFire: payload.isWorkingFire,
+            status: "active",
+            isClosed: false
+        )
+    }
+
+    private func updateVisibleScreenAfterDispatchChange() {
+        switch currentScreen {
+        case .root:
+            interfaceController?.setRootTemplate(
+                makeRootTemplate(isLoading: isLoading),
+                animated: false,
+                completion: nil
+            )
+        case .active:
+            replaceTopTemplate(with: makeActiveDispatchesTemplate())
+        case .recent:
+            break
+        case .detail:
+            updateVisibleDetailAfterRefresh()
+        }
     }
 
     private func refreshDispatches(updateVisibleScreen: Bool) {

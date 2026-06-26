@@ -9,6 +9,7 @@ final class DashboardViewModel: ObservableObject {
     private var hasLoaded = false
     private var cachedVolunteerContext: APIClient.VolunteerContext?
     private var isLoadingDashboard = false
+    private var isRefreshingDispatchFeed = false
     private var pendingForceRefresh = false
     private var lastLoadedAt: Date?
     private let minimumRefreshInterval: TimeInterval = 60
@@ -44,6 +45,27 @@ final class DashboardViewModel: ObservableObject {
     func refreshAfterDispatchNotification(role: UserRole) {
         Task {
             await refreshActiveDispatchesAfterNotification(role: role)
+        }
+    }
+
+    func refreshDispatchFeed() async {
+        guard !isRefreshingDispatchFeed else { return }
+
+        isRefreshingDispatchFeed = true
+        defer {
+            isRefreshingDispatchFeed = false
+        }
+
+        do {
+            let dispatchHistory = try await APIClient.shared.fetchDispatchHistory(window: "24h")
+            activeDispatches = dispatchHistory.activeDispatches
+
+            logActiveDispatches(
+                sourceLabel: dispatchHistory.sourceLabel,
+                activeDispatches: dispatchHistory.activeDispatches
+            )
+        } catch {
+            print("Dispatch feed refresh failed: \(error.localizedDescription)")
         }
     }
 

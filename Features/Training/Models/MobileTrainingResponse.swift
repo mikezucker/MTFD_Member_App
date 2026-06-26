@@ -18,6 +18,7 @@ struct TrainingViewer: Codable, Equatable {
     let email: String
     let role: String
     let company: String?
+    let attributes: [String]?
 }
 
 struct TrainingCapabilities: Codable, Equatable {
@@ -183,13 +184,77 @@ struct CreateTrainingCourseRequest: Codable, Equatable {
     let allowMemberObjectiveSelfCheckoff: Bool
     let objectiveFeedbackToMessages: Bool
     let enableInstructorDashboard: Bool
+    let targetType: String?
     let targetRole: String?
+    let targetStation: String?
+    let targetUserId: String?
+    let targetUserIds: [String]?
+    let dueAt: Date?
+    let includeFutureUsers: Bool?
+    let modules: [CreateTrainingCourseModule]
+}
+
+struct CreateTrainingCourseModule: Codable, Equatable {
+    let title: String
+    let contentTypes: [String]
+    let practicalSkillCount: Int
+    let videoTitle: String?
+    let videoUrl: String?
+    let imageTitle: String?
+    let imageUrl: String?
+    let documentTitle: String?
+    let documentUrl: String?
+    let quizPrompt: String?
+    let practicalTitle: String?
+    let practicalInstructions: String?
+    let practicalScenarios: [TrainingDraftPracticalScenario]?
+}
+
+struct TrainingDraftPracticalScenario: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var title: String
+    var instructions: String
+
+    private enum CodingKeys: String, CodingKey {
+        case title
+        case instructions
+    }
 }
 
 struct CreateTrainingCourseResponse: Codable, Equatable {
     let success: Bool
     let message: String?
     let error: String?
+}
+
+struct UpdateTrainingCourseRequest: Codable, Equatable {
+    let title: String
+    let description: String?
+    let status: String
+    let trainingType: String
+    let allowMemberObjectiveSelfCheckoff: Bool
+    let objectiveFeedbackToMessages: Bool
+    let enableInstructorDashboard: Bool
+    let modules: [CreateTrainingCourseModule]
+}
+
+struct TrainingMutationResponse: Codable, Equatable {
+    let success: Bool
+    let message: String?
+    let error: String?
+}
+
+struct TrainingUploadResponse: Codable, Equatable {
+    let success: Bool
+    let file: TrainingUploadedFile?
+    let error: String?
+}
+
+struct TrainingUploadedFile: Codable, Equatable {
+    let filePath: String
+    let fileName: String
+    let mimeType: String
+    let sizeBytes: Int?
 }
 
 enum TrainingCourseType: String, CaseIterable, Identifiable {
@@ -234,17 +299,57 @@ enum TrainingCourseType: String, CaseIterable, Identifiable {
 struct AssignTrainingCourseRequest: Codable, Equatable {
     let targetType: String
     let targetRole: String?
+    let targetStation: String?
     let targetUserId: String?
     let targetUserIds: [String]?
     let dueAt: Date?
+    let includeFutureUsers: Bool?
 
     static func role(targetRole: String, dueAt: Date?) -> AssignTrainingCourseRequest {
         AssignTrainingCourseRequest(
             targetType: "ROLE",
             targetRole: targetRole,
+            targetStation: nil,
             targetUserId: nil,
             targetUserIds: nil,
-            dueAt: dueAt
+            dueAt: dueAt,
+            includeFutureUsers: nil
+        )
+    }
+
+    static func allUsers(dueAt: Date?, includeFutureUsers: Bool) -> AssignTrainingCourseRequest {
+        AssignTrainingCourseRequest(
+            targetType: "ALL_USERS",
+            targetRole: nil,
+            targetStation: nil,
+            targetUserId: nil,
+            targetUserIds: nil,
+            dueAt: dueAt,
+            includeFutureUsers: includeFutureUsers
+        )
+    }
+
+    static func station(station: String, dueAt: Date?) -> AssignTrainingCourseRequest {
+        AssignTrainingCourseRequest(
+            targetType: "STATION",
+            targetRole: nil,
+            targetStation: station,
+            targetUserId: nil,
+            targetUserIds: nil,
+            dueAt: dueAt,
+            includeFutureUsers: nil
+        )
+    }
+
+    static func users(userIds: [String], dueAt: Date?) -> AssignTrainingCourseRequest {
+        AssignTrainingCourseRequest(
+            targetType: userIds.count == 1 ? "USER" : "USERS",
+            targetRole: nil,
+            targetStation: nil,
+            targetUserId: userIds.count == 1 ? userIds.first : nil,
+            targetUserIds: userIds.count > 1 ? userIds : nil,
+            dueAt: dueAt,
+            includeFutureUsers: nil
         )
     }
 }

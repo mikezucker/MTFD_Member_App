@@ -4,7 +4,7 @@ struct StationMapper {
 
     static func displayName(from company: String?) -> String {
         guard let rawCompany = company?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawCompany.isEmpty else { return "Station" }
+              !rawCompany.isEmpty else { return "Department" }
 
         let company = rawCompany
             .uppercased()
@@ -20,7 +20,7 @@ struct StationMapper {
             return "Fire Headquarters"
         case "COLLINSVILLE":
             return "Station 2"
-        case "MT. KEMBLE", "MT KEMBLE":
+        case "MT.KEMBLE", "MTKEMBLE":
             return "Station 1"
         case "HILLSIDE":
             return "Station 3"
@@ -40,4 +40,3 @@ struct StationMapper {
 //
 //  Created by Michael Zucker on 5/3/26.
 //
-

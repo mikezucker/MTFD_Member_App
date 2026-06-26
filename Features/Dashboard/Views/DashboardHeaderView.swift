@@ -176,10 +176,15 @@ struct DashboardHeaderView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image("MTFDLogo")
+            Image("MTFDHeaderIcon")
                 .resizable()
-                .scaledToFit()
+                .scaledToFill()
                 .frame(width: 76, height: 76)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(.white.opacity(0.12), lineWidth: 1)
+                )
                 .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
 
             VStack(alignment: .leading, spacing: 4) {

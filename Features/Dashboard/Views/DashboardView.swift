@@ -69,7 +69,7 @@ struct DashboardView: View {
                                 activeDispatches: viewModel.activeDispatches,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 departmentStats: viewModel.state.dashboardDepartment,
-                                stationStats: viewModel.state.dashboardStation,
+                                stationStats: resolvedStationStats,
                                 chiefStationStats: viewModel.state.dashboardStations,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
@@ -92,7 +92,7 @@ struct DashboardView: View {
                             CareerOfficerDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
                                 departmentStats: viewModel.state.dashboardDepartment,
-                                stationStats: viewModel.state.dashboardStation,
+                                stationStats: resolvedStationStats,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
@@ -133,7 +133,7 @@ struct DashboardView: View {
                             VolunteerOfficerDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
                                 departmentStats: viewModel.state.dashboardDepartment,
-                                stationStats: viewModel.state.dashboardStation,
+                                stationStats: resolvedStationStats,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
@@ -174,7 +174,7 @@ struct DashboardView: View {
                             CareerMemberDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
                                 departmentStats: viewModel.state.dashboardDepartment,
-                                stationStats: viewModel.state.dashboardStation,
+                                stationStats: resolvedStationStats,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
@@ -215,7 +215,7 @@ struct DashboardView: View {
                             VolunteerMemberDashboardView(
                                 volunteerContext: viewModel.state.volunteerContext,
                                 stationDisplayName: stationDisplayName,
-                                stationStats: viewModel.state.dashboardStation,
+                                stationStats: resolvedStationStats,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 workOrdersMessage: viewModel.state.apparatusWorkOrdersMessage,
                                 assignedTrainingPreview: viewModel.state.assignedTrainingPreview,
@@ -258,6 +258,9 @@ struct DashboardView: View {
             }
             .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
                 syncLiveActivityWithDashboardActiveDispatches()
+            }
+            .task {
+                await activeDispatchRefreshLoop()
             }
             .onDisappear {
             }
@@ -353,6 +356,62 @@ struct DashboardView: View {
         StationMapper.displayName(from: session.currentUser?.company)
     }
 
+    private var resolvedStationStats: APIClient.DispatchBucket? {
+        if viewModel.state.dashboardStations == nil {
+            return viewModel.state.dashboardStation
+        }
+
+        let candidates = [
+            stationDisplayName,
+            viewModel.state.volunteerContext?.station,
+            viewModel.state.volunteerContext?.company,
+            session.currentUser?.company
+        ]
+        .compactMap { $0 }
+
+        for candidate in candidates {
+            if let bucket = stationStatsBucket(for: candidate) {
+                return bucket
+            }
+        }
+
+        return viewModel.state.dashboardStation
+    }
+
+    private func stationStatsBucket(for stationName: String) -> APIClient.DispatchBucket? {
+        let normalized = stationName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+
+        let displayName = StationMapper.displayName(from: stationName).uppercased()
+        let combined = "\(normalized) \(displayName)"
+        let stations = viewModel.state.dashboardStations
+
+        if combined.contains("STATION 1") || combined.contains("MT KEMBLE") || combined.contains("MT. KEMBLE") {
+            return stations?.station1
+        }
+
+        if combined.contains("STATION 2") || combined.contains("COLLINSVILLE") {
+            return stations?.station2
+        }
+
+        if combined.contains("STATION 3") || combined.contains("HILLSIDE") {
+            return stations?.station3
+        }
+
+        if combined.contains("STATION 4") || combined.contains("FAIRCHILD") {
+            return stations?.station4
+        }
+
+        if combined.contains("STATION 5") || combined.contains("WOODLAND") {
+            return stations?.station5
+        }
+
+        return nil
+    }
+
     private var hasNewMessage: Bool {
         false
     }
@@ -422,6 +481,18 @@ struct DashboardView: View {
     private func scheduleLiveActivitySync() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
             syncLiveActivityWithDashboardActiveDispatches()
+        }
+    }
+
+    private func activeDispatchRefreshLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await viewModel.refreshDispatchFeed()
         }
     }
 

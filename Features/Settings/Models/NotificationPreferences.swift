@@ -60,6 +60,13 @@ enum CriticalDispatchAlertMode: String, Codable, CaseIterable, Identifiable {
 enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
     case systemDefault = "SYSTEM_DEFAULT"
     case silent = "SILENT"
+    case airHornBlast = "air-horn-blast.caf"
+    case airRaidSiren = "air-raid-siren.caf"
+    case escapeSiren = "escape-siren.caf"
+    case leroy = "leroy.caf"
+    case quickSiren = "quick-siren.caf"
+    case smokeAlarm = "smoke-alarm.caf"
+    case truckBacking = "truck-backing.caf"
 
     var id: String { rawValue }
 
@@ -69,6 +76,20 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
             return "Default System Sound"
         case .silent:
             return "Silent"
+        case .airHornBlast:
+            return "Air Horn Blast"
+        case .airRaidSiren:
+            return "Air Raid Siren"
+        case .escapeSiren:
+            return "Escape Siren"
+        case .leroy:
+            return "Leroy"
+        case .quickSiren:
+            return "Quick Siren"
+        case .smokeAlarm:
+            return "Smoke Alarm"
+        case .truckBacking:
+            return "Truck Backing"
         }
     }
 
@@ -78,6 +99,47 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
             return "Uses the normal iOS notification sound for dispatch alerts."
         case .silent:
             return "Dispatch alerts appear visually without a notification sound."
+        case .airHornBlast,
+             .airRaidSiren,
+             .escapeSiren,
+             .leroy,
+             .quickSiren,
+             .smokeAlarm,
+             .truckBacking:
+            return "Uses \(title) for dispatch alert notifications."
+        }
+    }
+
+    var apnsSoundName: String? {
+        switch self {
+        case .systemDefault:
+            return "default"
+        case .silent:
+            return nil
+        case .airHornBlast,
+             .airRaidSiren,
+             .escapeSiren,
+             .leroy,
+             .quickSiren,
+             .smokeAlarm,
+             .truckBacking:
+            return rawValue
+        }
+    }
+
+    var previewSoundName: String? {
+        switch self {
+        case .systemDefault,
+             .silent:
+            return nil
+        case .airHornBlast,
+             .airRaidSiren,
+             .escapeSiren,
+             .leroy,
+             .quickSiren,
+             .smokeAlarm,
+             .truckBacking:
+            return rawValue
         }
     }
 }

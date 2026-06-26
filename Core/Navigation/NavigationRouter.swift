@@ -63,4 +63,12 @@ final class NavigationRouter: ObservableObject {
     func clearMessageRoute() {
         messageToOpen = nil
     }
+
+    func resetToHome() {
+        selectedTab = .home
+        clearDispatchRoute()
+        clearTrainingRoute()
+        clearDocumentRoute()
+        clearMessageRoute()
+    }
 }

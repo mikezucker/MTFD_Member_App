@@ -131,6 +131,9 @@ struct MessageCenterView: View {
         .task {
             await viewModel.loadMessagesIfNeeded()
         }
+        .task {
+            await activeDispatchRefreshLoop()
+        }
         .refreshable {
             await viewModel.refresh()
         }
@@ -387,6 +390,18 @@ struct MessageCenterView: View {
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, minHeight: 260)
+    }
+
+    private func activeDispatchRefreshLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await viewModel.refreshActiveDispatches()
+        }
     }
 
     private func makeDispatchPayload(
