@@ -1223,48 +1223,6 @@ private extension TrainingDraftModule {
     }
 }
 
-private struct TrainingStandardVideo: Identifiable, Equatable {
-    let id: String
-    let title: String
-    let url: String
-    let category: String
-}
-
-private enum TrainingVideoSource: String, CaseIterable, Identifiable {
-    case library
-    case custom
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .library: return "Library"
-        case .custom: return "New Video"
-        }
-    }
-}
-
-private let trainingStandardVideos: [TrainingStandardVideo] = [
-    TrainingStandardVideo(
-        id: "nfpa-fire-extinguisher",
-        title: "Portable Fire Extinguishers",
-        url: "https://www.youtube.com/results?search_query=portable+fire+extinguisher+training",
-        category: "Fireground"
-    ),
-    TrainingStandardVideo(
-        id: "scba-basics",
-        title: "SCBA Basics",
-        url: "https://www.youtube.com/results?search_query=firefighter+SCBA+basics+training",
-        category: "Operations"
-    ),
-    TrainingStandardVideo(
-        id: "mayday-radio",
-        title: "Mayday Radio Procedure",
-        url: "https://www.youtube.com/results?search_query=firefighter+mayday+radio+procedure+training",
-        category: "Safety"
-    )
-]
-
 private enum TrainingDraftContentType: String, CaseIterable, Identifiable, Hashable {
     case video
     case image
@@ -1332,8 +1290,7 @@ private enum TrainingDraftContentType: String, CaseIterable, Identifiable, Hasha
 
 private struct TrainingDraftModuleCard: View {
     @Binding var module: TrainingDraftModule
-    @State private var videoSource: TrainingVideoSource = .library
-    @State private var selectedLibraryVideoId = trainingStandardVideos.first?.id ?? ""
+    let moduleNumber: Int
     @State private var selectedVideoItem: PhotosPickerItem?
     @State private var selectedImageItem: PhotosPickerItem?
     @State private var isDocumentImporterPresented = false
@@ -1351,10 +1308,17 @@ private struct TrainingDraftModuleCard: View {
                     .frame(width: 24)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    TextField("Module title", text: $module.title)
-                        .textInputAutocapitalization(.words)
-                        .font(.headline)
-                        .foregroundStyle(.white)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("Module \(moduleNumber):")
+                            .font(.headline.bold())
+                            .foregroundStyle(AppTheme.gold)
+                            .fixedSize()
+
+                        TextField("Module name", text: $module.title)
+                            .textInputAutocapitalization(.words)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                    }
 
                     contentTypeSummary
                 }
@@ -1421,7 +1385,6 @@ private struct TrainingDraftModuleCard: View {
                 ) { file in
                     module.videoTitle = module.videoTitle.isEmpty ? file.fileName : module.videoTitle
                     module.videoUrl = file.filePath
-                    videoSource = .custom
                 }
                 selectedVideoItem = nil
             }
@@ -1492,50 +1455,19 @@ private struct TrainingDraftModuleCard: View {
     private var contentFields: some View {
         if module.contentTypes.contains(.video) {
             VStack(alignment: .leading, spacing: 10) {
-                Picker("Video Source", selection: $videoSource) {
-                    ForEach(TrainingVideoSource.allCases) { source in
-                        Text(source.title).tag(source)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: videoSource) { _, newValue in
-                    if newValue == .library {
-                        applySelectedLibraryVideo()
-                    }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Video Lesson")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+
+                    Text("Add a title and video link, or upload a video from this device.")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.62))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if videoSource == .library {
-                    Picker("Standard Video", selection: $selectedLibraryVideoId) {
-                        ForEach(trainingStandardVideos) { video in
-                            Text("\(video.category): \(video.title)").tag(video.id)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(.white)
-                    .onChange(of: selectedLibraryVideoId) { _, _ in
-                        applySelectedLibraryVideo()
-                    }
-
-                    if let selectedVideo {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(selectedVideo.title)
-                                .font(.caption.bold())
-                                .foregroundStyle(.white)
-
-                            Text(selectedVideo.url)
-                                .font(.caption2)
-                                .foregroundStyle(.white.opacity(0.62))
-                                .lineLimit(2)
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                } else {
-                    contentTextField("Video title", text: $module.videoTitle)
-                    contentTextField("Video URL", text: $module.videoUrl, keyboard: .URL)
-                }
+                contentTextField("Video title", text: $module.videoTitle)
+                contentTextField("Video URL", text: $module.videoUrl, keyboard: .URL)
 
                 PhotosPicker(selection: $selectedVideoItem, matching: .videos) {
                     Label("Upload Video From Device", systemImage: "video.badge.plus")
@@ -1544,13 +1476,6 @@ private struct TrainingDraftModuleCard: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isUploading)
-            }
-            .onAppear {
-                if module.videoTitle.isEmpty, module.videoUrl.isEmpty {
-                    applySelectedLibraryVideo()
-                } else if !trainingStandardVideos.contains(where: { $0.url == module.videoUrl }) {
-                    videoSource = .custom
-                }
             }
         }
 
@@ -1684,16 +1609,6 @@ private struct TrainingDraftModuleCard: View {
             .background(Color.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .foregroundStyle(.white)
-    }
-
-    private var selectedVideo: TrainingStandardVideo? {
-        trainingStandardVideos.first { $0.id == selectedLibraryVideoId }
-    }
-
-    private func applySelectedLibraryVideo() {
-        guard let selectedVideo else { return }
-        module.videoTitle = selectedVideo.title
-        module.videoUrl = selectedVideo.url
     }
 
     private func toggle(_ type: TrainingDraftContentType) {
@@ -2088,7 +2003,7 @@ private struct CreateTrainingToolView: View {
     @State private var includeDueDate = false
     @State private var dueDate = Calendar.current.date(byAdding: .day, value: 30, to: Date()) ?? Date()
     @State private var modules: [TrainingDraftModule] = [
-        TrainingDraftModule(title: "Module 1", contentTypes: [.video, .image, .quiz], practicalSkillCount: 1)
+        TrainingDraftModule(title: "", contentTypes: [.video, .image, .quiz], practicalSkillCount: 1)
     ]
 
     @State private var isSubmitting = false
@@ -2255,7 +2170,10 @@ private struct CreateTrainingToolView: View {
 
             ForEach($modules) { $module in
                 VStack(alignment: .leading, spacing: 8) {
-                    TrainingDraftModuleCard(module: $module)
+                    TrainingDraftModuleCard(
+                        module: $module,
+                        moduleNumber: moduleNumber(for: module.id)
+                    )
 
                     Button(role: .destructive) {
                         modules.removeAll { $0.id == module.id }
@@ -2273,7 +2191,7 @@ private struct CreateTrainingToolView: View {
             Button {
                 modules.append(
                     TrainingDraftModule(
-                        title: "Module \(modules.count + 1)",
+                        title: "",
                         contentTypes: [.video],
                         practicalSkillCount: 0
                     )
@@ -2286,6 +2204,15 @@ private struct CreateTrainingToolView: View {
             .buttonStyle(.plain)
         }
         .trainingConsoleCard()
+    }
+
+    private func moduleNumber(for id: UUID) -> Int {
+        (modules.firstIndex { $0.id == id } ?? 0) + 1
+    }
+
+    private func moduleTitle(_ module: TrainingDraftModule, fallbackNumber: Int) -> String {
+        let title = module.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Module \(fallbackNumber)" : title
     }
 
     private var initialAssignmentCard: some View {
@@ -2463,9 +2390,9 @@ private struct CreateTrainingToolView: View {
             targetUserIds: assignOnCreate ? assignmentRequest.targetUserIds : nil,
             dueAt: assignOnCreate ? assignmentRequest.dueAt : nil,
             includeFutureUsers: assignOnCreate ? assignmentRequest.includeFutureUsers : nil,
-            modules: modules.map { module in
+            modules: modules.enumerated().map { index, module in
                 CreateTrainingCourseModule(
-                    title: module.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                    title: moduleTitle(module, fallbackNumber: index + 1),
                     contentTypes: module.contentTypes.map(\.rawValue).sorted(),
                     practicalSkillCount: module.practicalSkillCount,
                     videoTitle: module.trimmedOrNil(\.videoTitle),
@@ -2504,7 +2431,7 @@ private struct CreateTrainingToolView: View {
                 includeFutureUsers = true
                 includeDueDate = false
                 modules = [
-                    TrainingDraftModule(title: "Module 1", contentTypes: [.video, .image, .quiz], practicalSkillCount: 1)
+                    TrainingDraftModule(title: "", contentTypes: [.video, .image, .quiz], practicalSkillCount: 1)
                 ]
             } else {
                 errorMessage = response.error ?? "Unable to create training."
@@ -3091,7 +3018,7 @@ private struct TrainingCourseManageEditView: View {
                 Button {
                     modules.append(
                         TrainingDraftModule(
-                            title: "Module \(modules.count + 1)",
+                            title: "",
                             contentTypes: [.video],
                             practicalSkillCount: 0
                         )
@@ -3106,7 +3033,10 @@ private struct TrainingCourseManageEditView: View {
 
             ForEach($modules) { $module in
                 VStack(alignment: .leading, spacing: 8) {
-                    TrainingDraftModuleCard(module: $module)
+                    TrainingDraftModuleCard(
+                        module: $module,
+                        moduleNumber: moduleNumber(for: module.id)
+                    )
 
                     Button(role: .destructive) {
                         modulePendingDeletion = module.id
@@ -3143,6 +3073,15 @@ private struct TrainingCourseManageEditView: View {
         } message: {
             Text("This removes the module and its content from the draft. Changes are applied when you save.")
         }
+    }
+
+    private func moduleNumber(for id: UUID) -> Int {
+        (modules.firstIndex { $0.id == id } ?? 0) + 1
+    }
+
+    private func moduleTitle(_ module: TrainingDraftModule, fallbackNumber: Int) -> String {
+        let title = module.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Module \(fallbackNumber)" : title
     }
 
     private var assignedUsersCard: some View {
@@ -3288,7 +3227,7 @@ private struct TrainingCourseManageEditView: View {
 
             if modules.isEmpty {
                 modules = [
-                    TrainingDraftModule(title: "Module 1", contentTypes: [.video], practicalSkillCount: 0)
+                    TrainingDraftModule(title: "", contentTypes: [.video], practicalSkillCount: 0)
                 ]
             }
         } catch {
@@ -3313,9 +3252,9 @@ private struct TrainingCourseManageEditView: View {
             allowMemberObjectiveSelfCheckoff: allowMemberObjectiveSelfCheckoff,
             objectiveFeedbackToMessages: objectiveFeedbackToMessages,
             enableInstructorDashboard: enableInstructorDashboard,
-            modules: modules.map { module in
+            modules: modules.enumerated().map { index, module in
                 CreateTrainingCourseModule(
-                    title: module.title.trimmingCharacters(in: .whitespacesAndNewlines),
+                    title: moduleTitle(module, fallbackNumber: index + 1),
                     contentTypes: module.contentTypes.map(\.rawValue).sorted(),
                     practicalSkillCount: module.practicalSkillCount,
                     videoTitle: module.trimmedOrNil(\.videoTitle),
