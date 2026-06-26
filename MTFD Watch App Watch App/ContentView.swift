@@ -19,6 +19,21 @@ struct WatchDispatch: Identifiable, Codable {
 
 private struct WatchDispatchFeedResponse: Decodable {
     let activeDispatches: [WatchActiveDispatch]
+    let historicalDispatches: [WatchActiveDispatch]?
+}
+
+private struct WatchSnapshotResponse: Decodable {
+    let success: Bool?
+    let fetchedAt: Date?
+    let message: String?
+    let dispatches: WatchSnapshotDispatches?
+    let schedule: WatchScheduleResponse?
+    let workOrders: WatchWorkOrdersResponse?
+}
+
+private struct WatchSnapshotDispatches: Decodable {
+    let activeDispatches: [WatchActiveDispatch]
+    let historicalDispatches: [WatchActiveDispatch]?
 }
 
 private struct WatchActiveDispatch: Decodable {
@@ -35,14 +50,53 @@ private struct WatchActiveDispatch: Decodable {
     let lastActivityAt: Date?
 }
 
+private struct WatchScheduleEntry: Identifiable, Codable {
+    let id: String
+    let title: String
+    let station: String?
+    let timeRange: String?
+    let staffing: [String]
+    let staffingDetails: [WatchScheduleStaffingDetail]?
+}
+
+private struct WatchScheduleStaffingDetail: Codable {
+    let name: String?
+    let qualifier: String?
+    let isVacant: Bool?
+}
+
+private struct WatchScheduleResponse: Decodable {
+    let ok: Bool?
+    let message: String?
+    let date: String?
+    let entries: [WatchScheduleEntry]
+}
+
+private struct WatchWorkOrder: Identifiable, Codable {
+    let id: String
+    let apparatusApiId: String?
+    let apparatusName: String
+    let title: String
+    let status: String?
+}
+
+private struct WatchWorkOrdersResponse: Decodable {
+    let ok: Bool?
+    let message: String?
+    let items: [WatchWorkOrder]
+}
+
 @MainActor
 private final class WatchDispatchViewModel: ObservableObject {
-    @Published var dispatches: [WatchDispatch] = []
+    @Published var activeDispatches: [WatchDispatch] = []
+    @Published var recentDispatches: [WatchDispatch] = []
+    @Published var scheduleEntries: [WatchScheduleEntry] = []
+    @Published var workOrders: [WatchWorkOrder] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var lastLoadedAt: Date?
 
-    private let feedURL = URL(string: "https://new-mtfd-site.vercel.app/api/shared/active-dispatches")!
+    private let feedURL = URL(string: "https://new-mtfd-site.vercel.app/api/shared/watch-snapshot")!
     private let cacheKey = "watch_active_dispatch_cache_v1"
 
     init() {
@@ -66,9 +120,19 @@ private final class WatchDispatchViewModel: ObservableObject {
                 throw URLError(.badServerResponse)
             }
 
-            let decoded = try Self.decoder.decode(WatchDispatchFeedResponse.self, from: data)
-            dispatches = decoded.activeDispatches.map(Self.mapDispatch)
-            lastLoadedAt = Date()
+            let decoded = try Self.decoder.decode(WatchSnapshotResponse.self, from: data)
+            let dispatches = decoded.dispatches
+            let active = (dispatches?.activeDispatches ?? []).map(Self.mapDispatch)
+            let activeIds = Set(active.map(\.id))
+            let recent = (dispatches?.historicalDispatches ?? [])
+                .map(Self.mapDispatch)
+                .filter { !activeIds.contains($0.id) }
+
+            activeDispatches = active
+            recentDispatches = Array(recent.prefix(20))
+            scheduleEntries = Array((decoded.schedule?.entries ?? []).prefix(20))
+            workOrders = Array((decoded.workOrders?.items ?? []).prefix(30))
+            lastLoadedAt = decoded.fetchedAt ?? Date()
             cacheDispatches()
         } catch {
             errorMessage = error.localizedDescription
@@ -84,7 +148,10 @@ private final class WatchDispatchViewModel: ObservableObject {
 
         do {
             let cached = try JSONDecoder().decode(WatchDispatchCache.self, from: data)
-            dispatches = cached.dispatches
+            activeDispatches = cached.activeDispatches ?? cached.dispatches ?? []
+            recentDispatches = cached.recentDispatches ?? []
+            scheduleEntries = cached.scheduleEntries ?? []
+            workOrders = cached.workOrders ?? []
             lastLoadedAt = cached.lastLoadedAt
         } catch {
             UserDefaults.standard.removeObject(forKey: cacheKey)
@@ -95,7 +162,11 @@ private final class WatchDispatchViewModel: ObservableObject {
         do {
             let data = try JSONEncoder().encode(
                 WatchDispatchCache(
-                    dispatches: dispatches,
+                    dispatches: nil,
+                    activeDispatches: activeDispatches,
+                    recentDispatches: recentDispatches,
+                    scheduleEntries: scheduleEntries,
+                    workOrders: workOrders,
                     lastLoadedAt: lastLoadedAt
                 )
             )
@@ -229,7 +300,11 @@ private final class WatchDispatchViewModel: ObservableObject {
 }
 
 private struct WatchDispatchCache: Codable {
-    let dispatches: [WatchDispatch]
+    let dispatches: [WatchDispatch]?
+    let activeDispatches: [WatchDispatch]?
+    let recentDispatches: [WatchDispatch]?
+    let scheduleEntries: [WatchScheduleEntry]?
+    let workOrders: [WatchWorkOrder]?
     let lastLoadedAt: Date?
 }
 
@@ -239,6 +314,11 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             List {
+                WatchHomeHeader(
+                    activeCount: viewModel.activeDispatches.count,
+                    workOrderCount: viewModel.workOrders.count
+                )
+
                 NavigationLink {
                     WatchActiveCallsView(viewModel: viewModel)
                 } label: {
@@ -246,27 +326,29 @@ struct ContentView: View {
                         title: "Active Calls",
                         subtitle: activeDispatchCountText,
                         systemImage: "dot.radiowaves.left.and.right",
-                        color: viewModel.dispatches.isEmpty ? .green : .orange
+                        color: viewModel.activeDispatches.isEmpty ? .green : .orange
                     )
                 }
 
                 NavigationLink {
-                    WatchPlaceholderListView(
-                        title: "Past Calls",
-                        systemImage: "clock.arrow.circlepath",
-                        message: "Recent call history will sync here when the shared history endpoint is available to the Watch app."
-                    )
+                    WatchRecentCallsView(viewModel: viewModel)
                 } label: {
                     WatchMenuRow(
                         title: "Past Calls",
-                        subtitle: "Recent history",
+                        subtitle: recentDispatchCountText,
                         systemImage: "clock.arrow.circlepath",
                         color: .blue
                     )
                 }
 
                 NavigationLink {
-                    WatchStatsView(activeCount: viewModel.dispatches.count, lastLoadedAt: viewModel.lastLoadedAt)
+                    WatchStatsView(
+                        activeCount: viewModel.activeDispatches.count,
+                        recentCount: viewModel.recentDispatches.count,
+                        scheduleCount: viewModel.scheduleEntries.count,
+                        workOrderCount: viewModel.workOrders.count,
+                        lastLoadedAt: viewModel.lastLoadedAt
+                    )
                 } label: {
                     WatchMenuRow(
                         title: "Stats",
@@ -277,15 +359,22 @@ struct ContentView: View {
                 }
 
                 NavigationLink {
-                    WatchPlaceholderListView(
-                        title: "Work Orders",
-                        systemImage: "wrench.and.screwdriver.fill",
-                        message: "Work orders should mirror phone permissions, filters, and status rules once the Watch API is connected."
+                    WatchScheduleView(viewModel: viewModel)
+                } label: {
+                    WatchMenuRow(
+                        title: "Schedule",
+                        subtitle: scheduleCountText,
+                        systemImage: "calendar",
+                        color: .cyan
                     )
+                }
+
+                NavigationLink {
+                    WatchWorkOrdersView(viewModel: viewModel)
                 } label: {
                     WatchMenuRow(
                         title: "Work Orders",
-                        subtitle: "Phone rules",
+                        subtitle: workOrderCountText,
                         systemImage: "wrench.and.screwdriver.fill",
                         color: .yellow
                     )
@@ -304,7 +393,7 @@ struct ContentView: View {
                 }
             }
             .listStyle(.carousel)
-            .navigationTitle("MTFD")
+            .navigationTitle("")
             .task {
                 await viewModel.loadDispatches()
             }
@@ -315,8 +404,84 @@ struct ContentView: View {
     }
 
     private var activeDispatchCountText: String {
-        let count = viewModel.dispatches.count
+        let count = viewModel.activeDispatches.count
         return count == 1 ? "1 active dispatch" : "\(count) active dispatches"
+    }
+
+    private var recentDispatchCountText: String {
+        let count = viewModel.recentDispatches.count
+        return count == 1 ? "1 recent dispatch" : "\(count) recent dispatches"
+    }
+
+    private var scheduleCountText: String {
+        let count = viewModel.scheduleEntries.count
+        return count == 1 ? "1 schedule item" : "\(count) schedule items"
+    }
+
+    private var workOrderCountText: String {
+        let count = viewModel.workOrders.count
+        return count == 1 ? "1 open item" : "\(count) open items"
+    }
+}
+
+private struct WatchHomeHeader: View {
+    let activeCount: Int
+    let workOrderCount: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image("AppIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 38, height: 38)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("MTFD")
+                        .font(.headline.weight(.black))
+
+                    Text("Member Watch")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack(spacing: 6) {
+                WatchStatusChip(
+                    value: "\(activeCount)",
+                    label: "Active",
+                    color: activeCount > 0 ? .orange : .green
+                )
+
+                WatchStatusChip(
+                    value: "\(workOrderCount)",
+                    label: "Work",
+                    color: workOrderCount > 0 ? .yellow : .green
+                )
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct WatchStatusChip: View {
+    let value: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(value)
+                .font(.caption.weight(.black))
+
+            Text(label)
+                .font(.caption2.weight(.semibold))
+        }
+        .foregroundStyle(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(color.opacity(0.16), in: Capsule())
     }
 }
 
@@ -325,13 +490,13 @@ private struct WatchActiveCallsView: View {
 
     var body: some View {
         Group {
-            if viewModel.isLoading && viewModel.dispatches.isEmpty {
+            if viewModel.isLoading && viewModel.activeDispatches.isEmpty {
                 loadingView
-            } else if viewModel.dispatches.isEmpty {
+            } else if viewModel.activeDispatches.isEmpty {
                 noDispatchesView
             } else {
-                List(viewModel.dispatches) { dispatch in
-                    if dispatch.id == viewModel.dispatches.first?.id {
+                List(viewModel.activeDispatches) { dispatch in
+                    if dispatch.id == viewModel.activeDispatches.first?.id {
                         feedStatusRow
                     }
 
@@ -393,7 +558,7 @@ private struct WatchActiveCallsView: View {
     }
 
     private var activeDispatchCountText: String {
-        let count = viewModel.dispatches.count
+        let count = viewModel.activeDispatches.count
         return count == 1 ? "1 active dispatch" : "\(count) active dispatches"
     }
 
@@ -447,29 +612,39 @@ private struct WatchMenuRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: systemImage)
+                .font(.headline.weight(.bold))
                 .foregroundStyle(color)
-                .frame(width: 24)
+                .frame(width: 30, height: 30)
+                .background(color.opacity(0.16), in: Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.headline)
+                    .font(.headline.weight(.bold))
 
                 Text(subtitle)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 5)
     }
 }
 
 private struct WatchStatsView: View {
     let activeCount: Int
+    let recentCount: Int
+    let scheduleCount: Int
+    let workOrderCount: Int
     let lastLoadedAt: Date?
 
     var body: some View {
         List {
             Label("\(activeCount) active", systemImage: "dot.radiowaves.left.and.right")
+            Label("\(recentCount) recent", systemImage: "clock.arrow.circlepath")
+            Label("\(scheduleCount) schedule", systemImage: "calendar")
+            Label("\(workOrderCount) work orders", systemImage: "wrench.and.screwdriver.fill")
 
             if let lastLoadedAt {
                 Label("Updated \(lastLoadedAt, style: .relative) ago", systemImage: "clock")
@@ -478,6 +653,75 @@ private struct WatchStatsView: View {
             }
         }
         .navigationTitle("Stats")
+    }
+}
+
+private struct WatchRecentCallsView: View {
+    @ObservedObject var viewModel: WatchDispatchViewModel
+
+    var body: some View {
+        Group {
+            if viewModel.isLoading && viewModel.recentDispatches.isEmpty {
+                loadingView
+            } else if viewModel.recentDispatches.isEmpty {
+                noRecentDispatchesView
+            } else {
+                List(viewModel.recentDispatches) { dispatch in
+                    NavigationLink {
+                        WatchDispatchDetailView(dispatch: dispatch, isRecent: true)
+                    } label: {
+                        WatchDispatchRow(dispatch: dispatch)
+                    }
+                }
+                .listStyle(.carousel)
+            }
+        }
+        .navigationTitle("Past Calls")
+        .refreshable {
+            await viewModel.loadDispatches()
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+
+            Text("Loading History")
+                .font(.headline)
+
+            Text("Checking recent dispatches.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    private var noRecentDispatchesView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+
+            Text("No Recent Calls")
+                .font(.headline)
+
+            Text("Recent dispatch history will appear here after the feed syncs.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                Task {
+                    await viewModel.loadDispatches()
+                }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isLoading)
+        }
+        .padding()
     }
 }
 
@@ -502,6 +746,226 @@ private struct WatchPlaceholderListView: View {
         }
         .padding()
         .navigationTitle(title)
+    }
+}
+
+private struct WatchScheduleView: View {
+    @ObservedObject var viewModel: WatchDispatchViewModel
+
+    var body: some View {
+        Group {
+            if viewModel.isLoading && viewModel.scheduleEntries.isEmpty {
+                loadingView
+            } else if viewModel.scheduleEntries.isEmpty {
+                noScheduleView
+            } else {
+                List(viewModel.scheduleEntries) { entry in
+                    WatchScheduleRow(entry: entry)
+                }
+                .listStyle(.carousel)
+            }
+        }
+        .navigationTitle("Schedule")
+        .refreshable {
+            await viewModel.loadDispatches()
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+
+            Text("Loading Schedule")
+                .font(.headline)
+
+            Text("Checking today’s staffing.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    private var noScheduleView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+
+            Text("No Schedule Data")
+                .font(.headline)
+
+            Text("Today’s schedule will appear here when FirstDue syncs.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                Task {
+                    await viewModel.loadDispatches()
+                }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isLoading)
+        }
+        .padding()
+    }
+}
+
+private struct WatchScheduleRow: View {
+    let entry: WatchScheduleEntry
+
+    private var staffedCount: Int {
+        entry.staffingDetails?.filter { $0.isVacant != true }.count ?? entry.staffing.filter {
+            !$0.localizedCaseInsensitiveContains("vacant")
+        }.count
+    }
+
+    private var vacancyCount: Int {
+        entry.staffingDetails?.filter { $0.isVacant == true }.count ?? entry.staffing.filter {
+            $0.localizedCaseInsensitiveContains("vacant")
+        }.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: vacancyCount > 0 ? "person.crop.circle.badge.exclamationmark" : "person.2.fill")
+                    .foregroundStyle(vacancyCount > 0 ? .orange : .green)
+
+                Text(entry.station ?? "MTFD")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+
+            Text(entry.title)
+                .font(.headline.weight(.bold))
+                .lineLimit(2)
+
+            if let timeRange = entry.timeRange, !timeRange.isEmpty {
+                Text(timeRange)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Text("\(staffedCount) staffed • \(vacancyCount) vacant")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(vacancyCount > 0 ? .orange : .green)
+                .lineLimit(1)
+
+            let visibleStaffing = entry.staffing.prefix(3)
+            if !visibleStaffing.isEmpty {
+                Text(visibleStaffing.joined(separator: "\n"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct WatchWorkOrdersView: View {
+    @ObservedObject var viewModel: WatchDispatchViewModel
+
+    var body: some View {
+        Group {
+            if viewModel.isLoading && viewModel.workOrders.isEmpty {
+                loadingView
+            } else if viewModel.workOrders.isEmpty {
+                noWorkOrdersView
+            } else {
+                List(viewModel.workOrders) { workOrder in
+                    WatchWorkOrderRow(workOrder: workOrder)
+                }
+                .listStyle(.carousel)
+            }
+        }
+        .navigationTitle("Work Orders")
+        .refreshable {
+            await viewModel.loadDispatches()
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 10) {
+            ProgressView()
+
+            Text("Loading Work Orders")
+                .font(.headline)
+
+            Text("Checking apparatus readiness.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    private var noWorkOrdersView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
+
+            Text("No Open Work Orders")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+
+            Text("Apparatus work orders will appear here when FirstDue reports open items.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button {
+                Task {
+                    await viewModel.loadDispatches()
+                }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .disabled(viewModel.isLoading)
+        }
+        .padding()
+    }
+}
+
+private struct WatchWorkOrderRow: View {
+    let workOrder: WatchWorkOrder
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "wrench.and.screwdriver.fill")
+                    .foregroundStyle(.yellow)
+
+                Text(workOrder.apparatusName)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(.yellow)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+
+            Text(workOrder.title)
+                .font(.headline.weight(.bold))
+                .lineLimit(3)
+
+            if let status = workOrder.status, !status.isEmpty {
+                Text(status)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.vertical, 4)
     }
 }
 
@@ -552,6 +1016,7 @@ private struct WatchDispatchRow: View {
 
 private struct WatchDispatchDetailView: View {
     let dispatch: WatchDispatch
+    var isRecent = false
 
     private var accentColor: Color {
         dispatch.isCritical ? .red : .orange
@@ -569,7 +1034,7 @@ private struct WatchDispatchDetailView: View {
                     Image(systemName: dispatch.isCritical ? "exclamationmark.triangle.fill" : "flame.fill")
                         .foregroundStyle(accentColor)
 
-                    Text(dispatch.isCritical ? "Critical Dispatch" : "Active Dispatch")
+                    Text(isRecent ? "Past Dispatch" : dispatch.isCritical ? "Critical Dispatch" : "Active Dispatch")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(accentColor)
                 }
