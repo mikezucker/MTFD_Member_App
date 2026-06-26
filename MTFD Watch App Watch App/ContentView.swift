@@ -431,7 +431,7 @@ private struct WatchHomeHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                Image("AppIcon")
+                Image("MTFDWatchLogo")
                     .resizable()
                     .scaledToFit()
                     .frame(width: 38, height: 38)
