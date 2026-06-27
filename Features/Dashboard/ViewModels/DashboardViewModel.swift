@@ -453,9 +453,11 @@ final class DashboardViewModel: ObservableObject {
                 title: item.title,
                 subtitle: item.subtitle,
                 actionLabel: item.actionLabel ?? "Open",
-                destination: normalized.contains("training")
-                    ? .trainingAssigned
-                    : .messageCenter
+                destination: normalized.contains("document")
+                    ? .documents
+                    : normalized.contains("training")
+                        ? .trainingAssigned
+                        : .messageCenter
             )
         }
     }

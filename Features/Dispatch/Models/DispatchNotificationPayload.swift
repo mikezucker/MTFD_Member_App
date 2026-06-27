@@ -14,6 +14,10 @@ enum AppNotificationType: String {
 
     init(rawValueSafe value: String?) {
         let normalized = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "document" {
+            self = .documentAssignment
+            return
+        }
         self = AppNotificationType(rawValue: normalized) ?? .unknown
     }
 }

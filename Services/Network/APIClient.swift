@@ -668,6 +668,63 @@ final class APIClient {
         }
     }
 
+    // MARK: - Documents
+
+    func fetchDocuments() async throws -> MobileDocumentsResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/documents",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileDocumentsResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func downloadDocumentVersion(versionId: String) async throws -> Data {
+        let request = try makeRequest(
+            path: "/api/mobile/documents/version/\(versionId)/file",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            return try await performRequest(request)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func acknowledgeDocumentVersion(versionId: String, password: String) async throws -> MobileDocumentAcknowledgementResponse {
+        let payload = MobileDocumentAcknowledgementRequest(password: password)
+        let body = try encode(payload)
+        let request = try makeRequest(
+            path: "/api/mobile/documents/version/\(versionId)/acknowledge",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileDocumentAcknowledgementResponse.self, from: data)
+        } catch APIError.unauthorized {
+            throw APIError.serverError(statusCode: 401, message: "Incorrect password.")
+        } catch {
+            throw error
+        }
+    }
+
     // MARK: - Announcements
 
     func fetchAnnouncements() async throws -> AnnouncementsResponse {
@@ -1253,6 +1310,51 @@ extension APIClient {
         let startsAt: String?
         let endsAt: String?
         let updatedAt: String?
+    }
+
+    struct MobileDocumentsResponse: Decodable {
+        let success: Bool
+        let folders: [MobileDocumentFolder]
+        let documents: [MobileDocument]
+        let error: String?
+    }
+
+    struct MobileDocumentFolder: Decodable, Identifiable {
+        let id: String
+        let name: String
+        let parentId: String?
+    }
+
+    struct MobileDocument: Decodable, Identifiable {
+        let id: String
+        let title: String
+        let description: String?
+        let category: String
+        let folderId: String?
+        let updatedAt: Date?
+        let latestVersion: MobileDocumentVersion?
+    }
+
+    struct MobileDocumentVersion: Decodable, Identifiable {
+        let id: String
+        let version: Int
+        let fileName: String
+        let mimeType: String
+        let sizeBytes: Int
+        let publishedAt: Date?
+        let assigned: Bool
+        let acknowledgedAt: Date?
+        let requiresAcknowledgement: Bool
+    }
+
+    private struct MobileDocumentAcknowledgementRequest: Encodable {
+        let password: String
+    }
+
+    struct MobileDocumentAcknowledgementResponse: Decodable {
+        let success: Bool
+        let acknowledgedAt: Date?
+        let error: String?
     }
 
     struct DispatchStatsResponse: Decodable {
