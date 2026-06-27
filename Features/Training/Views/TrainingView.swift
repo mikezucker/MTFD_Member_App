@@ -189,8 +189,11 @@ struct TrainingView: View {
 
         let capabilities = response.capabilities
 
+        if capabilities.canCreateTraining {
+            sections.append(.create)
+        }
+
         if capabilities.canEvaluateTraining ||
-            capabilities.canCreateTraining ||
             capabilities.canAssignTraining {
             sections.append(.manage)
         }
@@ -869,7 +872,7 @@ private enum TrainingHomeSection: String, CaseIterable, Identifiable {
         case .completed:
             return "Completed"
         case .create:
-            return "Create"
+            return "Create Course"
         case .manage:
             return "Evaluator Tools"
         case .progress:
@@ -884,7 +887,7 @@ private enum TrainingHomeSection: String, CaseIterable, Identifiable {
         case .completed:
             return "Completed Training"
         case .create:
-            return "Create Training"
+            return "Create Course"
         case .manage:
             return "Evaluator Tools"
         case .progress:
@@ -1986,7 +1989,48 @@ private struct CreateTrainingToolView: View {
         case description
     }
 
+    private enum CreateTrainingWizardStep: Int, CaseIterable, Identifiable {
+        case courseInfo
+        case settings
+        case modules
+        case assignment
+        case review
+
+        var id: Int { rawValue }
+
+        var title: String {
+            switch self {
+            case .courseInfo: return "Course"
+            case .settings: return "Settings"
+            case .modules: return "Modules"
+            case .assignment: return "Assign"
+            case .review: return "Review"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .courseInfo: return "Name and describe the training."
+            case .settings: return "Choose type, publishing, and checkoff options."
+            case .modules: return "Build the course outline and content."
+            case .assignment: return "Optionally send it to members now."
+            case .review: return "Confirm the course before creating it."
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .courseInfo: return "text.book.closed.fill"
+            case .settings: return "slider.horizontal.3"
+            case .modules: return "square.stack.3d.up.fill"
+            case .assignment: return "person.2.fill"
+            case .review: return "checkmark.seal.fill"
+            }
+        }
+    }
+
     @FocusState private var focusedField: CreateTrainingField?
+    @State private var currentStep: CreateTrainingWizardStep = .courseInfo
     @State private var title = ""
     @State private var description = ""
     @State private var publish = false
@@ -2022,6 +2066,33 @@ private struct CreateTrainingToolView: View {
         cleanTitle.count >= 3 && !isSubmitting && (!assignOnCreate || canSubmitInitialAssignment)
     }
 
+    private var canContinueCurrentStep: Bool {
+        switch currentStep {
+        case .courseInfo:
+            return cleanTitle.count >= 3
+        case .settings:
+            return true
+        case .modules:
+            return !modules.isEmpty
+        case .assignment:
+            return !assignOnCreate || canSubmitInitialAssignment
+        case .review:
+            return canSubmit
+        }
+    }
+
+    private var currentStepIndex: Int {
+        CreateTrainingWizardStep.allCases.firstIndex(of: currentStep) ?? 0
+    }
+
+    private var isFirstStep: Bool {
+        currentStep == CreateTrainingWizardStep.allCases.first
+    }
+
+    private var isLastStep: Bool {
+        currentStep == CreateTrainingWizardStep.allCases.last
+    }
+
     private var canAssignDepartmentWide: Bool {
         scope?.type == "DEPARTMENT"
     }
@@ -2053,21 +2124,10 @@ private struct CreateTrainingToolView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Create Training")
-                .font(.headline)
-                .foregroundStyle(.white)
-
-            Text("Create the course, outline modules, add content types, and plan quizzes or hands-on skill checkoffs.")
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.72))
-                .fixedSize(horizontal: false, vertical: true)
-
-            courseInfoCard
-            trainingTypeCard
-            moduleBuilderCard
-            optionsCard
-            initialAssignmentCard
-            submitButton
+            wizardIntroCard
+            wizardProgressCard
+            currentWizardStep
+            wizardControls
 
             if let successMessage {
                 resultCard(emoji: "✅", title: "Training Created", message: successMessage)
@@ -2094,6 +2154,158 @@ private struct CreateTrainingToolView: View {
         }
     }
 
+    private func canJump(to step: CreateTrainingWizardStep) -> Bool {
+        step.rawValue <= currentStep.rawValue ||
+            (step.rawValue == currentStep.rawValue + 1 && canContinueCurrentStep)
+    }
+
+    private func nextStep() {
+        guard canContinueCurrentStep,
+              let next = CreateTrainingWizardStep(rawValue: currentStep.rawValue + 1)
+        else { return }
+
+        focusedField = nil
+        withAnimation(.snappy) {
+            currentStep = next
+        }
+    }
+
+    private func previousStep() {
+        guard let previous = CreateTrainingWizardStep(rawValue: currentStep.rawValue - 1) else { return }
+
+        focusedField = nil
+        withAnimation(.snappy) {
+            currentStep = previous
+        }
+    }
+
+    private var wizardIntroCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: currentStep.systemImage)
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.gold)
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.09))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Create Training")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+
+                    Text("Step \(currentStepIndex + 1) of \(CreateTrainingWizardStep.allCases.count): \(currentStep.title)")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+                }
+
+                Spacer()
+            }
+
+            Text(currentStep.subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .trainingConsoleCard()
+    }
+
+    private var wizardProgressCard: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(CreateTrainingWizardStep.allCases) { step in
+                    Button {
+                        if canJump(to: step) {
+                            withAnimation(.snappy) {
+                                currentStep = step
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: step.rawValue < currentStep.rawValue ? "checkmark.circle.fill" : step.systemImage)
+                                .font(.caption.bold())
+
+                            Text(step.title)
+                                .font(.caption.bold())
+                        }
+                        .foregroundStyle(step == currentStep ? .black : .white.opacity(canJump(to: step) ? 0.82 : 0.38))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(step == currentStep ? AppTheme.gold : Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canJump(to: step))
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    @ViewBuilder
+    private var currentWizardStep: some View {
+        switch currentStep {
+        case .courseInfo:
+            courseInfoCard
+        case .settings:
+            VStack(alignment: .leading, spacing: 14) {
+                trainingTypeCard
+                optionsCard
+            }
+        case .modules:
+            moduleBuilderCard
+        case .assignment:
+            initialAssignmentCard
+        case .review:
+            reviewCard
+        }
+    }
+
+    private var wizardControls: some View {
+        HStack(spacing: 10) {
+            if !isFirstStep {
+                Button {
+                    previousStep()
+                } label: {
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(Color.white.opacity(0.09))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+
+            if isLastStep {
+                submitButton
+            } else {
+                Button {
+                    nextStep()
+                } label: {
+                    HStack {
+                        Text("Continue")
+                            .font(.headline)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.bold())
+                    }
+                    .foregroundStyle(.black)
+                    .padding(15)
+                    .frame(maxWidth: .infinity)
+                    .background(AppTheme.gold)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .disabled(!canContinueCurrentStep)
+                .opacity(canContinueCurrentStep ? 1 : 0.55)
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     private var courseInfoCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             labelRow(emoji: "📝", title: "Course Info", subtitle: "Matches the website create course form")
@@ -2106,6 +2318,12 @@ private struct CreateTrainingToolView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .foregroundStyle(.white)
 
+            if !cleanTitle.isEmpty, cleanTitle.count < 3 {
+                Text("Use at least 3 characters for the training title.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
             TextField("Description", text: $description, axis: .vertical)
                 .focused($focusedField, equals: .description)
                 .lineLimit(4...7)
@@ -2115,6 +2333,72 @@ private struct CreateTrainingToolView: View {
                 .foregroundStyle(.white)
         }
         .trainingConsoleCard()
+    }
+
+    private var reviewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            labelRow(
+                emoji: "✅",
+                title: "Review Course",
+                subtitle: publish ? "This course will be published." : "This course will be saved as a draft."
+            )
+
+            reviewRow("Title", cleanTitle.isEmpty ? "Missing title" : cleanTitle)
+            reviewRow("Type", trainingType.displayName)
+            reviewRow("Status", publish ? "Published" : "Draft")
+            reviewRow("Modules", "\(modules.count) module\(modules.count == 1 ? "" : "s")")
+
+            ForEach(modules.indices, id: \.self) { index in
+                moduleReviewRow(index: index, module: modules[index])
+            }
+
+            reviewRow("Assignment", assignOnCreate ? audienceSummary : "Not assigned yet")
+
+            if assignOnCreate, includeDueDate {
+                reviewRow("Due", dueDate.formatted(date: .abbreviated, time: .omitted))
+            }
+
+            reviewRow("Student self-checkoff", allowMemberObjectiveSelfCheckoff ? "Allowed" : "Instructor sign-off required")
+            reviewRow("Feedback to messages", objectiveFeedbackToMessages ? "On" : "Off")
+            reviewRow("Instructor dashboard", enableInstructorDashboard ? "On" : "Off")
+        }
+        .trainingConsoleCard()
+    }
+
+    private func moduleReviewRow(index: Int, module: TrainingDraftModule) -> some View {
+        let moduleNumber = index + 1
+        let title = moduleTitle(module, fallbackNumber: moduleNumber)
+        let contentSummary = module.contentTypes.map(\.title).sorted().joined(separator: ", ")
+
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("Module \(moduleNumber): \(title)")
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+
+            Text(contentSummary)
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.62))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.07))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func reviewRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.caption.bold())
+                .foregroundStyle(.white.opacity(0.58))
+                .frame(width: 128, alignment: .leading)
+
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+        }
     }
 
 
@@ -2433,6 +2717,7 @@ private struct CreateTrainingToolView: View {
                 modules = [
                     TrainingDraftModule(title: "", contentTypes: [.video, .image, .quiz], practicalSkillCount: 1)
                 ]
+                currentStep = .courseInfo
             } else {
                 errorMessage = response.error ?? "Unable to create training."
             }
