@@ -29,8 +29,14 @@ struct DashboardView: View {
     }
 
     private func refreshDashboard() async {
+        guard hasAuthToken else { return }
+
         await viewModel.refreshAsync(role: mappedUserRole(from: session.currentUser?.role))
         scheduleLiveActivitySync()
+    }
+
+    private var hasAuthToken: Bool {
+        APIClient.shared.authToken?.isEmpty == false || KeychainService.shared.loadToken()?.isEmpty == false
     }
 
     var body: some View {
@@ -238,8 +244,10 @@ struct DashboardView: View {
             .onAppear {
 
                 showContent = true
-                viewModel.loadIfNeeded(role: mappedUserRole(from: session.currentUser?.role))
-                scheduleLiveActivitySync()
+                if hasAuthToken {
+                    viewModel.loadIfNeeded(role: mappedUserRole(from: session.currentUser?.role))
+                    scheduleLiveActivitySync()
+                }
 
 
                 if !hasLoadedDispatchUnits {
@@ -260,12 +268,15 @@ struct DashboardView: View {
                 syncLiveActivityWithDashboardActiveDispatches()
             }
             .task {
-                await activeDispatchRefreshLoop()
+                if hasAuthToken {
+                    await activeDispatchRefreshLoop()
+                }
             }
             .onDisappear {
             }
             .onChange(of: scenePhase) { _, newPhase in
                 guard newPhase == .active else { return }
+                guard hasAuthToken else { return }
 
                 viewModel.refreshIfStale(role: mappedUserRole(from: session.currentUser?.role))
                 scheduleLiveActivitySync()
@@ -277,6 +288,7 @@ struct DashboardView: View {
                 }
 
                 print("🔔 Dispatch RECEIVED:", dispatch.id)
+                guard hasAuthToken else { return }
 
                 latestDispatch = dispatch
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
@@ -296,6 +308,7 @@ struct DashboardView: View {
             }
             .onReceive(router.$dispatchToOpen.compactMap { $0 }) { dispatch in
                 print("🧭 Dashboard opening dispatch:", dispatch.id)
+                guard hasAuthToken else { return }
 
                 latestDispatch = dispatch
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))

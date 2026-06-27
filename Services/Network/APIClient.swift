@@ -149,6 +149,12 @@ final class APIClient {
         }
 
         if requiresAuth {
+            if authToken?.isEmpty != false,
+               let savedToken = KeychainService.shared.loadToken(),
+               !savedToken.isEmpty {
+                authToken = savedToken
+            }
+
             guard let token = authToken, !token.isEmpty else {
                 throw APIError.missingAuthToken
             }
