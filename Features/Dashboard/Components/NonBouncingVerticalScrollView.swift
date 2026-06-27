@@ -73,7 +73,7 @@ final class MTFDNonBouncingScrollCoordinator: NSObject {
     }
 }
 
-final class MTFDNonBouncingHostingScrollView: UIScrollView {
+final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerDelegate {
     private let hostingController: UIHostingController<AnyView>
     private var allowsPullToRefresh = false
     private var isClampingContentOffset = false
@@ -86,10 +86,15 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView {
         backgroundColor = .clear
         clipsToBounds = true
         bounces = false
+        bouncesZoom = false
         alwaysBounceVertical = false
         alwaysBounceHorizontal = false
+        isDirectionalLockEnabled = true
         showsHorizontalScrollIndicator = false
         contentInsetAdjustmentBehavior = .never
+        contentInset = .zero
+        scrollIndicatorInsets = .zero
+        panGestureRecognizer.delegate = self
 
         hostingController.view.backgroundColor = .clear
         hostingController.view.translatesAutoresizingMaskIntoConstraints = true
@@ -105,8 +110,11 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView {
         allowsPullToRefresh = control != nil
 
         bounces = false
+        bouncesZoom = false
         alwaysBounceVertical = false
         alwaysBounceHorizontal = false
+        contentInset = .zero
+        scrollIndicatorInsets = .zero
     }
 
     func update(rootView: AnyView) {
@@ -172,5 +180,18 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView {
 
         isScrollEnabled = contentHeight > bounds.height
         clampCurrentContentOffset()
+    }
+
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === panGestureRecognizer else {
+            return super.gestureRecognizerShouldBegin(gestureRecognizer)
+        }
+
+        guard contentSize.height > bounds.height else {
+            return false
+        }
+
+        let velocity = panGestureRecognizer.velocity(in: self)
+        return abs(velocity.y) > abs(velocity.x)
     }
 }
