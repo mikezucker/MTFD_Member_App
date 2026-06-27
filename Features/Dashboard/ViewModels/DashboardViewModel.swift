@@ -156,16 +156,22 @@ final class DashboardViewModel: ObservableObject {
             async let dashboardResponse = timedDashboardRequest("mobile dashboard") {
                 try await APIClient.shared.fetchDashboard()
             }
-            async let dispatchHistoryResponse = timedDashboardRequest("dispatch history 24h") {
-                try await APIClient.shared.fetchDispatchHistory(window: "24h")
-            }
             async let upcomingScheduleResponse = timedDashboardRequest("upcoming schedule") {
                 try await APIClient.shared.fetchMobileUpcomingSchedule()
             }
             async let departmentScheduleEntriesResponse = fetchDepartmentScheduleOutlook()
 
             let dashboard = try await dashboardResponse
-            let dispatchHistory = try await dispatchHistoryResponse
+
+            let dispatchHistory: APIClient.DispatchHistoryResponse?
+            do {
+                dispatchHistory = try await timedDashboardRequest("dispatch history 24h") {
+                    try await APIClient.shared.fetchDispatchHistory(window: "24h")
+                }
+            } catch {
+                dispatchHistory = nil
+                print("🧨 Dispatch history failed:", error.localizedDescription)
+            }
 
             let upcomingSchedule: APIClient.MobileUpcomingScheduleResponse?
             do {
@@ -178,10 +184,19 @@ final class DashboardViewModel: ObservableObject {
 
             let departmentScheduleEntries = await departmentScheduleEntriesResponse
 
-            activeDispatches = dispatchHistory.activeDispatches
+            let resolvedActiveDispatches =
+                dispatchHistory?.activeDispatches ??
+                dashboard.activeDispatches?.filter(\.isVisibleActiveDispatch) ??
+                []
+            let resolvedHistoricalDispatches =
+                dispatchHistory?.historicalDispatches ??
+                dashboard.historicalDispatches ??
+                []
+
+            activeDispatches = resolvedActiveDispatches
             logActiveDispatches(
-                sourceLabel: dispatchHistory.sourceLabel,
-                activeDispatches: dispatchHistory.activeDispatches
+                sourceLabel: dispatchHistory?.sourceLabel ?? dashboard.sourceLabel,
+                activeDispatches: resolvedActiveDispatches
             )
 
             let resolvedVolunteerContext = mergedVolunteerContext(
@@ -211,7 +226,7 @@ final class DashboardViewModel: ObservableObject {
                 dashboardStations: nil,
                 volunteerContext: resolvedVolunteerContext,
                 lastUpdated: nil,
-                recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
+                recentDepartmentCalls: mapRecentCalls(from: resolvedHistoricalDispatches),
                 apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
                 apparatusWorkOrdersMessage: dashboard.apparatusWorkOrdersMessage,
                 upcomingSchedule: upcomingSchedule,

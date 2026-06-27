@@ -26,7 +26,7 @@ enum DispatchUnitFilter {
     }
 }
 
-private extension APIClient.ActiveDispatch {
+extension APIClient.ActiveDispatch {
     var isVisibleActiveDispatch: Bool {
         if isClosed == true {
             return false
@@ -1354,6 +1354,7 @@ extension APIClient {
         let departmentUpdates: [DashboardUpdate]?
         let apparatusWorkOrders: [ApparatusWorkOrder]?
         let apparatusWorkOrdersMessage: String?
+        let historicalDispatches: [DispatchHistoryItem]?
         let notesConfigured: Bool?
         let notesMessage: String?
         let error: String?
