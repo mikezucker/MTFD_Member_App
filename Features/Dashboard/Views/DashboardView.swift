@@ -20,12 +20,21 @@ struct DashboardView: View {
     @State private var showApparatusWorkOrders = false
     @State private var messageCenterMode: MessageCenterView.Mode = .combined
     @State private var selectedDispatch: DispatchNotificationPayload?
+    @State private var dashboardLayoutRevision = 0
 
     @State private var latestDispatch: DispatchNotificationPayload?
 
 
     private var dashboardRole: DashboardRole {
         DashboardRole.from(session.currentUser?.role)
+    }
+
+    private var configuredDashboardCards: [DashboardCardID] {
+        _ = dashboardLayoutRevision
+        let hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
+        return DashboardCardLayoutDefaults
+            .savedOrder(for: session.currentUser?.role)
+            .filter { !hiddenCards.contains($0) }
     }
 
     private func refreshDashboard() async {
@@ -73,6 +82,7 @@ struct DashboardView: View {
                                 chiefStationStats: viewModel.state.dashboardStations,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                dashboardCards: configuredDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 }
@@ -101,6 +111,7 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                dashboardCards: configuredDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -142,6 +153,7 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                dashboardCards: configuredDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -183,6 +195,7 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                dashboardCards: configuredDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -235,6 +248,9 @@ struct DashboardView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
+            .onReceive(NotificationCenter.default.publisher(for: .dashboardLayoutDidChange)) { _ in
+                dashboardLayoutRevision += 1
+            }
             .onAppear {
 
                 showContent = true

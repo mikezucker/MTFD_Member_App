@@ -159,6 +159,7 @@ struct NotificationPreferences: Codable, Equatable {
     var criticalDispatchAlerts: Bool = false
     var criticalDispatchAlertMode: CriticalDispatchAlertMode = .seriousOnly
     var dispatchAlertTone: DispatchAlertTone = .systemDefault
+    var criticalDispatchAlertTone: DispatchAlertTone = .airHornBlast
     var callTypes: Set<String> = ["FIRE", "EMS", "MVA"]
     var workingOnly: Bool = false
 
@@ -189,6 +190,7 @@ struct NotificationPreferences: Codable, Equatable {
         case criticalDispatchAlerts
         case criticalDispatchAlertMode
         case dispatchAlertTone
+        case criticalDispatchAlertTone
         case callTypes
         case workingOnly
         case normalAlertScheduleMode
@@ -218,6 +220,7 @@ struct NotificationPreferences: Codable, Equatable {
         criticalDispatchAlerts = try container.decodeIfPresent(Bool.self, forKey: .criticalDispatchAlerts) ?? false
         criticalDispatchAlertMode = try container.decodeIfPresent(CriticalDispatchAlertMode.self, forKey: .criticalDispatchAlertMode) ?? .seriousOnly
         dispatchAlertTone = try container.decodeIfPresent(DispatchAlertTone.self, forKey: .dispatchAlertTone) ?? .systemDefault
+        criticalDispatchAlertTone = try container.decodeIfPresent(DispatchAlertTone.self, forKey: .criticalDispatchAlertTone) ?? .airHornBlast
         callTypes = try container.decodeIfPresent(Set<String>.self, forKey: .callTypes) ?? ["FIRE", "EMS", "MVA"]
         workingOnly = try container.decodeIfPresent(Bool.self, forKey: .workingOnly) ?? false
 
@@ -255,6 +258,7 @@ struct NotificationPreferences: Codable, Equatable {
         try container.encode(criticalDispatchAlerts, forKey: .criticalDispatchAlerts)
         try container.encode(criticalDispatchAlertMode, forKey: .criticalDispatchAlertMode)
         try container.encode(dispatchAlertTone, forKey: .dispatchAlertTone)
+        try container.encode(criticalDispatchAlertTone, forKey: .criticalDispatchAlertTone)
         try container.encode(callTypes, forKey: .callTypes)
         try container.encode(workingOnly, forKey: .workingOnly)
 

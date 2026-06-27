@@ -85,20 +85,76 @@ final class DocumentsViewModel: ObservableObject {
     }
 }
 
+private enum PolicyLibraryFilter: String, CaseIterable, Identifiable {
+    case all
+    case needsAcknowledgement
+    case current
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all:
+            return "All"
+        case .needsAcknowledgement:
+            return "Needs Ack"
+        case .current:
+            return "Current"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all:
+            return "tray.full.fill"
+        case .needsAcknowledgement:
+            return "signature"
+        case .current:
+            return "checkmark.seal.fill"
+        }
+    }
+
+    var emptyMessage: String {
+        switch self {
+        case .all:
+            return "Try a different search or folder."
+        case .needsAcknowledgement:
+            return "No policies in this view need acknowledgement."
+        case .current:
+            return "No current policies match this view."
+        }
+    }
+}
+
 struct DocumentsView: View {
     @StateObject private var viewModel = DocumentsViewModel()
     @StateObject private var router = NavigationRouter.shared
     @State private var query = ""
     @State private var selectedFolderId: String?
+    @State private var selectedFilter = PolicyLibraryFilter.all
 
     private var filteredDocuments: [APIClient.MobileDocument] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !normalizedQuery.isEmpty else { return viewModel.documents }
+        let matchingDocuments: [APIClient.MobileDocument]
 
-        return viewModel.documents.filter { document in
+        if normalizedQuery.isEmpty {
+            matchingDocuments = viewModel.documents
+        } else {
+            matchingDocuments = viewModel.documents.filter { document in
             document.title.lowercased().contains(normalizedQuery) ||
                 (document.description?.lowercased().contains(normalizedQuery) ?? false) ||
-                document.category.lowercased().contains(normalizedQuery)
+                    document.category.lowercased().contains(normalizedQuery) ||
+                    folderTitle(for: document.folderId ?? "__unfiled__").lowercased().contains(normalizedQuery)
+            }
+        }
+
+        switch selectedFilter {
+        case .all:
+            return matchingDocuments
+        case .needsAcknowledgement:
+            return matchingDocuments.filter { $0.latestVersion?.requiresAcknowledgement == true }
+        case .current:
+            return matchingDocuments.filter { $0.latestVersion != nil && $0.latestVersion?.requiresAcknowledgement != true }
         }
     }
 
@@ -180,6 +236,7 @@ struct DocumentsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     searchField
+                    filterBar
 
                     if viewModel.isLoading && viewModel.documents.isEmpty {
                         loadingCard
@@ -188,6 +245,7 @@ struct DocumentsView: View {
                     } else if filteredDocuments.isEmpty {
                         emptyCard
                     } else {
+                        libraryHeaderCard
                         statusMetrics
                         pendingAcknowledgementSection
                         policyLibrarySection
@@ -245,6 +303,91 @@ struct DocumentsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(PolicyLibraryFilter.allCases) { filter in
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedFilter = filter
+                        }
+                    } label: {
+                        HStack(spacing: 7) {
+                            Image(systemName: filter.systemImage)
+                                .font(.caption.weight(.bold))
+
+                            Text(filter.title)
+                                .font(.caption.weight(.bold))
+                        }
+                        .foregroundStyle(selectedFilter == filter ? AppTheme.navy : .white.opacity(0.76))
+                        .padding(.horizontal, 11)
+                        .frame(height: 34)
+                        .background(selectedFilter == filter ? AppTheme.gold : Color.white.opacity(0.09))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 1)
+        }
+    }
+
+    private var libraryHeaderCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: selectedFolderId == nil ? "books.vertical.fill" : "folder.fill")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundStyle(AppTheme.gold)
+                .frame(width: 38, height: 38)
+                .background(AppTheme.gold.opacity(0.16))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(selectedFolder?.name ?? "All Policies")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                Text(libraryHeaderSubtitle)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if selectedFolderId != nil {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedFolderId = selectedFolder?.parentId
+                        }
+                    } label: {
+                        Label("Up one folder", systemImage: "arrow.up.left")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(AppTheme.gold)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.08))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.white.opacity(0.09), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var libraryHeaderSubtitle: String {
+        if isSearching {
+            return "\(filteredDocuments.count) result\(filteredDocuments.count == 1 ? "" : "s") for your search."
+        }
+
+        let folderCount = visibleFolders.count
+        let documentCount = visibleDocuments.count
+        return "\(folderCount) folder\(folderCount == 1 ? "" : "s") and \(documentCount) polic\(documentCount == 1 ? "y" : "ies") shown."
+    }
+
     private var statusMetrics: some View {
         HStack(spacing: 10) {
             policyMetric(title: "Policies", value: "\(filteredDocuments.count)", systemImage: "doc.text.fill")
@@ -292,7 +435,7 @@ struct DocumentsView: View {
     private var policyLibrarySection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Policy Library")
+                Label("Policy Library", systemImage: "folder.fill")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
 
@@ -339,22 +482,6 @@ struct DocumentsView: View {
 
     private var folderNavigation: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if selectedFolderId != nil {
-                Button {
-                    selectedFolderId = selectedFolder?.parentId
-                } label: {
-                    HStack(spacing: 9) {
-                        Image(systemName: "chevron.left")
-                            .font(.caption.weight(.bold))
-
-                        Text("Back")
-                            .font(.subheadline.weight(.bold))
-                    }
-                    .foregroundStyle(AppTheme.gold)
-                }
-                .buttonStyle(.plain)
-            }
-
             HStack(spacing: 7) {
                 Button("All Policies") {
                     selectedFolderId = nil
@@ -398,7 +525,7 @@ struct DocumentsView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
 
-                    Text("\(folderItemCount(folder)) item\(folderItemCount(folder) == 1 ? "" : "s")")
+                    Text(folderCountLine(folder))
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.62))
                 }
@@ -422,13 +549,19 @@ struct DocumentsView: View {
     }
 
     private var emptyFolderCard: some View {
-        Text("This folder is empty.")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.72))
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Nothing here", systemImage: "tray")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.white)
+
+            Text(selectedFilter.emptyMessage)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.68))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private var loadingCard: some View {
@@ -468,13 +601,19 @@ struct DocumentsView: View {
     }
 
     private var emptyCard: some View {
-        Text("No policies found.")
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.72))
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.white.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 18))
+        VStack(alignment: .leading, spacing: 8) {
+            Label("No policies found", systemImage: "doc.text.magnifyingglass")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.white)
+
+            Text(selectedFilter.emptyMessage)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.68))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private func documentRow(
@@ -601,10 +740,19 @@ struct DocumentsView: View {
         documents.filter { $0.latestVersion != nil && $0.latestVersion?.requiresAcknowledgement != true }.count
     }
 
-    private func folderItemCount(_ folder: APIClient.MobileDocumentFolder) -> Int {
+    private func folderCountLine(_ folder: APIClient.MobileDocumentFolder) -> String {
         let childFolderCount = viewModel.folders.filter { $0.parentId == folder.id }.count
         let documentCount = filteredDocuments.filter { $0.folderId == folder.id }.count
-        return childFolderCount + documentCount
+
+        if childFolderCount == 0 {
+            return "\(documentCount) polic\(documentCount == 1 ? "y" : "ies")"
+        }
+
+        if documentCount == 0 {
+            return "\(childFolderCount) folder\(childFolderCount == 1 ? "" : "s")"
+        }
+
+        return "\(childFolderCount) folder\(childFolderCount == 1 ? "" : "s") / \(documentCount) polic\(documentCount == 1 ? "y" : "ies")"
     }
 
     private func documentIcon(for document: APIClient.MobileDocument) -> String {
@@ -642,12 +790,6 @@ struct DocumentsView: View {
 
         return names.joined(separator: " / ")
     }
-}
-
-private struct PolicyFolderSection: Identifiable {
-    let id: String
-    let title: String
-    let documents: [APIClient.MobileDocument]
 }
 
 struct DocumentPDFPreview: View {

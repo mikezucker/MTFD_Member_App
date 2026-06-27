@@ -30,6 +30,12 @@ struct NotificationPreferencesView: View {
         return [.always, .never]
     }
 
+    private var criticalAlertTones: [DispatchAlertTone] {
+        DispatchAlertTone.allCases.filter { tone in
+            tone != .systemDefault && tone != .silent
+        }
+    }
+
     private var normalAlertScheduleBinding: Binding<NotificationScheduleMode> {
         Binding(
             get: {
@@ -149,6 +155,16 @@ struct NotificationPreferencesView: View {
                             .pickerStyle(.segmented)
 
                             Text(vm.preferences.criticalDispatchAlertMode.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Picker("Critical Alert Tone", selection: $vm.preferences.criticalDispatchAlertTone) {
+                                ForEach(criticalAlertTones) { tone in
+                                    Text(tone.title).tag(tone)
+                                }
+                            }
+
+                            Text("Critical Alerts use this tone when iOS allows emergency alert sounds.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -288,6 +304,12 @@ struct NotificationPreferencesView: View {
             }
         }
         .onChange(of: vm.preferences.dispatchAlertTone) { _, tone in
+            previewDispatchAlertTone(tone)
+            Task {
+                await vm.saveImmediately()
+            }
+        }
+        .onChange(of: vm.preferences.criticalDispatchAlertTone) { _, tone in
             previewDispatchAlertTone(tone)
             Task {
                 await vm.saveImmediately()
