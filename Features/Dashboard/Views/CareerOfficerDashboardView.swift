@@ -52,8 +52,6 @@ struct CareerOfficerDashboardView: View {
                     scheduleSection
                 }
 
-                messagesSection
-
                 if isLoading || !workOrders.isEmpty {
                     workOrdersSection
                 }
@@ -168,27 +166,24 @@ struct CareerOfficerDashboardView: View {
 
     private var callTotalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                sectionTitle("Call Totals", systemImage: "chart.bar.fill")
-                Spacer()
+            sectionTitle("Call Totals", systemImage: "chart.bar.fill")
 
-                HStack(spacing: 6) {
-                    ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
-                        Button {
-                            selectedWindowRawValue = window.rawValue
-                        } label: {
-                            Text(window.rawValue)
-                                .font(.caption.bold())
-                                .foregroundStyle(selectedTotalsWindow == window ? AppTheme.navy : .white.opacity(0.72))
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule()
-                                        .fill(selectedTotalsWindow == window ? AppTheme.gold : Color.white.opacity(0.10))
-                                )
-                        }
-                        .buttonStyle(.plain)
+            HStack(spacing: 6) {
+                ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
+                    Button {
+                        selectedWindowRawValue = window.rawValue
+                    } label: {
+                        Text(window.rawValue)
+                            .font(.caption.bold())
+                            .foregroundStyle(selectedTotalsWindow == window ? AppTheme.navy : .white.opacity(0.72))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(selectedTotalsWindow == window ? AppTheme.gold : Color.white.opacity(0.10))
+                            )
                     }
+                    .buttonStyle(.plain)
                 }
             }
 

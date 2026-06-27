@@ -101,8 +101,6 @@ struct ChiefDashboardView: View {
 
                 scheduleOutlookSection
 
-                commandMessagesSection
-
                 if isLoading || !workOrders.isEmpty {
                     apparatusWorkOrdersSection
                 }
@@ -691,28 +689,24 @@ struct ChiefDashboardView: View {
 
     private var callTotalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                sectionTitle("Call Totals", systemImage: "chart.bar.fill")
+            sectionTitle("Call Totals", systemImage: "chart.bar.fill")
 
-                Spacer()
-
-                HStack(spacing: 6) {
-                    ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
-                        Button {
-                            selectedWindowRawValue = window.rawValue
-                        } label: {
-                            Text(window.rawValue)
-                                .font(.caption.bold())
-                                .foregroundStyle(selectedTotalsWindow == window ? AppTheme.navy : .white.opacity(0.72))
-                                .padding(.horizontal, 9)
-                                .padding(.vertical, 6)
-                                .background(
-                                    Capsule()
-                                        .fill(selectedTotalsWindow == window ? AppTheme.gold : Color.white.opacity(0.10))
-                                )
-                        }
-                        .buttonStyle(.plain)
+            HStack(spacing: 6) {
+                ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
+                    Button {
+                        selectedWindowRawValue = window.rawValue
+                    } label: {
+                        Text(window.rawValue)
+                            .font(.caption.bold())
+                            .foregroundStyle(selectedTotalsWindow == window ? AppTheme.navy : .white.opacity(0.72))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 6)
+                            .background(
+                                Capsule()
+                                    .fill(selectedTotalsWindow == window ? AppTheme.gold : Color.white.opacity(0.10))
+                            )
                     }
+                    .buttonStyle(.plain)
                 }
             }
 
@@ -1029,7 +1023,9 @@ private func selectNextScheduleDay() {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Apparatus Status", systemImage: "wrench.and.screwdriver.fill")
 
-            if workOrders.isEmpty {
+            if isLoading && workOrders.isEmpty {
+                loadingCard("Loading apparatus work orders...")
+            } else if workOrders.isEmpty {
                 Text("No open apparatus work orders.")
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.7))
