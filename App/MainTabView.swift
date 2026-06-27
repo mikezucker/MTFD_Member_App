@@ -179,18 +179,9 @@ struct MainTabView: View {
     var body: some View {
         ZStack(alignment: .top) {
             TabView(selection: $router.selectedTab) {
-                Group {
-                    if shouldShowCommandCenterAsHome {
-                        CommandView()
-                    } else {
-                        DashboardView()
-                    }
-                }
+                DashboardView()
                 .tabItem {
-                    Label(
-                        shouldShowCommandCenterAsHome ? "Command" : "Home",
-                        systemImage: shouldShowCommandCenterAsHome ? "shield.lefthalf.filled" : "house.fill"
-                    )
+                    Label("Home", systemImage: "house.fill")
                 }
                 .tag(NavigationRouter.AppTab.home)
 
