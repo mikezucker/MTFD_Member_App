@@ -6,9 +6,12 @@ struct DashboardAssignedTrainingPreviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            header
+            Button(action: onTap) {
+                header
+            }
+            .buttonStyle(.plain)
 
-            DashboardScrollableList(itemCount: items.count, maxHeight: 500) {
+            DashboardScrollableList(itemCount: items.count, visibleItemLimit: 3, maxHeight: 320) {
                 VStack(spacing: 12) {
                     ForEach(items) { item in
                         trainingRow(item)
@@ -32,8 +35,6 @@ struct DashboardAssignedTrainingPreviewCard: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(AppTheme.gold.opacity(0.18), lineWidth: 1)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
     }
 
     private var header: some View {

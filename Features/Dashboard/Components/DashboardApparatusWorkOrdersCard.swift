@@ -52,7 +52,10 @@ struct DashboardApparatusWorkOrdersCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header
+            Button(action: onTap) {
+                header
+            }
+            .buttonStyle(.plain)
 
             if showsFilters && apparatusNames.count > 2 {
                 filterChips
@@ -65,7 +68,8 @@ struct DashboardApparatusWorkOrdersCard: View {
             } else {
                 DashboardScrollableList(
                     itemCount: groupedStatusRows.count,
-                    maxHeight: 350
+                    visibleItemLimit: 3,
+                    maxHeight: 280
                 ) {
                     VStack(spacing: 0) {
                         ForEach(Array(groupedStatusRows.enumerated()), id: \.element.apparatusName) { index, group in
@@ -88,8 +92,6 @@ struct DashboardApparatusWorkOrdersCard: View {
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
         .onChange(of: workOrders) { _, _ in
             if !apparatusNames.contains(selectedApparatusName) {
                 selectedApparatusName = "All"

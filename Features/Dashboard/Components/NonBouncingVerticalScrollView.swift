@@ -187,11 +187,37 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
             return super.gestureRecognizerShouldBegin(gestureRecognizer)
         }
 
+        let touchLocation = panGestureRecognizer.location(in: self)
+        if let touchedView = hitTest(touchLocation, with: nil),
+           touchedView.isDescendantOfNestedScrollView(inside: self) {
+            return false
+        }
+
         guard contentSize.height > bounds.height else {
             return false
         }
 
         let velocity = panGestureRecognizer.velocity(in: self)
         return abs(velocity.y) > abs(velocity.x)
+    }
+}
+
+private extension UIView {
+    func isDescendantOfNestedScrollView(inside parentScrollView: UIScrollView) -> Bool {
+        var candidate: UIView? = self
+
+        while let view = candidate {
+            if let scrollView = view as? UIScrollView, scrollView !== parentScrollView {
+                return true
+            }
+
+            if view === parentScrollView {
+                return false
+            }
+
+            candidate = view.superview
+        }
+
+        return false
     }
 }

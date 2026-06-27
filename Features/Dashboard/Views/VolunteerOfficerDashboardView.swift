@@ -420,10 +420,6 @@ struct VolunteerOfficerDashboardView: View {
                     onOpenWorkOrders()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onOpenWorkOrders()
-                }
             }
         }
     }
