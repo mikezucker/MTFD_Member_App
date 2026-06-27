@@ -76,29 +76,35 @@ enum DashboardCardLayoutDefaults {
         let role = rawRole?.uppercased() ?? ""
 
         switch role {
-        case "ADMIN", "CHIEF":
-            return [.commandOverview, .needsAttention, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .departmentUpdates, .messages, .documents, .recentCalls, .stationUpdates]
+        case "ADMIN":
+            return [.scheduleEvents, .apparatusWorkOrders, .messages, .recentCalls]
+        case "CHIEF":
+            return [.scheduleEvents, .apparatusWorkOrders, .messages, .recentCalls]
         case "OFFICER_CAREER":
-            return [.commandOverview, .scheduleEvents, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .needsAttention, .messages, .documents, .recentCalls, .departmentUpdates]
+            return [.scheduleEvents, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .messages, .documents, .recentCalls, .departmentUpdates]
         case "OFFICER_VOLUNTEER":
-            return [.commandOverview, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .scheduleEvents, .needsAttention, .messages, .documents, .recentCalls, .departmentUpdates]
+            return [.apparatusWorkOrders, .stationUpdates, .assignedTraining, .scheduleEvents, .messages, .documents, .recentCalls, .departmentUpdates]
         case "MEMBER_CAREER":
-            return [.messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .recentCalls, .stationUpdates, .needsAttention]
+            return [.messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .recentCalls, .stationUpdates]
         case "MEMBER_VOLUNTEER":
-            return [.messages, .assignedTraining, .scheduleEvents, .apparatusWorkOrders, .documents, .departmentUpdates, .recentCalls, .stationUpdates, .needsAttention]
+            return [.messages, .assignedTraining, .scheduleEvents, .apparatusWorkOrders, .documents, .departmentUpdates, .recentCalls, .stationUpdates]
         default:
-            return [.messages, .assignedTraining, .documents, .scheduleEvents, .departmentUpdates, .stationUpdates, .needsAttention, .recentCalls, .apparatusWorkOrders]
+            return [.messages, .assignedTraining, .documents, .scheduleEvents, .departmentUpdates, .stationUpdates, .recentCalls, .apparatusWorkOrders]
         }
     }
 
     static func savedOrder(for rawRole: String?) -> [DashboardCardID] {
+        let defaultCards = defaultOrder(for: rawRole)
+
         guard let data = UserDefaults.standard.data(forKey: orderKey(for: rawRole)),
               let rawValues = try? JSONDecoder().decode([String].self, from: data) else {
-            return defaultOrder(for: rawRole)
+            return defaultCards
         }
 
-        let decoded = rawValues.compactMap(DashboardCardID.init(rawValue:))
-        let missing = DashboardCardID.allCases.filter { !decoded.contains($0) }
+        let decoded = rawValues
+            .compactMap(DashboardCardID.init(rawValue:))
+            .filter { defaultCards.contains($0) }
+        let missing = defaultCards.filter { !decoded.contains($0) }
         return decoded + missing
     }
 
@@ -114,11 +120,14 @@ enum DashboardCardLayoutDefaults {
         guard let rawValues = UserDefaults.standard.stringArray(forKey: hiddenCardsKey(for: rawRole)) else {
             return []
         }
-        return Set(rawValues.compactMap(DashboardCardID.init(rawValue:)))
+
+        let supportedCards = Set(defaultOrder(for: rawRole))
+        return Set(rawValues.compactMap(DashboardCardID.init(rawValue:))).intersection(supportedCards)
     }
 
     static func saveHiddenCards(_ cards: Set<DashboardCardID>, for rawRole: String?) {
-        UserDefaults.standard.set(cards.map(\.rawValue), forKey: hiddenCardsKey(for: rawRole))
+        let supportedCards = Set(defaultOrder(for: rawRole))
+        UserDefaults.standard.set(cards.intersection(supportedCards).map(\.rawValue), forKey: hiddenCardsKey(for: rawRole))
         NotificationCenter.default.post(name: .dashboardLayoutDidChange, object: nil)
     }
 
