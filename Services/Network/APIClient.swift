@@ -575,6 +575,43 @@ final class APIClient {
         }
     }
 
+    func fetchMobileAdminUsers() async throws -> MobileAdminUsersResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/admin/users",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileAdminUsersResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateMobileAdminUser(_ payload: MobileAdminUserUpdateRequest) async throws -> MobileAdminUserUpdateResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/admin/users",
+            method: "PATCH",
+            body: try encode(payload),
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileAdminUserUpdateResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     func fetchNotificationPreferences() async throws -> NotificationPreferencesResponse {
         let request = try makeRequest(
             path: "/api/mobile/notification-preferences",
@@ -1043,6 +1080,15 @@ extension APIClient {
         let linkLabel: String?
     }
 
+    struct MobileAdminUserUpdateRequest: Encodable {
+        let id: String
+        let role: String
+        let status: String
+        let company: String?
+        let reportsToUserId: String?
+        let badgeNumber: String?
+    }
+
     struct MemberAccessRequest: Encodable {
         let email: String
         let type: String
@@ -1098,6 +1144,10 @@ extension APIClient {
             permissions?.canPostStationMessages == true
         }
 
+        var canManageUsers: Bool {
+            permissions?.canManageReporting == true
+        }
+
         var isReliefDriver: Bool {
             attributes?.contains { attribute in
                 let normalized = attribute
@@ -1133,6 +1183,84 @@ extension APIClient {
 
     struct MobileMemberPermissions: Decodable {
         let canPostStationMessages: Bool?
+        let canManageReporting: Bool?
+    }
+
+    struct MobileAdminUsersResponse: Decodable {
+        let success: Bool
+        let canEditDepartmentRoles: Bool
+        let users: [MobileAdminUser]
+    }
+
+    struct MobileAdminUserUpdateResponse: Decodable {
+        let success: Bool
+        let user: MobileAdminUser
+    }
+
+    struct MobileAdminUser: Decodable, Identifiable, Equatable {
+        let id: String
+        let email: String
+        let name: String?
+        let phone: String?
+        let role: String
+        let status: String
+        let company: String?
+        let badgeNumber: String?
+        let reportsToUserId: String?
+        let updatedAt: String?
+
+        var displayName: String {
+            let trimmedName = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedName.isEmpty ? email : trimmedName
+        }
+
+        var searchableText: String {
+            [
+                name,
+                email,
+                phone,
+                roleLabel,
+                companyLabel,
+                badgeNumber
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        }
+
+        var roleLabel: String {
+            APIClient.MobileAdminUser.roleLabel(for: role)
+        }
+
+        var companyLabel: String {
+            APIClient.MobileAdminUser.companyLabel(for: company)
+        }
+
+        static func roleLabel(for role: String) -> String {
+            switch role {
+            case "ADMIN": return "Admin"
+            case "CHIEF": return "Chief"
+            case "BATTALION_CHIEF": return "Battalion Chief"
+            case "OFFICER_CAREER": return "Officer (Career)"
+            case "OFFICER_VOLUNTEER": return "Officer (Volunteer)"
+            case "MEMBER_CAREER": return "Member (Career)"
+            case "MEMBER_VOLUNTEER": return "Member (Volunteer)"
+            default: return role
+            }
+        }
+
+        static func companyLabel(for company: String?) -> String {
+            switch company {
+            case "MT_KEMBLE": return "Mt. Kemble Fire Company (Station 1)"
+            case "COLLINSVILLE": return "Collinsville Fire Company (Station 2)"
+            case "HILLSIDE": return "Hillside Fire Company (Station 3)"
+            case "FAIRCHILD": return "Fairchild Fire Company (Station 4)"
+            case "WOODLAND": return "Woodland Fire Company (Station 5)"
+            case "FIRE_HQ": return "Fire Headquarters"
+            case .some(let value): return value
+            case .none: return "No company assigned"
+            }
+        }
     }
 
     struct AnnouncementsResponse: Decodable {
