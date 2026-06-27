@@ -13,7 +13,6 @@ struct VolunteerOfficerDashboardView: View {
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
     let isLoading: Bool
-    let dashboardCards: [DashboardCardID]
     let onRefresh: () async -> Void
 
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
@@ -49,8 +48,42 @@ struct VolunteerOfficerDashboardView: View {
                 callTotalsSection
                 volunteerOfficerOverviewSection
 
-                ForEach(supportedDashboardCards, id: \.rawValue) { card in
-                    dashboardSection(for: card)
+                if isLoading || !workOrders.isEmpty {
+                    workOrdersSection
+                }
+
+                if isLoading || !stationUpdates.isEmpty {
+                    updatesGroup(
+                        title: "Station Updates",
+                        emptyMessage: "No station updates posted.",
+                        updates: stationUpdates
+                    )
+                }
+
+                if isLoading || !assignedTraining.isEmpty {
+                    trainingSection
+                }
+
+                if isLoading || upcomingSchedule?.isWorkingNow == true || upcomingSchedule?.nextShift != nil {
+                    scheduleSection
+                }
+
+                messagesSection
+
+                if isLoading || pendingDocuments > 0 {
+                    documentsSection
+                }
+
+                if isLoading || !recentCalls.isEmpty {
+                    pastDispatchesSection
+                }
+
+                if isLoading || !departmentUpdates.isEmpty {
+                    updatesGroup(
+                        title: "Department Updates",
+                        emptyMessage: "No department updates posted.",
+                        updates: departmentUpdates
+                    )
                 }
             }
             .padding(.horizontal, 24)
@@ -59,11 +92,6 @@ struct VolunteerOfficerDashboardView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    
-    private var supportedDashboardCards: [DashboardCardID] {
-        dashboardCards.filter(isSupportedDashboardCard)
     }
 
     private var volunteerOfficerOverviewSection: some View {
@@ -114,47 +142,6 @@ struct VolunteerOfficerDashboardView: View {
             .padding(.vertical, 6)
             .background(AppTheme.gold)
             .clipShape(Capsule())
-    }
-
-private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
-        switch card {
-        case .messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .recentCalls:
-            return true
-        case .commandOverview, .needsAttention:
-            return false
-        }
-    }
-
-    @ViewBuilder
-    private func dashboardSection(for card: DashboardCardID) -> some View {
-        switch card {
-        case .messages:
-            messagesSection
-        case .scheduleEvents:
-            scheduleSection
-        case .apparatusWorkOrders:
-            workOrdersSection
-        case .assignedTraining:
-            trainingSection
-        case .documents:
-            documentsSection
-        case .departmentUpdates:
-            updatesGroup(
-                title: "Department Updates",
-                emptyMessage: "No department updates posted.",
-                updates: departmentUpdates
-            )
-        case .stationUpdates:
-            updatesGroup(
-                title: "Station Updates",
-                emptyMessage: "No station updates posted.",
-                updates: stationUpdates
-            )
-        case .recentCalls:
-            pastDispatchesSection
-        case .commandOverview, .needsAttention:
-            EmptyView()
-        }
     }
 
     @ViewBuilder

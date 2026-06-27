@@ -49,15 +49,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("Dashboard") {
-                NavigationLink {
-                    DashboardLayoutView()
-                } label: {
-                    Label("Dashboard Layout", systemImage: "rectangle.grid.2x2.fill")
-                        .foregroundStyle(.blue)
-                }
-            }
-
             Section("Alerts") {
                 NavigationLink {
                     LiveActivitiesSettingsView()
@@ -118,4 +109,3 @@ struct SettingsView: View {
 //
 //  Created by Michael Zucker on 4/27/26.
 //
-
