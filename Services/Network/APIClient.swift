@@ -264,9 +264,18 @@ final class APIClient {
             }
         }
 
-        if let rawString = String(data: data, encoding: .utf8),
-           !rawString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return rawString
+        if let rawString = String(data: data, encoding: .utf8) {
+            let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                return nil
+            }
+
+            let lowercased = trimmed.lowercased()
+            if lowercased.hasPrefix("<!doctype html") || lowercased.hasPrefix("<html") {
+                return nil
+            }
+
+            return String(trimmed.prefix(300))
         }
 
         return nil

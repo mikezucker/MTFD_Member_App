@@ -29,7 +29,7 @@ final class DocumentsViewModel: ObservableObject {
             folders = response.folders
             hasLoaded = true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = policyCenterErrorMessage(for: error)
         }
 
         isLoading = false
@@ -44,7 +44,7 @@ final class DocumentsViewModel: ObservableObject {
         do {
             let data = try await APIClient.shared.downloadDocumentVersion(versionId: version.id)
             guard let pdf = PDFDocument(data: data) else {
-                errorMessage = "This document cannot be previewed in the app."
+                errorMessage = "This policy cannot be previewed in the app."
                 isOpening = false
                 return
             }
@@ -52,7 +52,7 @@ final class DocumentsViewModel: ObservableObject {
             selectedDocument = document
             selectedPDF = pdf
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = policyCenterErrorMessage(for: error)
         }
 
         isOpening = false
@@ -73,6 +73,15 @@ final class DocumentsViewModel: ObservableObject {
         }
         guard let document = documents.first(where: { $0.id == documentId }) else { return }
         await open(document)
+    }
+
+    private func policyCenterErrorMessage(for error: Error) -> String {
+        if case APIClient.APIError.serverError(let statusCode, _) = error,
+           statusCode == 404 {
+            return "Policy Center is not available on the server yet. Please try again after the site update finishes."
+        }
+
+        return error.localizedDescription
     }
 }
 
