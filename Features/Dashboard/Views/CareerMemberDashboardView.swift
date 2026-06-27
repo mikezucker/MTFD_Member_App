@@ -12,6 +12,7 @@ struct CareerMemberDashboardView: View {
     let pendingDocuments: Int
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
+    let dashboardCards: [DashboardCardID]
     let isLoading: Bool
     let onRefresh: () async -> Void
 
@@ -47,42 +48,8 @@ struct CareerMemberDashboardView: View {
                 activeDispatchSection
                 callTotalsSection
 
-                messagesSection
-
-                if isLoading || upcomingSchedule?.isWorkingNow == true || upcomingSchedule?.nextShift != nil {
-                    scheduleSection
-                }
-
-                if isLoading || !workOrders.isEmpty {
-                    workOrdersSection
-                }
-
-                if isLoading || !assignedTraining.isEmpty {
-                    trainingSection
-                }
-
-                if isLoading || pendingDocuments > 0 {
-                    documentsSection
-                }
-
-                if isLoading || !departmentUpdates.isEmpty {
-                    updatesGroup(
-                        title: "Department Updates",
-                        emptyMessage: "No department updates posted.",
-                        updates: departmentUpdates
-                    )
-                }
-
-                if isLoading || !recentCalls.isEmpty {
-                    pastDispatchesSection
-                }
-
-                if isLoading || !stationUpdates.isEmpty {
-                    updatesGroup(
-                        title: "Station Updates",
-                        emptyMessage: "No station updates posted.",
-                        updates: stationUpdates
-                    )
+                ForEach(dashboardCards) { card in
+                    dashboardCard(card)
                 }
             }
             .padding(.horizontal, 24)
@@ -245,6 +212,60 @@ struct CareerMemberDashboardView: View {
             DashboardMessageCenterCard {
                 onOpenMessages()
             }
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardCard(_ card: DashboardCardID) -> some View {
+        switch card {
+        case .messages:
+            messagesSection
+
+        case .scheduleEvents:
+            if isLoading || upcomingSchedule?.isWorkingNow == true || upcomingSchedule?.nextShift != nil {
+                scheduleSection
+            }
+
+        case .apparatusWorkOrders:
+            if isLoading || !workOrders.isEmpty {
+                workOrdersSection
+            }
+
+        case .assignedTraining:
+            if isLoading || !assignedTraining.isEmpty {
+                trainingSection
+            }
+
+        case .documents:
+            if isLoading || pendingDocuments > 0 {
+                documentsSection
+            }
+
+        case .departmentUpdates:
+            if isLoading || !departmentUpdates.isEmpty {
+                updatesGroup(
+                    title: "Department Updates",
+                    emptyMessage: "No department updates posted.",
+                    updates: departmentUpdates
+                )
+            }
+
+        case .stationUpdates:
+            if isLoading || !stationUpdates.isEmpty {
+                updatesGroup(
+                    title: "Station Updates",
+                    emptyMessage: "No station updates posted.",
+                    updates: stationUpdates
+                )
+            }
+
+        case .recentCalls:
+            if isLoading || !recentCalls.isEmpty {
+                pastDispatchesSection
+            }
+
+        case .commandOverview, .needsAttention:
+            EmptyView()
         }
     }
 

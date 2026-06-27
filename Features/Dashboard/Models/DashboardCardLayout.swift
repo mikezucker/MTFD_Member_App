@@ -83,11 +83,11 @@ enum DashboardCardLayoutDefaults {
         case "OFFICER_CAREER":
             return [.scheduleEvents, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .messages, .documents, .recentCalls, .departmentUpdates]
         case "OFFICER_VOLUNTEER":
-            return [.apparatusWorkOrders, .stationUpdates, .assignedTraining, .scheduleEvents, .messages, .documents, .recentCalls, .departmentUpdates]
+            return [.commandOverview, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .scheduleEvents, .messages, .documents, .recentCalls, .departmentUpdates]
         case "MEMBER_CAREER":
             return [.messages, .scheduleEvents, .apparatusWorkOrders, .assignedTraining, .documents, .departmentUpdates, .recentCalls, .stationUpdates]
         case "MEMBER_VOLUNTEER":
-            return [.messages, .assignedTraining, .scheduleEvents, .apparatusWorkOrders, .documents, .departmentUpdates, .recentCalls, .stationUpdates]
+            return [.commandOverview, .assignedTraining, .departmentUpdates, .apparatusWorkOrders, .recentCalls, .stationUpdates]
         default:
             return [.messages, .assignedTraining, .documents, .scheduleEvents, .departmentUpdates, .stationUpdates, .recentCalls, .apparatusWorkOrders]
         }

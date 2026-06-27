@@ -9,6 +9,7 @@ struct VolunteerMemberDashboardView: View {
     let assignedTrainingPreview: [DashboardTrainingPreviewItem]
     let stationUpdates: [DashboardBulletin]
     let departmentUpdates: [DashboardBulletin]
+    let dashboardCards: [DashboardCardID]
     let isLoading: Bool
     let onRefresh: () async -> Void
 
@@ -24,16 +25,8 @@ struct VolunteerMemberDashboardView: View {
     var body: some View {
         NonBouncingVerticalScrollView(showsIndicators: false, onRefresh: onRefresh) {
             VStack(alignment: .leading, spacing: 22) {
-                belongingCard
-                nextStepCard
-                announcementsCard
-                apparatusStatusCard
-                contributionCard
-
-                if volunteerContext?.officer != nil {
-                    officerCard
-                } else {
-                    quietOfficerCard
+                ForEach(volunteerDashboardCards) { card in
+                    dashboardCard(card)
                 }
             }
             .padding(.horizontal, 24)
@@ -41,6 +34,60 @@ struct VolunteerMemberDashboardView: View {
             .padding(.bottom, 120)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var volunteerDashboardCards: [DashboardCardID] {
+        var result: [DashboardCardID] = []
+        var hasAnnouncements = false
+
+        for card in dashboardCards {
+            switch card {
+            case .commandOverview, .assignedTraining, .apparatusWorkOrders, .recentCalls:
+                result.append(card)
+
+            case .departmentUpdates, .stationUpdates:
+                if !hasAnnouncements {
+                    result.append(card)
+                    hasAnnouncements = true
+                }
+
+            case .messages, .documents, .scheduleEvents, .needsAttention:
+                break
+            }
+        }
+
+        return result.isEmpty
+            ? [.commandOverview, .assignedTraining, .departmentUpdates, .apparatusWorkOrders, .recentCalls]
+            : result
+    }
+
+    @ViewBuilder
+    private func dashboardCard(_ card: DashboardCardID) -> some View {
+        switch card {
+        case .commandOverview:
+            belongingCard
+
+        case .assignedTraining:
+            nextStepCard
+
+        case .departmentUpdates, .stationUpdates:
+            announcementsCard
+
+        case .apparatusWorkOrders:
+            apparatusStatusCard
+
+        case .recentCalls:
+            contributionCard
+
+            if volunteerContext?.officer != nil {
+                officerCard
+            } else {
+                quietOfficerCard
+            }
+
+        case .messages, .documents, .scheduleEvents, .needsAttention:
+            EmptyView()
+        }
     }
 
     private var belongingCard: some View {

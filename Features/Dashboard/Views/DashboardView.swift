@@ -20,6 +20,7 @@ struct DashboardView: View {
     @State private var showApparatusWorkOrders = false
     @State private var messageCenterMode: MessageCenterView.Mode = .combined
     @State private var selectedDispatch: DispatchNotificationPayload?
+    @State private var dashboardLayoutRefreshID = UUID()
 
     @State private var latestDispatch: DispatchNotificationPayload?
 
@@ -37,6 +38,15 @@ struct DashboardView: View {
 
     private var hasAuthToken: Bool {
         APIClient.shared.authToken?.isEmpty == false || KeychainService.shared.loadToken()?.isEmpty == false
+    }
+
+    private var configuredDashboardCards: [DashboardCardID] {
+        _ = dashboardLayoutRefreshID
+
+        let hiddenCards = DashboardCardLayoutDefaults.hiddenCards(for: session.currentUser?.role)
+        return DashboardCardLayoutDefaults
+            .savedOrder(for: session.currentUser?.role)
+            .filter { !hiddenCards.contains($0) }
     }
 
     var body: some View {
@@ -147,6 +157,7 @@ struct DashboardView: View {
                                 pendingDocuments: viewModel.state.pendingDocumentSignatures,
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
+                                dashboardCards: configuredDashboardCards,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
                                 onRefresh: {
                                     await refreshDashboard()
@@ -188,6 +199,7 @@ struct DashboardView: View {
                                 pendingDocuments: viewModel.state.pendingDocumentSignatures,
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
+                                dashboardCards: configuredDashboardCards,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
                                 onRefresh: {
                                     await refreshDashboard()
@@ -227,6 +239,7 @@ struct DashboardView: View {
                                 assignedTrainingPreview: viewModel.state.assignedTrainingPreview,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 departmentUpdates: viewModel.state.departmentUpdates,
+                                dashboardCards: configuredDashboardCards,
                                 isLoading: viewModel.state.isLoading,
                                 onRefresh: {
                                     await refreshDashboard()
@@ -266,6 +279,9 @@ struct DashboardView: View {
             }
             .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
                 syncLiveActivityWithDashboardActiveDispatches()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .dashboardLayoutDidChange)) { _ in
+                dashboardLayoutRefreshID = UUID()
             }
             .task {
                 if hasAuthToken {
