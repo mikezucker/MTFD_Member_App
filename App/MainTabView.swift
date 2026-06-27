@@ -202,7 +202,7 @@ struct MainTabView: View {
 
                 DocumentsView()
                     .tabItem {
-                        Label("Documents", systemImage: "doc.text.fill")
+                        Label("Policy Center", systemImage: "doc.text.fill")
                     }
                     .tag(NavigationRouter.AppTab.documents)
 
@@ -443,8 +443,8 @@ private struct ChiefCommandView: View {
                     destination: .messages
                 ),
                 CommandTileData(
-                    title: "Documents / SOPs",
-                    subtitle: "Review SOP acknowledgements, missing signatures, and document completion status.",
+                    title: "Policy Center",
+                    subtitle: "Review policy acknowledgements, missing signatures, and SOP completion status.",
                     emoji: AppIconCatalog.documents
                 ),
                 CommandTileData(
@@ -488,8 +488,8 @@ private struct LieutenantCommandView: View {
                     destination: .messages
                 ),
                 CommandTileData(
-                    title: "Documents / SOPs",
-                    subtitle: "Review SOPs, station documents, acknowledgements, and required signatures.",
+                    title: "Policy Center",
+                    subtitle: "Review SOPs, station policies, acknowledgements, and required signatures.",
                     emoji: AppIconCatalog.documents
                 ),
                 CommandTileData(

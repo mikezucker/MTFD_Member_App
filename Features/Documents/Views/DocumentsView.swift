@@ -98,8 +98,8 @@ struct DocumentsView: View {
 
     var body: some View {
         AppScreen(
-            title: "Documents",
-            subtitle: "SOPs, policies, forms, and assigned acknowledgements.",
+            title: "Policy Center",
+            subtitle: "Policies, SOPs, forms, and assigned acknowledgements.",
             systemImage: "doc.text.fill"
         ) {
             ScrollView {
@@ -156,8 +156,8 @@ struct DocumentsView: View {
                     .foregroundStyle(.white)
 
                 Text(requiredCount > 0
-                     ? "\(requiredCount) document\(requiredCount == 1 ? "" : "s") need acknowledgement."
-                     : "All assigned documents are current.")
+                     ? "\(requiredCount) \(requiredCount == 1 ? "policy needs" : "policies need") acknowledgement."
+                     : "All assigned policies are current.")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white.opacity(0.72))
             }
@@ -183,7 +183,7 @@ struct DocumentsView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.white.opacity(0.58))
 
-            TextField("Search documents", text: $query)
+            TextField("Search Policy Center", text: $query)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .foregroundStyle(.white)
@@ -198,7 +198,7 @@ struct DocumentsView: View {
         HStack(spacing: 12) {
             ProgressView()
                 .tint(AppTheme.gold)
-            Text("Loading documents...")
+            Text("Loading Policy Center...")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.72))
         }
@@ -210,7 +210,7 @@ struct DocumentsView: View {
 
     private func errorCard(_ message: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Unable to load documents")
+            Text("Unable to load Policy Center")
                 .font(.headline.weight(.bold))
                 .foregroundStyle(.white)
 
@@ -231,7 +231,7 @@ struct DocumentsView: View {
     }
 
     private var emptyCard: some View {
-        Text("No documents found.")
+        Text("No policies found.")
             .font(.subheadline.weight(.semibold))
             .foregroundStyle(.white.opacity(0.72))
             .padding(16)

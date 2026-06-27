@@ -25,7 +25,7 @@ enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
         case .messages: return "Messages"
         case .assignedTraining: return "Assigned Training"
         case .apparatusWorkOrders: return "Apparatus Work Orders"
-        case .documents: return "Documents / SOPs"
+        case .documents: return "Policy Center"
         case .scheduleEvents: return "Schedule / Events"
         case .recentCalls: return "Latest Dispatches"
         case .departmentUpdates: return "Department Updates"

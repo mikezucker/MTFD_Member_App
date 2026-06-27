@@ -208,7 +208,7 @@ struct NotificationPreferencesView: View {
                     Text("Messages")
                 }
 
-                // MARK: - Training & Documents
+                // MARK: - Training & Policy Center
                 Section {
                     settingToggle(
                         title: "Training Assignments",
@@ -217,12 +217,12 @@ struct NotificationPreferencesView: View {
                     )
 
                     settingToggle(
-                        title: "Document / SOP Assignments",
-                        description: "Receive alerts when documents, SOPs, or acknowledgements are assigned to you.",
+                        title: "Policy Center Assignments",
+                        description: "Receive alerts when policies, SOPs, or acknowledgements are assigned to you.",
                         isOn: $vm.preferences.documentAssignmentsEnabled
                     )
                 } header: {
-                    Text("Training & Documents")
+                    Text("Training & Policy Center")
                 }
 
 

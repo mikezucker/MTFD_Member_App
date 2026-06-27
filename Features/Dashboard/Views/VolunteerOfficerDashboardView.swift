@@ -489,13 +489,13 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
 
     private var documentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Documents / SOPs", systemImage: "doc.text.fill")
+            sectionTitle("Policy Center", systemImage: "doc.text.fill")
 
             DashboardSmallStatusCard(
-                title: "Documents / SOPs",
+                title: "Policy Center",
                 subtitle: pendingDocuments > 0
                     ? "\(pendingDocuments) item\(pendingDocuments == 1 ? "" : "s") need acknowledgement."
-                    : "No documents need acknowledgement.",
+                    : "No policies need acknowledgement.",
                 systemImage: "doc.text.fill"
             ) {
                 onOpenDocuments()

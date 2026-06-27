@@ -128,7 +128,7 @@ struct AppNotificationPayload: Identifiable {
         case .trainingAssignment:
             return "Training Assignment"
         case .documentAssignment:
-            return "Document Assignment"
+            return "Policy Center Assignment"
         case .messageCenter:
             return "Message Center"
         case .unknown:
