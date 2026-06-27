@@ -759,23 +759,6 @@ private struct DispatchHistoryRow: View {
 private struct DepartmentMessageRow: View {
     let message: MobileMessage
 
-    private var iconName: String {
-        switch message.type {
-        case "TRAINING_REMINDER", "TRAINING", "TRAINING_ASSIGNMENT":
-            return "graduationcap.fill"
-        case "UNIFORM", "UNIFORM_REQUEST", "UNIFORM_REQUEST_UPDATE":
-            return "tshirt.fill"
-        case "DOCUMENT", "DOCUMENT_SIGNATURE":
-            return "doc.text.fill"
-        case "ANNOUNCEMENT":
-            return "megaphone.fill"
-        case "OFFICER_NOTE":
-            return "person.badge.shield.checkmark.fill"
-        default:
-            return "envelope.fill"
-        }
-    }
-
     private var priorityLabel: String? {
         switch message.priority {
         case "CRITICAL":
@@ -794,9 +777,9 @@ private struct DepartmentMessageRow: View {
                     .fill(Color.white.opacity(0.12))
                     .frame(width: 46, height: 46)
 
-                Image(systemName: iconName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(message.isRead ? .white.opacity(0.55) : AppTheme.gold)
+                Text(message.displayIcon)
+                    .font(.system(size: 22))
+                    .saturation(message.isRead ? 0.45 : 1.0)
 
                 if !message.isRead {
                     Circle()
@@ -826,6 +809,19 @@ private struct DepartmentMessageRow: View {
                     }
                 }
 
+                HStack(spacing: 6) {
+                    Text(message.typeDisplayLabel)
+                    Text("•")
+                    Text(message.audienceDisplayLabel)
+
+                    if message.isPinned == true {
+                        Text("• Pinned")
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.gold.opacity(0.9))
+                .lineLimit(1)
+
                 if let body = message.body, !body.isEmpty {
                     Text(body)
                         .font(.caption)
@@ -833,9 +829,15 @@ private struct DepartmentMessageRow: View {
                         .lineLimit(2)
                 }
 
-                Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.45))
+                HStack(spacing: 6) {
+                    Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
+
+                    if let expiresAt = message.expiresAt {
+                        Text("Expires \(expiresAt.formatted(date: .abbreviated, time: .omitted))")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.45))
             }
         }
         .padding(14)
@@ -968,17 +970,30 @@ private struct MessageDispatchMapPreview: View {
 private struct MessageDetailSheet: View {
     let message: MobileMessage
 
+    private var linkURL: URL? {
+        APIClient.shared.absoluteURL(from: message.linkUrl)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(message.title)
-                            .font(.title3.bold())
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(message.displayIcon)
+                            .font(.system(size: 34))
 
-                        Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(message.title)
+                                .font(.title3.bold())
+
+                            Text("\(message.typeDisplayLabel) • \(message.audienceDisplayLabel)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     if let body = message.body, !body.isEmpty {
@@ -990,6 +1005,41 @@ private struct MessageDetailSheet: View {
                         Text("No additional message details were provided.")
                             .font(.body)
                             .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Priority: \(message.priority.capitalized)")
+                        Text("Read: \(message.isRead ? "Yes" : "No")")
+
+                        if let createdByName = message.createdByName, !createdByName.isEmpty {
+                            Text("From: \(createdByName)")
+                        } else if let createdByRole = message.createdByRole, !createdByRole.isEmpty {
+                            Text("From: \(createdByRole.replacingOccurrences(of: "_", with: " ").capitalized)")
+                        }
+
+                        if let expiresAt = message.expiresAt {
+                            Text("Expires: \(expiresAt.formatted(date: .abbreviated, time: .shortened))")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    if let linkURL {
+                        Link(destination: linkURL) {
+                            HStack {
+                                Text(message.linkLabel ?? (message.type == "POLICY_LINK" ? "View Policy" : "Open Link"))
+                                    .font(.headline.weight(.semibold))
+
+                                Spacer()
+
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption.bold())
+                            }
+                            .padding()
+                            .foregroundStyle(.white)
+                            .background(AppTheme.navy)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
                     }
                 }
                 .padding(20)

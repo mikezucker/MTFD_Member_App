@@ -2439,13 +2439,23 @@ private struct CommandCreateMessageView: View {
     @State private var bodyText = ""
     @State private var audience = "OFFICERS"
     @State private var priority = "NORMAL"
+    @State private var messageType = "OFFICER_NOTE"
+    @State private var stationNumberTarget = 1
+    @State private var isPinned = false
+    @State private var hasExpiration = false
+    @State private var expiresAt = Date().addingTimeInterval(7 * 24 * 60 * 60)
+    @State private var linkUrl = ""
+    @State private var linkLabel = ""
     @State private var isSending = false
     @State private var errorMessage: String?
 
     private let audiences = [
         ("OFFICERS", "Officers"),
         ("ALL_MEMBERS", "All Members"),
-        ("CHIEFS", "Chiefs")
+        ("CHIEFS", "Chiefs"),
+        ("CAREER_MEMBERS", "Career"),
+        ("VOLUNTEER_MEMBERS", "Volunteers"),
+        ("STATION", "Station")
     ]
 
     private let priorities = [
@@ -2454,12 +2464,20 @@ private struct CommandCreateMessageView: View {
         ("CRITICAL", "Critical")
     ]
 
-    private var messageType: String {
-        audience == "ALL_MEMBERS" ? "ANNOUNCEMENT" : "OFFICER_NOTE"
-    }
+    private let messageTypes = [
+        ("ANNOUNCEMENT", "Announcement"),
+        ("TRAINING", "Training"),
+        ("EVENT", "Event"),
+        ("STAFFING", "Staffing"),
+        ("OFFICER_NOTE", "Officer Note"),
+        ("POLICY_LINK", "Policy Link"),
+        ("GENERAL", "General")
+    ]
 
     private var canSend: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSending
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !bodyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isSending
     }
 
     var body: some View {
@@ -2521,6 +2539,36 @@ private struct CommandCreateMessageView: View {
                             .pickerStyle(.segmented)
                         }
 
+                        if audience == "STATION" {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Station")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.white.opacity(0.72))
+
+                                Picker("Station", selection: $stationNumberTarget) {
+                                    ForEach(1...5, id: \.self) { stationNumber in
+                                        Text("Station \(stationNumber)").tag(stationNumber)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(AppTheme.gold)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Type")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white.opacity(0.72))
+
+                            Picker("Type", selection: $messageType) {
+                                ForEach(messageTypes, id: \.0) { value, label in
+                                    Text(label).tag(value)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .tint(AppTheme.gold)
+                        }
+
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Priority")
                                 .font(.caption.bold())
@@ -2532,6 +2580,44 @@ private struct CommandCreateMessageView: View {
                                 }
                             }
                             .pickerStyle(.segmented)
+                        }
+
+                        Toggle("Pin message", isOn: $isPinned)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .tint(AppTheme.gold)
+
+                        Toggle("Set expiration", isOn: $hasExpiration)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .tint(AppTheme.gold)
+
+                        if hasExpiration {
+                            DatePicker("Expires", selection: $expiresAt, displayedComponents: [.date, .hourAndMinute])
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .tint(AppTheme.gold)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(messageType == "POLICY_LINK" ? "Policy Link" : "Optional Link")
+                                .font(.caption.bold())
+                                .foregroundStyle(.white.opacity(0.72))
+
+                            TextField("URL or app route", text: $linkUrl)
+                                .textInputAutocapitalization(.never)
+                                .keyboardType(.URL)
+                                .padding(12)
+                                .background(.white.opacity(0.10))
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                            TextField("Link label", text: $linkLabel)
+                                .textInputAutocapitalization(.words)
+                                .padding(12)
+                                .background(.white.opacity(0.10))
+                                .foregroundStyle(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
                         }
 
                         if let errorMessage {
@@ -2593,17 +2679,35 @@ private struct CommandCreateMessageView: View {
             return
         }
 
+        guard !trimmedBody.isEmpty else {
+            errorMessage = "Message body is required."
+            return
+        }
+
+        let trimmedLinkUrl = linkUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLinkLabel = linkLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if messageType == "POLICY_LINK" && trimmedLinkUrl.isEmpty {
+            errorMessage = "Policy-link messages require a link."
+            return
+        }
+
         isSending = true
         errorMessage = nil
 
         do {
+            let expirationValue = hasExpiration ? ISO8601DateFormatter().string(from: expiresAt) : nil
             let response = try await APIClient.shared.createCommandMessage(
                 title: trimmedTitle,
-                body: trimmedBody.isEmpty ? nil : trimmedBody,
+                body: trimmedBody,
                 audience: audience,
                 priority: priority,
                 type: messageType,
-                actionType: "NONE"
+                stationNumberTarget: audience == "STATION" ? stationNumberTarget : nil,
+                expiresAt: expirationValue,
+                isPinned: isPinned,
+                linkUrl: trimmedLinkUrl.isEmpty ? nil : trimmedLinkUrl,
+                linkLabel: trimmedLinkLabel.isEmpty ? nil : trimmedLinkLabel
             )
 
             onCreated(response.message)

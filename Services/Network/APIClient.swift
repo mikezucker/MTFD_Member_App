@@ -795,11 +795,15 @@ final class APIClient {
 
     func createCommandMessage(
         title: String,
-        body: String?,
+        body: String,
         audience: String,
         priority: String = "NORMAL",
         type: String,
-        actionType: String = "NONE"
+        stationNumberTarget: Int? = nil,
+        expiresAt: String? = nil,
+        isPinned: Bool = false,
+        linkUrl: String? = nil,
+        linkLabel: String? = nil
     ) async throws -> CreateCommandMessageResponse {
         let payload = CreateCommandMessageRequest(
             title: title,
@@ -807,11 +811,15 @@ final class APIClient {
             audience: audience,
             priority: priority,
             type: type,
-            actionType: actionType
+            stationNumberTarget: stationNumberTarget,
+            expiresAt: expiresAt,
+            isPinned: isPinned,
+            linkUrl: linkUrl,
+            linkLabel: linkLabel
         )
 
         let request = try makeRequest(
-            path: "/api/mobile/command/messages",
+            path: "/api/mobile/messages",
             method: "POST",
             body: try encode(payload),
             requiresAuth: true
@@ -1024,11 +1032,15 @@ extension APIClient {
 
     struct CreateCommandMessageRequest: Encodable {
         let title: String
-        let body: String?
+        let body: String
         let audience: String
         let priority: String
         let type: String
-        let actionType: String
+        let stationNumberTarget: Int?
+        let expiresAt: String?
+        let isPinned: Bool
+        let linkUrl: String?
+        let linkLabel: String?
     }
 
     struct MemberAccessRequest: Encodable {
