@@ -542,7 +542,14 @@ private struct CommandWorkspaceView: View {
                 VStack(spacing: 0) {
                     commandRoleHeader
 
-                    ScrollView(showsIndicators: false) {
+                    NonBouncingVerticalScrollView(
+                        showsIndicators: false,
+                        onRefresh: {
+                            dashboardViewModel.refresh(role: mappedCommandUserRole)
+                            await scheduleViewModel.refresh()
+                            await messageViewModel.refresh()
+                        }
+                    ) {
                         VStack(alignment: .leading, spacing: 18) {
                             activeDispatchSection
 
@@ -571,11 +578,6 @@ private struct CommandWorkspaceView: View {
                         .padding(.horizontal)
                         .padding(.top, 12)
                         .padding(.bottom, 120)
-                    }
-                    .refreshable {
-                        dashboardViewModel.refresh(role: mappedCommandUserRole)
-                        await scheduleViewModel.refresh()
-                        await messageViewModel.refresh()
                     }
                 }
             }
