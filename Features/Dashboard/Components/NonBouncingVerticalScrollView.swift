@@ -103,14 +103,8 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView {
         refreshControl = control
         allowsPullToRefresh = control != nil
 
-        if allowsPullToRefresh {
-            bounces = true
-            alwaysBounceVertical = true
-        } else {
-            bounces = false
-            alwaysBounceVertical = false
-        }
-
+        bounces = false
+        alwaysBounceVertical = false
         alwaysBounceHorizontal = false
     }
 
@@ -148,17 +142,9 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView {
 
         let maxOffsetY = max(0, contentSize.height - bounds.height)
 
-        let isUserPullingOrRefreshing =
-            isTracking ||
-            isDragging ||
-            isDecelerating ||
-            refreshControl?.isRefreshing == true
-
-        if contentOffset.y < 0 && !isUserPullingOrRefreshing {
+        if contentOffset.y < 0 {
             contentOffset.y = 0
-        } else if !allowsPullToRefresh && contentOffset.y < 0 {
-            contentOffset.y = 0
-        } else if !isUserPullingOrRefreshing && contentOffset.y > maxOffsetY {
+        } else if contentOffset.y > maxOffsetY {
             contentOffset.y = maxOffsetY
         }
     }

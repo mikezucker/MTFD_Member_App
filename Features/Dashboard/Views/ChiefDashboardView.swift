@@ -1009,7 +1009,7 @@ private func selectNextScheduleDay() {
 
     private var recentDispatchesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Past Dispatches", systemImage: "clock.arrow.circlepath")
+            sectionTitle("Latest Dispatches", systemImage: "clock.arrow.circlepath")
 
             if isLoading && recentCalls.isEmpty {
                 loadingCard("Loading past dispatches...")

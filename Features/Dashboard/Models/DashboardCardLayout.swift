@@ -78,7 +78,7 @@ enum DashboardCardLayoutDefaults {
         switch role {
         case "ADMIN":
             return [.scheduleEvents, .apparatusWorkOrders, .messages, .recentCalls]
-        case "CHIEF":
+        case "CHIEF", "BATTALION_CHIEF":
             return [.scheduleEvents, .apparatusWorkOrders, .messages, .recentCalls]
         case "OFFICER_CAREER":
             return [.scheduleEvents, .apparatusWorkOrders, .stationUpdates, .assignedTraining, .messages, .documents, .recentCalls, .departmentUpdates]

@@ -82,7 +82,7 @@ struct DashboardLayoutView: View {
 
     private var usesFixedDashboardLayout: Bool {
         switch session.currentUser?.role.uppercased() {
-        case "CHIEF", "OFFICER_CAREER":
+        case "CHIEF", "BATTALION_CHIEF", "OFFICER_CAREER":
             return true
         default:
             return false

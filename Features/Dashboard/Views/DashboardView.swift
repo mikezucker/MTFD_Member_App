@@ -353,7 +353,7 @@ struct DashboardView: View {
     private var firstName: String {
         let role = session.currentUser?.role.uppercased() ?? ""
 
-        if role == "CHIEF" {
+        if role == "CHIEF" || role == "BATTALION_CHIEF" {
             return "Chief"
         }
 
@@ -515,7 +515,7 @@ struct DashboardView: View {
             return .member
         }
 
-        if rawRole == "ADMIN" || rawRole == "CHIEF" {
+        if rawRole == "ADMIN" || rawRole == "CHIEF" || rawRole == "BATTALION_CHIEF" {
             return .chief
         } else if rawRole.contains("OFFICER") {
             return .officer
@@ -569,6 +569,8 @@ struct DashboardView: View {
             return "Administrator"
         case "CHIEF":
             return "Chief"
+        case "BATTALION_CHIEF":
+            return "Battalion Chief"
         case "OFFICER_CAREER":
             return "Career Officer"
         case "OFFICER_VOLUNTEER":
