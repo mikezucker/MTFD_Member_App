@@ -10,12 +10,14 @@ struct MessageCenterView: View {
 
     let mode: Mode
 
+    @EnvironmentObject private var sessionManager: SessionManager
     @StateObject private var viewModel = MessageCenterViewModel()
 
     @State private var selectedMessage: MobileMessage?
     @State private var selectedDispatch: DispatchNotificationPayload?
     @State private var highlightedDispatchId: String?
     @State private var selectedTab: MessageCenterTab
+    @State private var showComposer = false
 
     init(mode: Mode = .combined) {
         self.mode = mode
@@ -96,6 +98,18 @@ struct MessageCenterView: View {
         }
     }
 
+    private var canCreateMessages: Bool {
+        guard let user = sessionManager.currentUser else { return false }
+
+        return user.canPostStationMessages
+            || user.canManageUsers
+            || user.role == "ADMIN"
+            || user.role == "CHIEF"
+            || user.role == "BATTALION_CHIEF"
+            || user.role == "OFFICER_CAREER"
+            || user.isFireHeadquarters
+    }
+
     var body: some View {
         AppScreen(
             title: screenTitle,
@@ -139,9 +153,35 @@ struct MessageCenterView: View {
         .refreshable {
             await viewModel.refresh()
         }
+        .toolbar {
+            if canCreateMessages {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showComposer = true
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .accessibilityLabel("Create message")
+                }
+            }
+        }
         .sheet(item: $selectedMessage) { message in
             MessageDetailSheet(message: message)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showComposer) {
+            MessageComposeView { title, body, audience, priority, type, stationNumberTarget in
+                try await viewModel.createMessage(
+                    title: title,
+                    body: body,
+                    audience: audience,
+                    priority: priority,
+                    type: type,
+                    stationNumberTarget: stationNumberTarget
+                )
+
+                selectedTab = .department
+            }
         }
         .navigationDestination(
             isPresented: Binding(
@@ -443,6 +483,163 @@ struct MessageCenterView: View {
             trainingId: nil,
             documentId: nil
         )
+    }
+}
+
+// MARK: - Compose
+
+private struct MessageComposeView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let onSend: (
+        _ title: String,
+        _ body: String,
+        _ audience: String,
+        _ priority: String,
+        _ type: String,
+        _ stationNumberTarget: Int?
+    ) async throws -> Void
+
+    @State private var title = ""
+    @State private var messageBody = ""
+    @State private var audience = "ALL_MEMBERS"
+    @State private var targetStation = false
+    @State private var priority = "NORMAL"
+    @State private var type = "ANNOUNCEMENT"
+    @State private var stationText = ""
+    @State private var isSending = false
+    @State private var errorMessage: String?
+
+    private let audiences: [(label: String, value: String)] = [
+        ("Department", "ALL_MEMBERS"),
+        ("Officers", "ALL_OFFICERS"),
+        ("Chiefs", "CHIEFS"),
+        ("Career", "CAREER_MEMBERS"),
+        ("Volunteers", "VOLUNTEER_MEMBERS")
+    ]
+
+    private let priorities: [(label: String, value: String)] = [
+        ("Normal", "NORMAL"),
+        ("High", "HIGH"),
+        ("Critical", "CRITICAL")
+    ]
+
+    private let messageTypes: [(label: String, value: String)] = [
+        ("Announcement", "ANNOUNCEMENT"),
+        ("Staffing", "STAFFING"),
+        ("Event", "EVENT"),
+        ("Officer Note", "OFFICER_NOTE")
+    ]
+
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedBody: String {
+        messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var stationNumber: Int? {
+        Int(stationText.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private var canSend: Bool {
+        !trimmedTitle.isEmpty
+            && !trimmedBody.isEmpty
+            && !isSending
+            && (!targetStation || stationNumber != nil)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Message") {
+                    TextField("Title", text: $title)
+                        .textInputAutocapitalization(.sentences)
+
+                    TextField("Body", text: $messageBody, axis: .vertical)
+                        .lineLimit(4...8)
+                        .textInputAutocapitalization(.sentences)
+                }
+
+                Section("Delivery") {
+                    Picker("Audience", selection: $audience) {
+                        ForEach(audiences, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+
+                    Toggle("Target a station", isOn: $targetStation)
+
+                    if targetStation {
+                        TextField("Station number", text: $stationText)
+                            .keyboardType(.numberPad)
+                    }
+
+                    Picker("Priority", selection: $priority) {
+                        ForEach(priorities, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+
+                    Picker("Type", selection: $type) {
+                        ForEach(messageTypes, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("New Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isSending)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSending ? "Sending" : "Send") {
+                        Task {
+                            await send()
+                        }
+                    }
+                    .disabled(!canSend)
+                }
+            }
+        }
+    }
+
+    private func send() async {
+        guard canSend else { return }
+
+        isSending = true
+        errorMessage = nil
+
+        do {
+            try await onSend(
+                trimmedTitle,
+                trimmedBody,
+                audience,
+                priority,
+                type,
+                targetStation ? stationNumber : nil
+            )
+
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isSending = false
     }
 }
 

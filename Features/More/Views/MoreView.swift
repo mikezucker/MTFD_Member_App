@@ -26,6 +26,17 @@ struct MoreView: View {
 
                         VStack(spacing: 12) {
                             NavigationLink {
+                                MessageCenterView(mode: .combined)
+                            } label: {
+                                    menuRow(
+                                        title: "Messages",
+                                        subtitle: "Dispatches, department messages, and announcements",
+                                        emoji: "📬"
+                                    )
+                            }
+                            .buttonStyle(.plain)
+
+                            NavigationLink {
                                 ScheduleView()
                             } label: {
                                     menuRow(

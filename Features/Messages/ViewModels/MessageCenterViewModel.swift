@@ -169,6 +169,29 @@ final class MessageCenterViewModel: ObservableObject {
         await loadMessages(force: true)
     }
 
+    func createMessage(
+        title: String,
+        body: String,
+        audience: String,
+        priority: String,
+        type: String,
+        stationNumberTarget: Int?
+    ) async throws {
+        let response = try await APIClient.shared.createCommandMessage(
+            title: title,
+            body: body,
+            audience: audience,
+            priority: priority,
+            type: type,
+            stationNumberTarget: stationNumberTarget
+        )
+
+        messages.removeAll { $0.id == response.message.id }
+        messages.insert(response.message, at: 0)
+        unreadCount += response.message.isRead ? 0 : 1
+        updateBadgeCount()
+    }
+
     private func updateBadgeCount() {
         AppBadgeManager.shared.updateAppBadge(
             dispatchCount: unreadDispatchCount,
