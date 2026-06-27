@@ -64,6 +64,15 @@ struct SettingsView: View {
                         .foregroundStyle(.blue)
                 }
             }
+
+            Section("Dashboard") {
+                NavigationLink {
+                    DashboardLayoutView()
+                } label: {
+                    Label("Edit Dashboard", systemImage: "rectangle.grid.2x2")
+                        .foregroundStyle(.blue)
+                }
+            }
         }
         .navigationTitle("Settings")
     }
