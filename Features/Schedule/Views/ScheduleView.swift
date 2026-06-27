@@ -115,8 +115,8 @@ struct ScheduleView: View {
                                 .foregroundStyle(isSelected ? .black.opacity(0.68) : .white.opacity(0.58))
 
                             HStack(spacing: 4) {
-                                Image(systemName: dayVacancyCount(day) > 0 ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                                    .font(.system(size: 10, weight: .bold))
+                                Text(dayVacancyCount(day) > 0 ? "⚠️" : "✅")
+                                    .font(.system(size: 10))
                                 Text("\(day.entries.count)")
                                     .font(.caption2.weight(.bold))
                             }
@@ -145,7 +145,7 @@ struct ScheduleView: View {
                     ForEach(ScheduleStatusFilter.allCases) { status in
                         filterChip(
                             title: status.title,
-                            systemImage: status.systemImage,
+                            emoji: status.emoji,
                             isSelected: selectedStatus == status
                         ) {
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -162,7 +162,7 @@ struct ScheduleView: View {
                     ForEach(stationFilters) { station in
                         filterChip(
                             title: station.title,
-                            systemImage: station.systemImage,
+                            emoji: station.emoji,
                             isSelected: selectedStation == station
                         ) {
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -178,9 +178,9 @@ struct ScheduleView: View {
 
     private var coverageSummary: some View {
         HStack(spacing: 10) {
-            summaryMetric(title: "Assignments", value: "\(selectedEntries.count)", systemImage: "calendar")
-            summaryMetric(title: "Staffed", value: "\(filledStaffingCount)", systemImage: "person.2.fill")
-            summaryMetric(title: "Vacant", value: "\(vacancyCount)", systemImage: "exclamationmark.triangle.fill", isWarning: vacancyCount > 0)
+            summaryMetric(title: "Assignments", value: "\(selectedEntries.count)", emoji: "📅")
+            summaryMetric(title: "Staffed", value: "\(filledStaffingCount)", emoji: "👥")
+            summaryMetric(title: "Vacant", value: "\(vacancyCount)", emoji: "⚠️", isWarning: vacancyCount > 0)
         }
     }
 
@@ -189,7 +189,10 @@ struct ScheduleView: View {
         if selectedStatus != .needsCoverage && !needsCoverageEntries.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Label("Needs Coverage", systemImage: "exclamationmark.triangle.fill")
+                    HStack(spacing: 8) {
+                        Text("⚠️")
+                        Text("Needs Coverage")
+                    }
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(.white)
 
@@ -296,12 +299,12 @@ struct ScheduleView: View {
                 }
 
                 HStack(spacing: 8) {
-                    staffingPill(title: "\(staffedCount) staffed", systemImage: "person.crop.circle.fill", color: AppTheme.gold)
+                    staffingPill(title: "\(staffedCount) staffed", emoji: "👥", color: AppTheme.gold)
 
                     if vacantCount > 0 {
-                        staffingPill(title: "\(vacantCount) vacant", systemImage: "exclamationmark.triangle.fill", color: .orange)
+                        staffingPill(title: "\(vacantCount) vacant", emoji: "⚠️", color: .orange)
                     } else {
-                        staffingPill(title: "Covered", systemImage: "checkmark.circle.fill", color: .green)
+                        staffingPill(title: "Covered", emoji: "✅", color: .green)
                     }
                 }
 
@@ -352,9 +355,8 @@ struct ScheduleView: View {
         let qualifier = detail.qualifier?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         return HStack(alignment: .top, spacing: 10) {
-            Image(systemName: detail.isVacant ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(detail.isVacant ? .orange : AppTheme.gold)
+            Text(detail.isVacant ? "⚠️" : "👤")
+                .font(.system(size: 17))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -377,9 +379,8 @@ struct ScheduleView: View {
         let isVacant = staff.localizedCaseInsensitiveContains("vacant")
 
         return HStack(alignment: .top, spacing: 10) {
-            Image(systemName: isVacant ? "person.crop.circle.badge.exclamationmark" : "person.crop.circle.fill")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(isVacant ? .orange : AppTheme.gold)
+            Text(isVacant ? "⚠️" : "👤")
+                .font(.system(size: 17))
                 .frame(width: 24)
 
             Text(staff)
@@ -391,9 +392,8 @@ struct ScheduleView: View {
 
     private func compactCoverageRow(_ entry: APIClient.MobileScheduleEntry) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.orange)
+            Text("⚠️")
+                .font(.system(size: 15))
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -421,12 +421,11 @@ struct ScheduleView: View {
         }
     }
 
-    private func summaryMetric(title: String, value: String, systemImage: String, isWarning: Bool = false) -> some View {
+    private func summaryMetric(title: String, value: String, emoji: String, isWarning: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(isWarning ? .orange : AppTheme.gold)
+                Text(emoji)
+                    .font(.caption)
 
                 Text(title)
                     .font(.caption2.weight(.bold))
@@ -448,11 +447,11 @@ struct ScheduleView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private func filterChip(title: String, systemImage: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+    private func filterChip(title: String, emoji: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.bold))
+                Text(emoji)
+                    .font(.caption)
                 Text(title)
                     .font(.caption.weight(.bold))
                     .lineLimit(1)
@@ -470,8 +469,11 @@ struct ScheduleView: View {
         .buttonStyle(.plain)
     }
 
-    private func staffingPill(title: String, systemImage: String, color: Color) -> some View {
-        Label(title, systemImage: systemImage)
+    private func staffingPill(title: String, emoji: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Text(emoji)
+            Text(title)
+        }
             .font(.caption.weight(.bold))
             .foregroundStyle(color)
             .padding(.horizontal, 9)
@@ -708,14 +710,14 @@ private enum ScheduleStatusFilter: String, CaseIterable, Identifiable {
         }
     }
 
-    var systemImage: String {
+    var emoji: String {
         switch self {
         case .all:
-            return "line.3.horizontal.decrease.circle"
+            return "📋"
         case .needsCoverage:
-            return "exclamationmark.triangle.fill"
+            return "⚠️"
         case .mySchedule:
-            return "person.crop.circle.fill"
+            return "👤"
         }
     }
 }
@@ -742,12 +744,12 @@ private enum ScheduleStationFilter: Identifiable, Equatable {
         }
     }
 
-    var systemImage: String {
+    var emoji: String {
         switch self {
         case .all:
-            return "building.2.fill"
+            return "🏠"
         case .station:
-            return "mappin.and.ellipse"
+            return "🚒"
         }
     }
 }

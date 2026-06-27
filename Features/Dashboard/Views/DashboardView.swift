@@ -31,7 +31,7 @@ struct DashboardView: View {
 
     private var configuredDashboardCards: [DashboardCardID] {
         _ = dashboardLayoutRevision
-        let hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
+        let hiddenCards = DashboardCardLayoutDefaults.hiddenCards(for: session.currentUser?.role)
         return DashboardCardLayoutDefaults
             .savedOrder(for: session.currentUser?.role)
             .filter { !hiddenCards.contains($0) }

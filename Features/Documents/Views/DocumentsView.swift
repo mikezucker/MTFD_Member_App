@@ -103,14 +103,14 @@ private enum PolicyLibraryFilter: String, CaseIterable, Identifiable {
         }
     }
 
-    var systemImage: String {
+    var emoji: String {
         switch self {
         case .all:
-            return "tray.full.fill"
+            return "📚"
         case .needsAcknowledgement:
-            return "signature"
+            return "✍️"
         case .current:
-            return "checkmark.seal.fill"
+            return "✅"
         }
     }
 
@@ -313,8 +313,8 @@ struct DocumentsView: View {
                         }
                     } label: {
                         HStack(spacing: 7) {
-                            Image(systemName: filter.systemImage)
-                                .font(.caption.weight(.bold))
+                            Text(filter.emoji)
+                                .font(.caption)
 
                             Text(filter.title)
                                 .font(.caption.weight(.bold))
@@ -334,12 +334,7 @@ struct DocumentsView: View {
 
     private var libraryHeaderCard: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: selectedFolderId == nil ? "books.vertical.fill" : "folder.fill")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(AppTheme.gold)
-                .frame(width: 38, height: 38)
-                .background(AppTheme.gold.opacity(0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+            policyEmojiBadge(selectedFolderId == nil ? "📚" : "📁", size: 38, fontSize: 22)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(selectedFolder?.name ?? "All Policies")
@@ -390,9 +385,9 @@ struct DocumentsView: View {
 
     private var statusMetrics: some View {
         HStack(spacing: 10) {
-            policyMetric(title: "Policies", value: "\(filteredDocuments.count)", systemImage: "doc.text.fill")
-            policyMetric(title: "Current", value: "\(currentCount(in: filteredDocuments))", systemImage: "checkmark.seal.fill", color: .green)
-            policyMetric(title: "Waiting", value: "\(pendingDocuments.count)", systemImage: "signature", color: .orange, isWarning: !pendingDocuments.isEmpty)
+            policyMetric(title: "Policies", value: "\(filteredDocuments.count)", emoji: "📄")
+            policyMetric(title: "Current", value: "\(currentCount(in: filteredDocuments))", emoji: "✅", color: .green)
+            policyMetric(title: "Waiting", value: "\(pendingDocuments.count)", emoji: "✍️", color: .orange, isWarning: !pendingDocuments.isEmpty)
         }
     }
 
@@ -401,7 +396,10 @@ struct DocumentsView: View {
         if !pendingDocuments.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Label("Awaiting Acknowledgement", systemImage: "signature")
+                    HStack(spacing: 8) {
+                        Text("✍️")
+                        Text("Awaiting Acknowledgement")
+                    }
                         .font(.headline.weight(.semibold))
                         .foregroundStyle(.white)
 
@@ -435,7 +433,10 @@ struct DocumentsView: View {
     private var policyLibrarySection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("Policy Library", systemImage: "folder.fill")
+                HStack(spacing: 8) {
+                    Text("📁")
+                    Text("Policy Library")
+                }
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
 
@@ -508,16 +509,11 @@ struct DocumentsView: View {
     }
 
     private func folderRow(_ folder: APIClient.MobileDocumentFolder) -> some View {
-        Button {
-            selectedFolderId = folder.id
-        } label: {
+                Button {
+                    selectedFolderId = folder.id
+                } label: {
             HStack(spacing: 12) {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppTheme.gold)
-                    .frame(width: 30, height: 30)
-                    .background(AppTheme.gold.opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                policyEmojiBadge("📁", size: 34, fontSize: 20)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(folder.name)
@@ -550,7 +546,10 @@ struct DocumentsView: View {
 
     private var emptyFolderCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Nothing here", systemImage: "tray")
+            HStack(spacing: 8) {
+                Text("📭")
+                Text("Nothing here")
+            }
                 .font(.headline.weight(.bold))
                 .foregroundStyle(.white)
 
@@ -602,7 +601,10 @@ struct DocumentsView: View {
 
     private var emptyCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("No policies found", systemImage: "doc.text.magnifyingglass")
+            HStack(spacing: 8) {
+                Text("🔎")
+                Text("No policies found")
+            }
                 .font(.headline.weight(.bold))
                 .foregroundStyle(.white)
 
@@ -625,12 +627,7 @@ struct DocumentsView: View {
             Task { await viewModel.open(document) }
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                Image(systemName: documentIcon(for: document))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(highlighted ? .orange : AppTheme.gold)
-                    .frame(width: 30, height: 30)
-                    .background((highlighted ? Color.orange : AppTheme.gold).opacity(0.15))
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                policyEmojiBadge(documentEmoji(for: document), size: 34, fontSize: 20)
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
@@ -696,15 +693,14 @@ struct DocumentsView: View {
     private func policyMetric(
         title: String,
         value: String,
-        systemImage: String,
+        emoji: String,
         color: Color = AppTheme.gold,
         isWarning: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(color)
+                Text(emoji)
+                    .font(.caption)
 
                 Text(title)
                     .font(.caption2.weight(.bold))
@@ -755,19 +751,27 @@ struct DocumentsView: View {
         return "\(childFolderCount) folder\(childFolderCount == 1 ? "" : "s") / \(documentCount) polic\(documentCount == 1 ? "y" : "ies")"
     }
 
-    private func documentIcon(for document: APIClient.MobileDocument) -> String {
+    private func documentEmoji(for document: APIClient.MobileDocument) -> String {
         switch document.category.uppercased() {
         case "POLICY":
-            return "checklist.checked"
+            return "📋"
         case "SOP", "SOG":
-            return "list.bullet.clipboard.fill"
+            return "🚒"
         case "TRAINING":
-            return "graduationcap.fill"
+            return "🎓"
         case "FORM":
-            return "square.and.pencil"
+            return "📝"
         default:
-            return "doc.text.fill"
+            return "📄"
         }
+    }
+
+    private func policyEmojiBadge(_ emoji: String, size: CGFloat = 34, fontSize: CGFloat = 20) -> some View {
+        Text(emoji)
+            .font(.system(size: fontSize))
+            .frame(width: size, height: size)
+            .background(AppTheme.gold.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 9))
     }
 
     private func folderTitle(for folderId: String) -> String {

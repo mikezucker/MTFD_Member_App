@@ -35,7 +35,7 @@ struct DashboardLayoutView: View {
                                         hiddenCards.insert(card)
                                     }
 
-                                    DashboardCardLayoutDefaults.saveHiddenCards(hiddenCards)
+                                    DashboardCardLayoutDefaults.saveHiddenCards(hiddenCards, for: session.currentUser?.role)
                                 }
                             )
                         )
@@ -52,7 +52,7 @@ struct DashboardLayoutView: View {
 
             Section {
                 Button(role: .destructive) {
-                    DashboardCardLayoutDefaults.reset()
+                    DashboardCardLayoutDefaults.reset(for: session.currentUser?.role)
                     loadLayout()
                 } label: {
                     Label("Reset to Default", systemImage: "arrow.counterclockwise")
@@ -86,11 +86,11 @@ struct DashboardLayoutView: View {
 
     private func moveCards(from source: IndexSet, to destination: Int) {
         cards.move(fromOffsets: source, toOffset: destination)
-        DashboardCardLayoutDefaults.saveOrder(cards)
+        DashboardCardLayoutDefaults.saveOrder(cards, for: session.currentUser?.role)
     }
 
     private func loadLayout() {
         cards = DashboardCardLayoutDefaults.savedOrder(for: session.currentUser?.role)
-        hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
+        hiddenCards = DashboardCardLayoutDefaults.hiddenCards(for: session.currentUser?.role)
     }
 }

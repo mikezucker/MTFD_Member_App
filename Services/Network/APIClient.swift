@@ -1146,6 +1146,8 @@ extension APIClient {
 
         var canManageUsers: Bool {
             permissions?.canManageReporting == true
+                || role == "OFFICER_CAREER"
+                || isFireHeadquarters
         }
 
         var isReliefDriver: Bool {
@@ -1230,6 +1232,16 @@ extension APIClient {
 
         var roleLabel: String {
             APIClient.MobileAdminUser.roleLabel(for: role)
+        }
+
+        var roleEmoji: String {
+            switch role {
+            case "ADMIN": return "🛠️"
+            case "CHIEF", "BATTALION_CHIEF": return "🛡️"
+            case "OFFICER_CAREER", "OFFICER_VOLUNTEER": return "🚒"
+            case "MEMBER_CAREER", "MEMBER_VOLUNTEER": return "👤"
+            default: return "👥"
+            }
         }
 
         var companyLabel: String {

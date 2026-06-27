@@ -10,7 +10,7 @@ struct MoreView: View {
             AppScreen(
                 title: "More",
                 subtitle: "Settings, profile, and additional tools.",
-                systemImage: "gearshape.fill"
+                systemImage: "ellipsis.circle.fill"
             ) {
                 ScrollView {
                     VStack(spacing: 18) {
@@ -28,11 +28,11 @@ struct MoreView: View {
                             NavigationLink {
                                 ScheduleView()
                             } label: {
-                                menuRow(
-                                    title: "Schedule",
-                                    subtitle: "Today’s FirstDue staffing and assignments",
-                                    systemImage: "calendar.badge.clock"
-                                )
+                                    menuRow(
+                                        title: "Schedule",
+                                        subtitle: "Today’s FirstDue staffing and assignments",
+                                        emoji: "📅"
+                                    )
                             }
                             .buttonStyle(.plain)
                             if sessionManager.currentUser?.canAccessUniforms == true {
@@ -42,7 +42,7 @@ struct MoreView: View {
                                     menuRow(
                                         title: "Uniforms",
                                         subtitle: "Uniform requests and gear information",
-                                        systemImage: "tshirt.fill"
+                                        emoji: "👕"
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -55,7 +55,7 @@ struct MoreView: View {
                                     menuRow(
                                         title: "User Admin",
                                         subtitle: "Review members and update reporting details",
-                                        systemImage: "person.2.badge.gearshape.fill"
+                                        emoji: "👥"
                                     )
                                 }
                                 .buttonStyle(.plain)
@@ -64,11 +64,11 @@ struct MoreView: View {
                             NavigationLink {
                                 SettingsView()
                             } label: {
-                                menuRow(
-                                    title: "Settings",
-                                    subtitle: "Notification filters and app preferences",
-                                    systemImage: "gearshape.fill"
-                                )
+                                    menuRow(
+                                        title: "Settings",
+                                        subtitle: "Notification filters and app preferences",
+                                        emoji: "⚙️"
+                                    )
                             }
                             .buttonStyle(.plain)
                         }
@@ -129,9 +129,7 @@ struct MoreView: View {
 
     private func profileCard(member: APIClient.Member) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 46))
-                .foregroundStyle(AppTheme.gold)
+            emojiBadge("👤", size: 54, fontSize: 30)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(member.name)
@@ -168,13 +166,10 @@ struct MoreView: View {
     private func menuRow(
         title: String,
         subtitle: String,
-        systemImage: String
+        emoji: String
     ) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(AppTheme.gold)
-                .frame(width: 28)
+            emojiBadge(emoji)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -195,6 +190,14 @@ struct MoreView: View {
         .padding()
         .background(Color.white.opacity(0.09))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func emojiBadge(_ emoji: String, size: CGFloat = 42, fontSize: CGFloat = 24) -> some View {
+        Text(emoji)
+            .font(.system(size: fontSize))
+            .frame(width: size, height: size)
+            .background(AppTheme.gold.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private func sendTestPush() async {
@@ -253,7 +256,7 @@ private struct UserAdminView: View {
         AppScreen(
             title: "User Admin",
             subtitle: "Member roles, reporting, and station assignments.",
-            systemImage: "person.2.badge.gearshape.fill"
+            systemImage: "person.2.fill"
         ) {
             ScrollView {
                 VStack(spacing: 16) {
@@ -371,15 +374,11 @@ private struct UserAdminRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(AppTheme.gold.opacity(0.18))
-                    .frame(width: 42, height: 42)
-
-                Image(systemName: "person.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(AppTheme.gold)
-            }
+            Text(user.roleEmoji)
+                .font(.system(size: 24))
+                .frame(width: 42, height: 42)
+                .background(AppTheme.gold.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(user.displayName)

@@ -51,8 +51,26 @@ enum DashboardCardID: String, CaseIterable, Identifiable, Codable {
 }
 
 enum DashboardCardLayoutDefaults {
-    static let hiddenCardsKey = "dashboard_hidden_cards"
-    static let orderKey = "dashboard_card_order"
+    private static let baseHiddenCardsKey = "dashboard_hidden_cards"
+    private static let baseOrderKey = "dashboard_card_order"
+
+    private static func normalizedRoleKey(for rawRole: String?) -> String {
+        let role = rawRole?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "-", with: "_") ?? "default"
+
+        return role.isEmpty ? "default" : role
+    }
+
+    private static func orderKey(for rawRole: String?) -> String {
+        "\(baseOrderKey)_\(normalizedRoleKey(for: rawRole))"
+    }
+
+    private static func hiddenCardsKey(for rawRole: String?) -> String {
+        "\(baseHiddenCardsKey)_\(normalizedRoleKey(for: rawRole))"
+    }
 
     static func defaultOrder(for rawRole: String?) -> [DashboardCardID] {
         let role = rawRole?.uppercased() ?? ""
@@ -74,7 +92,7 @@ enum DashboardCardLayoutDefaults {
     }
 
     static func savedOrder(for rawRole: String?) -> [DashboardCardID] {
-        guard let data = UserDefaults.standard.data(forKey: orderKey),
+        guard let data = UserDefaults.standard.data(forKey: orderKey(for: rawRole)),
               let rawValues = try? JSONDecoder().decode([String].self, from: data) else {
             return defaultOrder(for: rawRole)
         }
@@ -84,29 +102,29 @@ enum DashboardCardLayoutDefaults {
         return decoded + missing
     }
 
-    static func saveOrder(_ cards: [DashboardCardID]) {
+    static func saveOrder(_ cards: [DashboardCardID], for rawRole: String?) {
         let rawValues = cards.map(\.rawValue)
         if let data = try? JSONEncoder().encode(rawValues) {
-            UserDefaults.standard.set(data, forKey: orderKey)
+            UserDefaults.standard.set(data, forKey: orderKey(for: rawRole))
             NotificationCenter.default.post(name: .dashboardLayoutDidChange, object: nil)
         }
     }
 
-    static func hiddenCards() -> Set<DashboardCardID> {
-        guard let rawValues = UserDefaults.standard.stringArray(forKey: hiddenCardsKey) else {
+    static func hiddenCards(for rawRole: String?) -> Set<DashboardCardID> {
+        guard let rawValues = UserDefaults.standard.stringArray(forKey: hiddenCardsKey(for: rawRole)) else {
             return []
         }
         return Set(rawValues.compactMap(DashboardCardID.init(rawValue:)))
     }
 
-    static func saveHiddenCards(_ cards: Set<DashboardCardID>) {
-        UserDefaults.standard.set(cards.map(\.rawValue), forKey: hiddenCardsKey)
+    static func saveHiddenCards(_ cards: Set<DashboardCardID>, for rawRole: String?) {
+        UserDefaults.standard.set(cards.map(\.rawValue), forKey: hiddenCardsKey(for: rawRole))
         NotificationCenter.default.post(name: .dashboardLayoutDidChange, object: nil)
     }
 
-    static func reset() {
-        UserDefaults.standard.removeObject(forKey: orderKey)
-        UserDefaults.standard.removeObject(forKey: hiddenCardsKey)
+    static func reset(for rawRole: String?) {
+        UserDefaults.standard.removeObject(forKey: orderKey(for: rawRole))
+        UserDefaults.standard.removeObject(forKey: hiddenCardsKey(for: rawRole))
         NotificationCenter.default.post(name: .dashboardLayoutDidChange, object: nil)
     }
 }
