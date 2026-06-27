@@ -10,7 +10,6 @@ struct ChiefDashboardView: View {
     let chiefStationStats: APIClient.ChiefStationStats?
     let recentCalls: [RecentDepartmentCall]
     let isLoading: Bool
-    let dashboardCards: [DashboardCardID]
     let onRefresh: () async -> Void
 
     @StateObject private var scheduleViewModel = ScheduleViewModel()
@@ -115,7 +114,7 @@ struct ChiefDashboardView: View {
 
     
     private var supportedDashboardCards: [DashboardCardID] {
-        dashboardCards.filter(isSupportedDashboardCard)
+        DashboardCardID.allCases.filter(isSupportedDashboardCard)
     }
 
 private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {

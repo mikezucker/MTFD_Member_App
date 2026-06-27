@@ -13,7 +13,6 @@ struct VolunteerOfficerDashboardView: View {
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
     let isLoading: Bool
-    let dashboardCards: [DashboardCardID]
     let onRefresh: () async -> Void
 
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
@@ -63,7 +62,16 @@ struct VolunteerOfficerDashboardView: View {
 
     
     private var supportedDashboardCards: [DashboardCardID] {
-        dashboardCards.filter(isSupportedDashboardCard)
+        [
+            .stationUpdates,
+            .apparatusWorkOrders,
+            .assignedTraining,
+            .messages,
+            .documents,
+            .recentCalls,
+            .departmentUpdates,
+            .scheduleEvents
+        ].filter(isSupportedDashboardCard)
     }
 
     private var volunteerOfficerOverviewSection: some View {

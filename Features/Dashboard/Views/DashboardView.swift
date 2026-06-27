@@ -20,7 +20,6 @@ struct DashboardView: View {
     @State private var showApparatusWorkOrders = false
     @State private var messageCenterMode: MessageCenterView.Mode = .combined
     @State private var selectedDispatch: DispatchNotificationPayload?
-    @State private var dashboardLayoutVersion = 0
 
     @State private var latestDispatch: DispatchNotificationPayload?
 
@@ -74,7 +73,6 @@ struct DashboardView: View {
                                 chiefStationStats: viewModel.state.dashboardStations,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
-                                dashboardCards: visibleDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 }
@@ -103,7 +101,6 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
-                                dashboardCards: visibleDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -145,7 +142,6 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
-                                dashboardCards: visibleDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -187,7 +183,6 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
-                                dashboardCards: visibleDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -298,9 +293,6 @@ struct DashboardView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     isDispatchBellRinging = false
                 }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .dashboardLayoutDidChange)) { _ in
-                dashboardLayoutVersion += 1
             }
             .onReceive(router.$dispatchToOpen.compactMap { $0 }) { dispatch in
                 print("🧭 Dashboard opening dispatch:", dispatch.id)
@@ -422,14 +414,6 @@ struct DashboardView: View {
 
     private var hasNewMessage: Bool {
         false
-    }
-
-    private var visibleDashboardCards: [DashboardCardID] {
-        _ = dashboardLayoutVersion
-        let hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
-        return DashboardCardLayoutDefaults
-            .savedOrder(for: session.currentUser?.role)
-            .filter { !hiddenCards.contains($0) }
     }
 
     private var headerAlertMode: DashboardHeaderAlertMode {
