@@ -95,7 +95,7 @@ struct ChiefDashboardView: View {
 
                 chiefBriefSection
 
-                ForEach(supportedDashboardCards, id: \.rawValue) { card in
+                ForEach(visibleDashboardCards, id: \.rawValue) { card in
                     dashboardSection(for: card)
                 }
             }
@@ -116,6 +116,23 @@ struct ChiefDashboardView: View {
     
     private var supportedDashboardCards: [DashboardCardID] {
         dashboardCards.filter(isSupportedDashboardCard)
+    }
+
+    private var visibleDashboardCards: [DashboardCardID] {
+        supportedDashboardCards.filter(shouldShowDashboardCard)
+    }
+
+    private func shouldShowDashboardCard(_ card: DashboardCardID) -> Bool {
+        switch card {
+        case .messages, .scheduleEvents:
+            return true
+        case .apparatusWorkOrders:
+            return isLoading || !workOrders.isEmpty
+        case .recentCalls:
+            return isLoading || !recentCalls.isEmpty
+        case .commandOverview, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .needsAttention:
+            return false
+        }
     }
 
 private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {

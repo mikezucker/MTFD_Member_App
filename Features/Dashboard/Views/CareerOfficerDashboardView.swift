@@ -49,7 +49,7 @@ struct CareerOfficerDashboardView: View {
                 callTotalsSection
                 careerOfficerOverviewSection
 
-                ForEach(supportedDashboardCards, id: \.rawValue) { card in
+                ForEach(visibleDashboardCards, id: \.rawValue) { card in
                     dashboardSection(for: card)
                 }
             }
@@ -64,6 +64,31 @@ struct CareerOfficerDashboardView: View {
     
     private var supportedDashboardCards: [DashboardCardID] {
         dashboardCards.filter(isSupportedDashboardCard)
+    }
+
+    private var visibleDashboardCards: [DashboardCardID] {
+        supportedDashboardCards.filter(shouldShowDashboardCard)
+    }
+
+    private func shouldShowDashboardCard(_ card: DashboardCardID) -> Bool {
+        switch card {
+        case .messages, .scheduleEvents:
+            return true
+        case .apparatusWorkOrders:
+            return isLoading || !workOrders.isEmpty
+        case .assignedTraining:
+            return isLoading || !assignedTraining.isEmpty
+        case .documents:
+            return isLoading || pendingDocuments > 0
+        case .departmentUpdates:
+            return isLoading || !departmentUpdates.isEmpty
+        case .stationUpdates:
+            return isLoading || !stationUpdates.isEmpty
+        case .recentCalls:
+            return isLoading || !recentCalls.isEmpty
+        case .commandOverview, .needsAttention:
+            return false
+        }
     }
 
     private var careerOfficerOverviewSection: some View {
