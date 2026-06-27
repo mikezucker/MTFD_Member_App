@@ -32,6 +32,23 @@ struct StationMapper {
             return company.capitalized
         }
     }
+
+    static func stationNumber(from company: String?) -> Int? {
+        switch displayName(from: company) {
+        case "Station 1":
+            return 1
+        case "Station 2":
+            return 2
+        case "Station 3":
+            return 3
+        case "Station 4":
+            return 4
+        case "Station 5":
+            return 5
+        default:
+            return nil
+        }
+    }
 }
 
 //

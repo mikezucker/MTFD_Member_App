@@ -297,10 +297,7 @@ struct MainTabView: View {
     }
 
     private var shouldShowCommandCenterAsHome: Bool {
-        // All roles use DashboardView as the shared dashboard shell.
-        // This keeps APNs, dispatches, notification taps, Live Activities,
-        // header alert behavior, haptics, and active dispatch handling consistent.
-        false
+        canUseCommandTab
     }
 
     private var canUseCommandTab: Bool {
@@ -310,6 +307,7 @@ struct MainTabView: View {
             || role == "CHIEF"
             || role == "OFFICER_CAREER"
             || role == "OFFICER_VOLUNTEER"
+            || session.currentUser?.canPostStationMessages == true
     }
 
     private func openDispatchDetail(_ payload: AppNotificationPayload) {
@@ -2283,7 +2281,7 @@ private struct CommandMessagesDetailView: View {
                     .font(.headline)
                     .foregroundStyle(.white)
 
-                Text("Chiefs and officers can create messages here. The backend enforces audience permissions.")
+                Text("Chiefs, officers, and assigned station-message delegates can create messages here. The backend enforces audience and station permissions.")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.66))
                     .fixedSize(horizontal: false, vertical: true)
@@ -2432,6 +2430,7 @@ private struct CommandMessagesDetailView: View {
 
 private struct CommandCreateMessageView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var session: SessionManager
 
     let onCreated: (MobileMessage) -> Void
 
@@ -2449,14 +2448,36 @@ private struct CommandCreateMessageView: View {
     @State private var isSending = false
     @State private var errorMessage: String?
 
-    private let audiences = [
-        ("OFFICERS", "Officers"),
-        ("ALL_MEMBERS", "All Members"),
-        ("CHIEFS", "Chiefs"),
-        ("CAREER_MEMBERS", "Career"),
-        ("VOLUNTEER_MEMBERS", "Volunteers"),
-        ("STATION", "Station")
-    ]
+    private var isStationDelegateOnly: Bool {
+        guard session.currentUser?.canPostStationMessages == true else {
+            return false
+        }
+
+        let role = session.currentUser?.role.uppercased() ?? ""
+        return role != "ADMIN"
+            && role != "CHIEF"
+            && role != "OFFICER_CAREER"
+            && role != "OFFICER_VOLUNTEER"
+    }
+
+    private var assignedStationNumber: Int? {
+        StationMapper.stationNumber(from: session.currentUser?.company)
+    }
+
+    private var audiences: [(String, String)] {
+        if isStationDelegateOnly {
+            return [("STATION", assignedStationNumber.map { "Station \($0)" } ?? "Assigned Station")]
+        }
+
+        return [
+            ("OFFICERS", "Officers"),
+            ("ALL_MEMBERS", "All Members"),
+            ("CHIEFS", "Chiefs"),
+            ("CAREER_MEMBERS", "Career"),
+            ("VOLUNTEER_MEMBERS", "Volunteers"),
+            ("STATION", "Station")
+        ]
+    }
 
     private let priorities = [
         ("NORMAL", "Normal"),
@@ -2464,15 +2485,22 @@ private struct CommandCreateMessageView: View {
         ("CRITICAL", "Critical")
     ]
 
-    private let messageTypes = [
-        ("ANNOUNCEMENT", "Announcement"),
-        ("TRAINING", "Training"),
-        ("EVENT", "Event"),
-        ("STAFFING", "Staffing"),
-        ("OFFICER_NOTE", "Officer Note"),
-        ("POLICY_LINK", "Policy Link"),
-        ("GENERAL", "General")
-    ]
+    private var messageTypes: [(String, String)] {
+        var types = [
+            ("ANNOUNCEMENT", "Announcement"),
+            ("TRAINING", "Training"),
+            ("EVENT", "Event"),
+            ("STAFFING", "Staffing"),
+            ("POLICY_LINK", "Policy Link"),
+            ("GENERAL", "General")
+        ]
+
+        if !isStationDelegateOnly {
+            types.insert(("OFFICER_NOTE", "Officer Note"), at: 4)
+        }
+
+        return types
+    }
 
     private var canSend: Bool {
         !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -2537,6 +2565,7 @@ private struct CommandCreateMessageView: View {
                                 }
                             }
                             .pickerStyle(.segmented)
+                            .disabled(isStationDelegateOnly)
                         }
 
                         if audience == "STATION" {
@@ -2546,12 +2575,13 @@ private struct CommandCreateMessageView: View {
                                     .foregroundStyle(.white.opacity(0.72))
 
                                 Picker("Station", selection: $stationNumberTarget) {
-                                    ForEach(1...5, id: \.self) { stationNumber in
+                                    ForEach(isStationDelegateOnly ? [assignedStationNumber ?? stationNumberTarget] : Array(1...5), id: \.self) { stationNumber in
                                         Text("Station \(stationNumber)").tag(stationNumber)
                                     }
                                 }
                                 .pickerStyle(.menu)
                                 .tint(AppTheme.gold)
+                                .disabled(isStationDelegateOnly)
                             }
                         }
 
@@ -2667,6 +2697,16 @@ private struct CommandCreateMessageView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(AppTheme.navy, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
+            .onAppear {
+                if isStationDelegateOnly {
+                    audience = "STATION"
+                    messageType = messageType == "OFFICER_NOTE" ? "GENERAL" : messageType
+
+                    if let assignedStationNumber {
+                        stationNumberTarget = assignedStationNumber
+                    }
+                }
+            }
         }
     }
 
@@ -2686,9 +2726,17 @@ private struct CommandCreateMessageView: View {
 
         let trimmedLinkUrl = linkUrl.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLinkLabel = linkLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedStationNumber = isStationDelegateOnly
+            ? assignedStationNumber
+            : (audience == "STATION" ? stationNumberTarget : nil)
 
         if messageType == "POLICY_LINK" && trimmedLinkUrl.isEmpty {
             errorMessage = "Policy-link messages require a link."
+            return
+        }
+
+        if audience == "STATION" && resolvedStationNumber == nil {
+            errorMessage = "An assigned station is required to post a station message."
             return
         }
 
@@ -2703,7 +2751,7 @@ private struct CommandCreateMessageView: View {
                 audience: audience,
                 priority: priority,
                 type: messageType,
-                stationNumberTarget: audience == "STATION" ? stationNumberTarget : nil,
+                stationNumberTarget: resolvedStationNumber,
                 expiresAt: expirationValue,
                 isPinned: isPinned,
                 linkUrl: trimmedLinkUrl.isEmpty ? nil : trimmedLinkUrl,

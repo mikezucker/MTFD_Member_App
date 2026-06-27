@@ -1092,6 +1092,11 @@ extension APIClient {
         let email: String?
         let phone: String?
         let attributes: [String]?
+        let permissions: MobileMemberPermissions?
+
+        var canPostStationMessages: Bool {
+            permissions?.canPostStationMessages == true
+        }
 
         var isReliefDriver: Bool {
             attributes?.contains { attribute in
@@ -1124,6 +1129,10 @@ extension APIClient {
                 || isFireHeadquarters
                 || isReliefDriver
         }
+    }
+
+    struct MobileMemberPermissions: Decodable {
+        let canPostStationMessages: Bool?
     }
 
     struct AnnouncementsResponse: Decodable {
