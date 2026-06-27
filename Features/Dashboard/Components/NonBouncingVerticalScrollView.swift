@@ -76,6 +76,7 @@ final class MTFDNonBouncingScrollCoordinator: NSObject {
 final class MTFDNonBouncingHostingScrollView: UIScrollView {
     private let hostingController: UIHostingController<AnyView>
     private var allowsPullToRefresh = false
+    private var isClampingContentOffset = false
 
     init(rootView: AnyView) {
         self.hostingController = UIHostingController(rootView: rootView)
@@ -114,6 +115,35 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView {
         layoutIfNeeded()
     }
 
+    override var contentOffset: CGPoint {
+        didSet {
+            clampCurrentContentOffset()
+        }
+    }
+
+    override func setContentOffset(_ contentOffset: CGPoint, animated: Bool) {
+        super.setContentOffset(clampedContentOffset(contentOffset), animated: animated)
+    }
+
+    private func clampedContentOffset(_ proposedOffset: CGPoint) -> CGPoint {
+        let maxOffsetY = max(0, contentSize.height - bounds.height)
+        return CGPoint(
+            x: 0,
+            y: min(max(proposedOffset.y, 0), maxOffsetY)
+        )
+    }
+
+    private func clampCurrentContentOffset() {
+        guard !isClampingContentOffset else { return }
+
+        let clampedOffset = clampedContentOffset(contentOffset)
+        guard clampedOffset != contentOffset else { return }
+
+        isClampingContentOffset = true
+        contentOffset = clampedOffset
+        isClampingContentOffset = false
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
 
@@ -140,12 +170,7 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView {
             height: contentHeight
         )
 
-        let maxOffsetY = max(0, contentSize.height - bounds.height)
-
-        if contentOffset.y < 0 {
-            contentOffset.y = 0
-        } else if contentOffset.y > maxOffsetY {
-            contentOffset.y = maxOffsetY
-        }
+        isScrollEnabled = contentHeight > bounds.height
+        clampCurrentContentOffset()
     }
 }
