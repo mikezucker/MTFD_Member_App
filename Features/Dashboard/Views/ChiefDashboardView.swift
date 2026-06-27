@@ -10,7 +10,6 @@ struct ChiefDashboardView: View {
     let chiefStationStats: APIClient.ChiefStationStats?
     let recentCalls: [RecentDepartmentCall]
     let isLoading: Bool
-    let dashboardCards: [DashboardCardID]
     let onRefresh: () async -> Void
 
     @StateObject private var scheduleViewModel = ScheduleViewModel()
@@ -41,19 +40,20 @@ struct ChiefDashboardView: View {
     }
 
     @AppStorage("chiefDashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
-    @AppStorage("chiefDashboardTotalsScope") private var selectedTotalsScopeRawValue = ChiefTotalsScope.all.rawValue
+    @AppStorage("chiefDashboardTotalsScope") private var selectedTotalsScopeRawValue = ChiefTotalsScope.department.rawValue
 
     private var selectedTotalsWindow: DashboardTotalsWindow {
         DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
     }
 
     private var selectedTotalsScope: ChiefTotalsScope {
-        ChiefTotalsScope(rawValue: selectedTotalsScopeRawValue) ?? .all
+        let savedScope = ChiefTotalsScope(rawValue: selectedTotalsScopeRawValue) ?? .department
+        return availableTotalsScopes.contains(savedScope) ? savedScope : .department
     }
 
     private var selectedTotalsBucket: APIClient.DispatchBucket? {
         switch selectedTotalsScope {
-        case .all:
+        case .department:
             return chiefStationStats?.all ?? departmentStats
         case .station1:
             return chiefStationStats?.station1
@@ -66,6 +66,10 @@ struct ChiefDashboardView: View {
         case .station5:
             return chiefStationStats?.station5
         }
+    }
+
+    private var availableTotalsScopes: [ChiefTotalsScope] {
+        [.department, .station1, .station2, .station3, .station4, .station5]
     }
 
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
@@ -95,8 +99,16 @@ struct ChiefDashboardView: View {
 
                 chiefBriefSection
 
-                ForEach(visibleDashboardCards, id: \.rawValue) { card in
-                    dashboardSection(for: card)
+                scheduleOutlookSection
+
+                commandMessagesSection
+
+                if isLoading || !workOrders.isEmpty {
+                    apparatusWorkOrdersSection
+                }
+
+                if isLoading || !recentCalls.isEmpty {
+                    recentDispatchesSection
                 }
             }
             .padding(.horizontal, 24)
@@ -110,53 +122,6 @@ struct ChiefDashboardView: View {
             if scheduleViewModel.outlookDays.isEmpty {
                 await scheduleViewModel.loadOutlookDays(count: 4)
             }
-        }
-    }
-
-    
-    private var supportedDashboardCards: [DashboardCardID] {
-        dashboardCards.filter(isSupportedDashboardCard)
-    }
-
-    private var visibleDashboardCards: [DashboardCardID] {
-        supportedDashboardCards.filter(shouldShowDashboardCard)
-    }
-
-    private func shouldShowDashboardCard(_ card: DashboardCardID) -> Bool {
-        switch card {
-        case .messages, .scheduleEvents:
-            return true
-        case .apparatusWorkOrders:
-            return isLoading || !workOrders.isEmpty
-        case .recentCalls:
-            return isLoading || !recentCalls.isEmpty
-        case .commandOverview, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .needsAttention:
-            return false
-        }
-    }
-
-private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
-        switch card {
-        case .messages, .scheduleEvents, .apparatusWorkOrders, .recentCalls:
-            return true
-        case .commandOverview, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .needsAttention:
-            return false
-        }
-    }
-
-    @ViewBuilder
-    private func dashboardSection(for card: DashboardCardID) -> some View {
-        switch card {
-        case .messages:
-            commandMessagesSection
-        case .scheduleEvents:
-            scheduleOutlookSection
-        case .apparatusWorkOrders:
-            apparatusWorkOrdersSection
-        case .recentCalls:
-            recentDispatchesSection
-        case .commandOverview, .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .needsAttention:
-            EmptyView()
         }
     }
 
@@ -753,7 +718,7 @@ private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
-                    ForEach(ChiefTotalsScope.allCases, id: \.rawValue) { scope in
+                    ForEach(availableTotalsScopes, id: \.rawValue) { scope in
                         Button {
                             selectedTotalsScopeRawValue = scope.rawValue
                         } label: {
@@ -867,7 +832,7 @@ private func selectNextTotalsWindow() {
 
 
     private enum ChiefTotalsScope: String, CaseIterable {
-        case all = "ALL"
+        case department = "DEPARTMENT"
         case station1 = "1"
         case station2 = "2"
         case station3 = "3"
@@ -876,7 +841,7 @@ private func selectNextTotalsWindow() {
 
         var title: String {
             switch self {
-            case .all: return "ALL"
+            case .department: return "Dept"
             case .station1: return "Sta 1"
             case .station2: return "Sta 2"
             case .station3: return "Sta 3"

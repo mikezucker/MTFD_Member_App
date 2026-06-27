@@ -82,7 +82,6 @@ struct DashboardView: View {
                                 chiefStationStats: viewModel.state.dashboardStations,
                                 recentCalls: viewModel.state.recentDepartmentCalls,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
-                                dashboardCards: configuredDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 }
@@ -111,7 +110,6 @@ struct DashboardView: View {
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
-                                dashboardCards: configuredDashboardCards,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
