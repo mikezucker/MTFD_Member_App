@@ -13,6 +13,7 @@ struct CareerMemberDashboardView: View {
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
     let isLoading: Bool
+    let dashboardCards: [DashboardCardID]
     let onRefresh: () async -> Void
 
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
@@ -61,7 +62,7 @@ struct CareerMemberDashboardView: View {
 
     
     private var supportedDashboardCards: [DashboardCardID] {
-        DashboardCardID.allCases.filter(isSupportedDashboardCard)
+        dashboardCards.filter(isSupportedDashboardCard)
     }
 
 private func isSupportedDashboardCard(_ card: DashboardCardID) -> Bool {

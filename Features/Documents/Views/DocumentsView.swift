@@ -89,6 +89,7 @@ struct DocumentsView: View {
     @StateObject private var viewModel = DocumentsViewModel()
     @StateObject private var router = NavigationRouter.shared
     @State private var query = ""
+    @State private var selectedFolderId: String?
 
     private var filteredDocuments: [APIClient.MobileDocument] {
         let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -125,23 +126,49 @@ struct DocumentsView: View {
         filteredDocuments.filter { $0.latestVersion?.requiresAcknowledgement == true }
     }
 
-    private var folderSections: [PolicyFolderSection] {
-        let grouped = Dictionary(grouping: filteredDocuments) { document in
-            document.folderId ?? "__unfiled__"
+    private var isSearching: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var visibleFolders: [APIClient.MobileDocumentFolder] {
+        viewModel.folders
+            .filter { folder in
+                (folder.parentId ?? "") == (selectedFolderId ?? "")
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var visibleDocuments: [APIClient.MobileDocument] {
+        if isSearching {
+            return filteredDocuments.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         }
 
-        return grouped.map { folderId, documents in
-            PolicyFolderSection(
-                id: folderId,
-                title: folderTitle(for: folderId),
-                documents: documents.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-            )
+        return filteredDocuments
+            .filter { ($0.folderId ?? "") == (selectedFolderId ?? "") }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    private var selectedFolder: APIClient.MobileDocumentFolder? {
+        guard let selectedFolderId else { return nil }
+        return viewModel.folders.first { $0.id == selectedFolderId }
+    }
+
+    private var folderBreadcrumbs: [APIClient.MobileDocumentFolder] {
+        guard let selectedFolder else { return [] }
+
+        var breadcrumbs = [selectedFolder]
+        var parentId = selectedFolder.parentId
+        var visited = Set([selectedFolder.id])
+
+        while let id = parentId,
+              let parent = viewModel.folders.first(where: { $0.id == id }),
+              !visited.contains(parent.id) {
+            breadcrumbs.insert(parent, at: 0)
+            visited.insert(parent.id)
+            parentId = parent.parentId
         }
-        .sorted { lhs, rhs in
-            if lhs.id == "__unfiled__" { return false }
-            if rhs.id == "__unfiled__" { return true }
-            return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-        }
+
+        return breadcrumbs
     }
 
     var body: some View {
@@ -169,6 +196,11 @@ struct DocumentsView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
                 .padding(.bottom, 28)
+            }
+            .onChange(of: viewModel.folders.map(\.id)) { _, folderIds in
+                if let selectedFolderId, !folderIds.contains(selectedFolderId) {
+                    self.selectedFolderId = nil
+                }
             }
             .refreshable {
                 await viewModel.refresh()
@@ -275,41 +307,128 @@ struct DocumentsView: View {
                     .clipShape(Capsule())
             }
 
-            ForEach(folderSections) { section in
-                folderSection(section)
+            if isSearching {
+                searchResultsSection
+            } else {
+                folderNavigation
+
+                VStack(spacing: 10) {
+                    ForEach(visibleFolders) { folder in
+                        folderRow(folder)
+                    }
+
+                    ForEach(visibleDocuments) { document in
+                        documentRow(document)
+                    }
+                }
+
+                if visibleFolders.isEmpty && visibleDocuments.isEmpty {
+                    emptyFolderCard
+                }
             }
         }
     }
 
-    private func folderSection(_ section: PolicyFolderSection) -> some View {
+    private var searchResultsSection: some View {
+        VStack(spacing: 10) {
+            ForEach(visibleDocuments) { document in
+                documentRow(document, showFolder: true)
+            }
+        }
+    }
+
+    private var folderNavigation: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
-                Image(systemName: section.id == "__unfiled__" ? "tray.fill" : "folder.fill")
-                    .font(.caption.weight(.bold))
+            if selectedFolderId != nil {
+                Button {
+                    selectedFolderId = selectedFolder?.parentId
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "chevron.left")
+                            .font(.caption.weight(.bold))
+
+                        Text("Back")
+                            .font(.subheadline.weight(.bold))
+                    }
                     .foregroundStyle(AppTheme.gold)
-
-                Text(section.title)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .lineLimit(1)
-
-                Spacer()
-
-                Text("\(section.documents.count)")
-                    .font(.caption2.bold())
-                    .foregroundStyle(.white.opacity(0.68))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.white.opacity(0.08))
-                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
 
-            VStack(spacing: 10) {
-                ForEach(section.documents) { document in
-                    documentRow(document)
+            HStack(spacing: 7) {
+                Button("All Policies") {
+                    selectedFolderId = nil
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(selectedFolderId == nil ? AppTheme.gold : .white.opacity(0.66))
+                .buttonStyle(.plain)
+
+                ForEach(folderBreadcrumbs) { folder in
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.4))
+
+                    Button(folder.name) {
+                        selectedFolderId = folder.id
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(folder.id == selectedFolderId ? AppTheme.gold : .white.opacity(0.66))
+                    .lineLimit(1)
+                    .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func folderRow(_ folder: APIClient.MobileDocumentFolder) -> some View {
+        Button {
+            selectedFolderId = folder.id
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.gold)
+                    .frame(width: 30, height: 30)
+                    .background(AppTheme.gold.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(folder.name)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+
+                    Text("\(folderItemCount(folder)) item\(folderItemCount(folder) == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var emptyFolderCard: some View {
+        Text("This folder is empty.")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white.opacity(0.72))
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.white.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
     }
 
     private var loadingCard: some View {
@@ -480,6 +599,12 @@ struct DocumentsView: View {
 
     private func currentCount(in documents: [APIClient.MobileDocument]) -> Int {
         documents.filter { $0.latestVersion != nil && $0.latestVersion?.requiresAcknowledgement != true }.count
+    }
+
+    private func folderItemCount(_ folder: APIClient.MobileDocumentFolder) -> Int {
+        let childFolderCount = viewModel.folders.filter { $0.parentId == folder.id }.count
+        let documentCount = filteredDocuments.filter { $0.folderId == folder.id }.count
+        return childFolderCount + documentCount
     }
 
     private func documentIcon(for document: APIClient.MobileDocument) -> String {
