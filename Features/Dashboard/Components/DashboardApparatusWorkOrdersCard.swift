@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct DashboardApparatusWorkOrdersCard: View {
+    private static let allApparatusFilterKey = "__all_apparatus__"
+
     let workOrders: [DashboardApparatusWorkOrder]
     var title: String = "Apparatus Status"
     var subtitle: String? = nil
@@ -8,40 +10,60 @@ struct DashboardApparatusWorkOrdersCard: View {
     var showsFilters: Bool = true
     let onTap: () -> Void
 
-    @State private var selectedApparatusName: String = "All"
+    @State private var selectedApparatusKey: String = Self.allApparatusFilterKey
 
-    private var apparatusNames: [String] {
-        let names = workOrders
-            .map(\.apparatusName)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    private struct ApparatusFilterOption: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let count: Int
+    }
 
-        let unique = Array(Set(names)).sorted {
-            $0.localizedStandardCompare($1) == .orderedAscending
+    private var apparatusFilterOptions: [ApparatusFilterOption] {
+        let grouped = Dictionary(grouping: workOrders) { workOrder in
+            apparatusKey(for: workOrder)
         }
 
-        return ["All"] + unique
+        let apparatusOptions = grouped
+            .map { key, orders in
+                ApparatusFilterOption(
+                    id: key,
+                    name: displayName(for: orders.first),
+                    count: orders.count
+                )
+            }
+            .sorted { lhs, rhs in
+                lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            }
+
+        return [
+            ApparatusFilterOption(
+                id: Self.allApparatusFilterKey,
+                name: "All",
+                count: workOrders.count
+            )
+        ] + apparatusOptions
     }
 
     private var filteredWorkOrders: [DashboardApparatusWorkOrder] {
-        guard selectedApparatusName != "All" else {
+        guard selectedApparatusKey != Self.allApparatusFilterKey else {
             return workOrders
         }
 
         return workOrders.filter {
-            $0.apparatusName.trimmingCharacters(in: .whitespacesAndNewlines) == selectedApparatusName
+            apparatusKey(for: $0) == selectedApparatusKey
         }
     }
 
-    private var groupedStatusRows: [(apparatusName: String, workOrders: [DashboardApparatusWorkOrder])] {
+    private var groupedStatusRows: [(apparatusKey: String, apparatusName: String, workOrders: [DashboardApparatusWorkOrder])] {
         let grouped = Dictionary(grouping: filteredWorkOrders) { workOrder in
-            workOrder.apparatusName
+            apparatusKey(for: workOrder)
         }
 
         return grouped
-            .map { apparatusName, orders in
+            .map { apparatusKey, orders in
                 (
-                    apparatusName: apparatusName,
+                    apparatusKey: apparatusKey,
+                    apparatusName: displayName(for: orders.first),
                     workOrders: orders.sorted { lhs, rhs in
                         lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
                     }
@@ -59,14 +81,14 @@ struct DashboardApparatusWorkOrdersCard: View {
             }
             .buttonStyle(.plain)
 
-            if showsFilters && apparatusNames.count > 1 {
+            if showsFilters && apparatusFilterOptions.count > 1 {
                 filterChips
             }
 
             if workOrders.isEmpty {
                 emptyState(emptyMessage)
             } else if filteredWorkOrders.isEmpty {
-                emptyState("No open apparatus issues for \(selectedApparatusName).")
+                emptyState("No open apparatus issues for \(selectedApparatusLabel).")
             } else {
                 DashboardScrollableList(
                     itemCount: groupedStatusRows.count,
@@ -74,7 +96,7 @@ struct DashboardApparatusWorkOrdersCard: View {
                     maxHeight: 245
                 ) {
                     VStack(spacing: 0) {
-                        ForEach(Array(groupedStatusRows.enumerated()), id: \.element.apparatusName) { index, group in
+                        ForEach(Array(groupedStatusRows.enumerated()), id: \.element.apparatusKey) { index, group in
                             apparatusStatusRow(group)
 
                             if index < groupedStatusRows.count - 1 {
@@ -110,10 +132,14 @@ struct DashboardApparatusWorkOrdersCard: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         }
         .onChange(of: workOrders) { _, _ in
-            if !apparatusNames.contains(selectedApparatusName) {
-                selectedApparatusName = "All"
+            if !apparatusFilterOptions.contains(where: { $0.id == selectedApparatusKey }) {
+                selectedApparatusKey = Self.allApparatusFilterKey
             }
         }
+    }
+
+    private var selectedApparatusLabel: String {
+        apparatusFilterOptions.first(where: { $0.id == selectedApparatusKey })?.name ?? "All"
     }
 
     private var header: some View {
@@ -149,21 +175,32 @@ struct DashboardApparatusWorkOrdersCard: View {
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                ForEach(apparatusNames, id: \.self) { name in
-                    let isSelected = selectedApparatusName == name
+                ForEach(apparatusFilterOptions) { option in
+                    let isSelected = selectedApparatusKey == option.id
 
                     Button {
-                        selectedApparatusName = name
+                        selectedApparatusKey = option.id
                     } label: {
-                        Text(shortApparatusLabel(name))
-                            .font(.caption.bold())
-                            .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
-                            .frame(minWidth: 44, minHeight: 32)
-                            .padding(.horizontal, 6)
-                            .background(
-                                Capsule()
-                                    .fill(isSelected ? AppTheme.gold : Color.white.opacity(0.10))
-                            )
+                        HStack(spacing: 5) {
+                            Text(shortApparatusLabel(option.name))
+                                .font(.caption.bold())
+
+                            Text("\(option.count)")
+                                .font(.caption2.bold())
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(isSelected ? AppTheme.navy.opacity(0.14) : Color.white.opacity(0.12))
+                                )
+                        }
+                        .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
+                        .frame(minHeight: 32)
+                        .padding(.horizontal, 8)
+                        .background(
+                            Capsule()
+                                .fill(isSelected ? AppTheme.gold : Color.white.opacity(0.10))
+                        )
                     }
                     .buttonStyle(.plain)
                 }
@@ -172,7 +209,7 @@ struct DashboardApparatusWorkOrdersCard: View {
     }
 
     private func apparatusStatusRow(
-        _ group: (apparatusName: String, workOrders: [DashboardApparatusWorkOrder])
+        _ group: (apparatusKey: String, apparatusName: String, workOrders: [DashboardApparatusWorkOrder])
     ) -> some View {
         let first = group.workOrders.first
         let status = first?.status?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -225,5 +262,27 @@ struct DashboardApparatusWorkOrdersCard: View {
             .replacingOccurrences(of: "Rescue ", with: "R")
             .replacingOccurrences(of: "Ambulance ", with: "A")
             .replacingOccurrences(of: "Command ", with: "C")
+    }
+
+    private func apparatusKey(for workOrder: DashboardApparatusWorkOrder) -> String {
+        let apiId = workOrder.apparatusApiId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let apiId, !apiId.isEmpty {
+            return "api:\(apiId)"
+        }
+
+        let name = workOrder.apparatusName
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        return name.isEmpty ? "unknown" : "name:\(name)"
+    }
+
+    private func displayName(for workOrder: DashboardApparatusWorkOrder?) -> String {
+        let name = workOrder?.apparatusName
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        return name.isEmpty ? "Apparatus" : name
     }
 }
