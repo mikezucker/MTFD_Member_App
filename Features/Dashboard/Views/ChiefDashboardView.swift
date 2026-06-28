@@ -998,7 +998,7 @@ private func selectNextTotalsWindow() {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.66))
                 } else {
-                    DashboardScrollableList(itemCount: displayEntries.count, maxHeight: 360) {
+                    DashboardScrollableList(itemCount: displayEntries.count, maxHeight: 280) {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(displayEntries) { entry in
                                 scheduleEntryRow(entry)
