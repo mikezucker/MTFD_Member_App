@@ -22,8 +22,8 @@ struct DashboardRecentCallsCard: View {
                     .foregroundStyle(AppTheme.gold.opacity(0.9))
             }
 
-            DashboardScrollableList(itemCount: calls.count, visibleItemLimit: 3, maxHeight: 330) {
-                VStack(spacing: 10) {
+            DashboardScrollableList(itemCount: calls.count, visibleItemLimit: 4, maxHeight: 300) {
+                VStack(spacing: 8) {
                     ForEach(calls) { call in
                         callRow(call)
                     }
@@ -57,36 +57,66 @@ struct DashboardRecentCallsCard: View {
     }
 
     private func callRow(_ call: RecentDepartmentCall) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top, spacing: 8) {
-                Text(call.title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(2)
+        HStack(alignment: .top, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(AppTheme.gold.opacity(0.14))
+                    .frame(width: 36, height: 36)
 
-                Spacer()
-
-                Text(call.timestamp)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.52))
-                    .lineLimit(1)
+                Image(systemName: iconName(for: call.title))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AppTheme.gold)
             }
 
-            Text(call.address)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.66))
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(call.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
 
-            if let incidentNumber = call.incidentNumber,
-               !incidentNumber.isEmpty {
-                Text(incidentNumber)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.42))
+                    Spacer()
+
+                    Text(call.timestamp)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.52))
+                        .lineLimit(1)
+                }
+
+                Text(call.address)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.66))
+                    .lineLimit(1)
+
+                if let incidentNumber = call.incidentNumber,
+                   !incidentNumber.isEmpty {
+                    Text(incidentNumber)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.42))
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(10)
         .background(Color.white.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func iconName(for title: String) -> String {
+        let normalized = title.lowercased()
+
+        if normalized.contains("fire") || normalized.contains("alarm") {
+            return "flame.fill"
+        }
+
+        if normalized.contains("ems") || normalized.contains("medical") || normalized.contains("sick") {
+            return "cross.case.fill"
+        }
+
+        if normalized.contains("mva") || normalized.contains("accident") {
+            return "car.fill"
+        }
+
+        return "bell.fill"
     }
 }

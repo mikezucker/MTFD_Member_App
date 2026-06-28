@@ -45,25 +45,38 @@ struct DashboardDispatchPreviewCard: View {
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
-                    AppIcon(.dispatch)
-                        .font(.system(size: 23, weight: .bold))
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(dispatch.type == .dispatchCritical ? Color.red.opacity(0.24) : AppTheme.gold.opacity(0.18))
+                            .frame(width: 48, height: 48)
+
+                        Image(systemName: dispatch.type == .dispatchCritical ? "flame.fill" : "bell.and.waves.left.and.right.fill")
+                            .font(.system(size: 21, weight: .bold))
+                            .foregroundStyle(dispatch.type == .dispatchCritical ? Color.red.opacity(0.95) : AppTheme.gold)
+                    }
 
                     VStack(alignment: .leading, spacing: 4) {
+                        Text(dispatch.type == .dispatchCritical ? "Critical Dispatch" : "Active Dispatch")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(AppTheme.gold)
+                            .textCase(.uppercase)
+
                         Text(callType)
-                            .font(.headline)
+                            .font(.headline.weight(.semibold))
                             .foregroundStyle(.white)
+                            .lineLimit(2)
 
                         Text(address)
                             .font(.subheadline)
-                            .foregroundStyle(.white.opacity(0.78))
+                            .foregroundStyle(.white.opacity(0.74))
                             .lineLimit(2)
 
                         if !dispatch.units.isEmpty {
                             Text(dispatch.units.joined(separator: ", "))
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.62))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(AppTheme.gold.opacity(0.95))
                                 .lineLimit(1)
                         }
                     }
@@ -75,18 +88,33 @@ struct DashboardDispatchPreviewCard: View {
                         .foregroundStyle(.white.opacity(0.5))
                 }
 
-                DispatchLookAroundCardPreview(address: address)
-                    .frame(height: 130)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                HStack(spacing: 8) {
+                    if let callType = dispatch.callType, !callType.isEmpty {
+                        dispatchMetaPill(callType)
+                    }
+
+                    if let address = dispatch.address, !address.isEmpty {
+                        dispatchMetaPill(shortAddress(address))
+                    }
+                }
             }
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 24)
-                    .fill(Color.white.opacity(isHighlighted ? 0.20 : 0.12))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(isHighlighted ? 0.18 : 0.11),
+                                Color.white.opacity(isHighlighted ? 0.10 : 0.06)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24)
-                    .stroke(Color.red.opacity(0.85), lineWidth: 2)
+                    .stroke(dispatch.type == .dispatchCritical ? Color.red.opacity(0.75) : AppTheme.gold.opacity(0.35), lineWidth: isHighlighted ? 2 : 1)
             )
             .shadow(
                 color: isHighlighted ? Color.red.opacity(0.28) : Color.black.opacity(0.12),
@@ -98,6 +126,24 @@ struct DashboardDispatchPreviewCard: View {
             }
         }
         .buttonStyle(.plain)
+    }
+
+    private func dispatchMetaPill(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(.white.opacity(0.76))
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.08))
+            .clipShape(Capsule())
+    }
+
+    private func shortAddress(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: ", Morristown, NJ", with: "")
+            .replacingOccurrences(of: "Morris Township, NJ", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
