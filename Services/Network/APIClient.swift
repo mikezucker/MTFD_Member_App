@@ -502,6 +502,10 @@ final class APIClient {
 
     func clearSession() {
         authToken = nil
+        KeychainService.shared.deleteToken()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .didInvalidateSession, object: nil)
+        }
     }
     
 

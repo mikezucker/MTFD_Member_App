@@ -13,7 +13,25 @@ final class SessionManager: ObservableObject {
     @Published var isRestoringSession = false
     @Published var errorMessage: String?
 
-    private init() {}
+    private var sessionInvalidatedObserver: NSObjectProtocol?
+
+    private init() {
+        sessionInvalidatedObserver = NotificationCenter.default.addObserver(
+            forName: .didInvalidateSession,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                SessionManager.shared.handleInvalidatedSession()
+            }
+        }
+    }
+
+    deinit {
+        if let sessionInvalidatedObserver {
+            NotificationCenter.default.removeObserver(sessionInvalidatedObserver)
+        }
+    }
 
     func restoreSession() async {
         isRestoringSession = true
@@ -90,6 +108,14 @@ final class SessionManager: ObservableObject {
         currentUser = nil
         isLoggedIn = false
         errorMessage = nil
+    }
+
+    private func handleInvalidatedSession() {
+        NavigationRouter.shared.resetToHome()
+        APIClient.shared.authToken = nil
+        currentUser = nil
+        isLoggedIn = false
+        errorMessage = "Your session expired. Please sign in again."
     }
 
     func updateProfile(name: String, email: String, phone: String?) async throws {
