@@ -28,7 +28,9 @@ struct DashboardApparatusWorkOrdersCard: View {
             return workOrders
         }
 
-        return workOrders.filter { $0.apparatusName == selectedApparatusName }
+        return workOrders.filter {
+            $0.apparatusName.trimmingCharacters(in: .whitespacesAndNewlines) == selectedApparatusName
+        }
     }
 
     private var groupedStatusRows: [(apparatusName: String, workOrders: [DashboardApparatusWorkOrder])] {
@@ -57,7 +59,7 @@ struct DashboardApparatusWorkOrdersCard: View {
             }
             .buttonStyle(.plain)
 
-            if showsFilters && apparatusNames.count > 2 {
+            if showsFilters && apparatusNames.count > 1 {
                 filterChips
             }
 
@@ -69,7 +71,7 @@ struct DashboardApparatusWorkOrdersCard: View {
                 DashboardScrollableList(
                     itemCount: groupedStatusRows.count,
                     visibleItemLimit: 3,
-                    maxHeight: 280
+                    maxHeight: 245
                 ) {
                     VStack(spacing: 0) {
                         ForEach(Array(groupedStatusRows.enumerated()), id: \.element.apparatusName) { index, group in
@@ -84,6 +86,21 @@ struct DashboardApparatusWorkOrdersCard: View {
                     }
                 }
             }
+
+            Button(action: onTap) {
+                HStack {
+                    Text("Open Work Order Board")
+                        .font(.caption.bold())
+
+                    Spacer()
+
+                    Image(systemName: "arrow.right")
+                        .font(.caption.bold())
+                }
+                .foregroundStyle(AppTheme.gold)
+                .padding(.top, 2)
+            }
+            .buttonStyle(.plain)
         }
         .padding(14)
         .background(Color.white.opacity(0.08))

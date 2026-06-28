@@ -1056,7 +1056,7 @@ private struct TrainingScreenHeader: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 10)
+        .padding(.top, 0)
         .padding(.bottom, 12)
         .background(AppTheme.navy)
         .overlay(alignment: .bottom) {

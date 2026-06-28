@@ -175,7 +175,8 @@ final class MessageCenterViewModel: ObservableObject {
         audience: String,
         priority: String,
         type: String,
-        stationNumberTarget: Int?
+        stationNumberTarget: Int?,
+        isPinned: Bool
     ) async throws {
         let response = try await APIClient.shared.createCommandMessage(
             title: title,
@@ -183,7 +184,8 @@ final class MessageCenterViewModel: ObservableObject {
             audience: audience,
             priority: priority,
             type: type,
-            stationNumberTarget: stationNumberTarget
+            stationNumberTarget: stationNumberTarget,
+            isPinned: isPinned
         )
 
         messages.removeAll { $0.id == response.message.id }

@@ -5,11 +5,13 @@ struct CareerOfficerDashboardView: View {
     let activeDispatches: [APIClient.ActiveDispatch]
     let departmentStats: APIClient.DispatchBucket?
     let stationStats: APIClient.DispatchBucket?
+    let chiefStationStats: APIClient.ChiefStationStats?
     let upcomingSchedule: APIClient.MobileUpcomingScheduleResponse?
     let workOrders: [DashboardApparatusWorkOrder]
     let recentCalls: [RecentDepartmentCall]
     let assignedTraining: [DashboardTrainingPreviewItem]
     let pendingDocuments: Int
+    let pendingPolicies: [DashboardPendingPolicy]
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
     let isLoading: Bool
@@ -24,10 +26,36 @@ struct CareerOfficerDashboardView: View {
     let onOpenPastDispatches: () -> Void
 
     @AppStorage("careerOfficerDashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
-    @State private var selectedTotalsScope: TotalsScope = .department
+    @AppStorage("careerOfficerDashboardTotalsScope") private var selectedTotalsScopeRawValue = OfficerTotalsScope.department.rawValue
 
     private var selectedTotalsWindow: DashboardTotalsWindow {
         DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
+    }
+
+    private var selectedTotalsScope: OfficerTotalsScope {
+        let savedScope = OfficerTotalsScope(rawValue: selectedTotalsScopeRawValue) ?? .department
+        return availableTotalsScopes.contains(savedScope) ? savedScope : .department
+    }
+
+    private var availableTotalsScopes: [OfficerTotalsScope] {
+        [.department, .station1, .station2, .station3, .station4, .station5]
+    }
+
+    private var selectedTotalsBucket: APIClient.DispatchBucket? {
+        switch selectedTotalsScope {
+        case .department:
+            return chiefStationStats?.all ?? departmentStats
+        case .station1:
+            return chiefStationStats?.station1
+        case .station2:
+            return chiefStationStats?.station2
+        case .station3:
+            return chiefStationStats?.station3
+        case .station4:
+            return chiefStationStats?.station4
+        case .station5:
+            return chiefStationStats?.station5
+        }
     }
 
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
@@ -64,21 +92,7 @@ struct CareerOfficerDashboardView: View {
                     documentsSection
                 }
 
-                if isLoading || !stationUpdates.isEmpty {
-                    updatesGroup(
-                        title: "Station Updates",
-                        emptyMessage: "No station updates posted.",
-                        updates: stationUpdates
-                    )
-                }
-
-                if isLoading || !departmentUpdates.isEmpty {
-                    updatesGroup(
-                        title: "Department Updates",
-                        emptyMessage: "No department updates posted.",
-                        updates: departmentUpdates
-                    )
-                }
+                messagesSection
 
                 if isLoading || !recentCalls.isEmpty {
                     pastDispatchesSection
@@ -190,32 +204,27 @@ struct CareerOfficerDashboardView: View {
             if isLoading && departmentStats == nil && stationStats == nil {
                 loadingCard("Loading call totals...")
             } else {
-                HStack(spacing: 6) {
-                    totalsScopeButton(.station, title: "Station")
-                    totalsScopeButton(.department, title: "Dept")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(availableTotalsScopes, id: \.rawValue) { scope in
+                            totalsScopeButton(scope)
+                        }
+                    }
                 }
 
-                totalsRow(
-                    title: selectedTotalsScope == .station ? "Station" : "Department",
-                    stats: selectedTotalsScope == .station ? stationStats : departmentStats
-                )
+                totalsRow(title: selectedTotalsScope.title, stats: selectedTotalsBucket)
             }
         }
     }
 
 
-    private enum TotalsScope {
-        case station
-        case department
-    }
-
-    private func totalsScopeButton(_ scope: TotalsScope, title: String) -> some View {
+    private func totalsScopeButton(_ scope: OfficerTotalsScope) -> some View {
         let isSelected = selectedTotalsScope == scope
 
         return Button {
-            selectedTotalsScope = scope
+            selectedTotalsScopeRawValue = scope.rawValue
         } label: {
-            Text(title)
+            Text(scope.title)
                 .font(.caption.bold())
                 .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
                 .padding(.horizontal, 12)
@@ -464,6 +473,15 @@ struct CareerOfficerDashboardView: View {
             ) {
                 onOpenDocuments()
             }
+
+            if !pendingPolicies.isEmpty {
+                DashboardPolicyAcknowledgementCard(
+                    pendingPolicies: pendingPolicies,
+                    totalPendingCount: pendingDocuments
+                ) {
+                    onOpenDocuments()
+                }
+            }
         }
     }
 
@@ -489,6 +507,26 @@ struct CareerOfficerDashboardView: View {
         case fire
         case ems
         case other
+    }
+
+    private enum OfficerTotalsScope: String, CaseIterable {
+        case department = "DEPARTMENT"
+        case station1 = "1"
+        case station2 = "2"
+        case station3 = "3"
+        case station4 = "4"
+        case station5 = "5"
+
+        var title: String {
+            switch self {
+            case .department: return "Dept"
+            case .station1: return "Sta 1"
+            case .station2: return "Sta 2"
+            case .station3: return "Sta 3"
+            case .station4: return "Sta 4"
+            case .station5: return "Sta 5"
+            }
+        }
     }
 
     private func callTotal(_ stats: APIClient.DispatchBucket?, _ kind: TotalKind) -> Int {
@@ -583,5 +621,76 @@ private func selectNextTotalsWindow() {
             trainingId: nil,
             documentId: nil
         )
+    }
+}
+
+private struct DashboardPolicyAcknowledgementCard: View {
+    let pendingPolicies: [DashboardPendingPolicy]
+    let totalPendingCount: Int
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    Text("✍️")
+                        .font(.title3)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Policies Need Sign-Off")
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(.white)
+
+                        Text("\(totalPendingCount) pending acknowledgement\(totalPendingCount == 1 ? "" : "s")")
+                            .font(.caption)
+                            .foregroundStyle(.orange.opacity(0.95))
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+                }
+
+                VStack(spacing: 8) {
+                    ForEach(pendingPolicies.prefix(3)) { policy in
+                        policyRow(policy)
+                    }
+                }
+
+                if totalPendingCount > 3 {
+                    Text("+\(totalPendingCount - 3) more in Policy Center")
+                        .font(.caption.bold())
+                        .foregroundStyle(AppTheme.gold)
+                }
+            }
+            .padding(16)
+            .background(Color.orange.opacity(0.16))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.orange.opacity(0.42), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func policyRow(_ policy: DashboardPendingPolicy) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(policy.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(2)
+
+            Text(policy.folderName ?? policy.category)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.62))
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }

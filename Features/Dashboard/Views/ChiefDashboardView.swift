@@ -80,9 +80,7 @@ struct ChiefDashboardView: View {
         Array(activeDispatches.dropFirst())
     }
 
-    private var topContentPadding: CGFloat {
-        activeDispatches.isEmpty ? 64 : 22
-    }
+    private var topContentPadding: CGFloat { 22 }
 
     var body: some View {
         NonBouncingVerticalScrollView(
@@ -100,6 +98,8 @@ struct ChiefDashboardView: View {
                 chiefBriefSection
 
                 scheduleOutlookSection
+
+                commandMessagesSection
 
                 if isLoading || !workOrders.isEmpty {
                     apparatusWorkOrdersSection
@@ -172,9 +172,9 @@ struct ChiefDashboardView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     Text(chiefBriefHeadline)
-                        .font(.system(size: 23, weight: .black, design: .serif))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.white)
-                        .lineLimit(2)
+                        .lineLimit(3)
                         .minimumScaleFactor(0.78)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -298,7 +298,7 @@ struct ChiefDashboardView: View {
     ) -> some View {
         HStack(spacing: 6) {
             Text(value)
-                .font(.caption.weight(.black))
+                .font(.subheadline.weight(.black))
                 .foregroundStyle(tint)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)

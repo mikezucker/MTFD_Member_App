@@ -50,11 +50,23 @@ struct MessageCenterView: View {
     }
 
     private var departmentMessages: [MobileMessage] {
-        viewModel.messages.filter { message in
-            message.type != "DISPATCH" &&
-            message.type != "DISPATCH_UPDATE" &&
-            message.dispatchId == nil
-        }
+        viewModel.messages
+            .filter { message in
+                message.type != "DISPATCH" &&
+                message.type != "DISPATCH_UPDATE" &&
+                message.dispatchId == nil
+            }
+            .sorted { lhs, rhs in
+                if (lhs.isPinned ?? false) != (rhs.isPinned ?? false) {
+                    return lhs.isPinned == true
+                }
+
+                if messagePriorityRank(lhs.priority) != messagePriorityRank(rhs.priority) {
+                    return messagePriorityRank(lhs.priority) < messagePriorityRank(rhs.priority)
+                }
+
+                return lhs.createdAt > rhs.createdAt
+            }
     }
 
     private var unreadDepartmentMessageCount: Int {
@@ -170,14 +182,15 @@ struct MessageCenterView: View {
                 .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showComposer) {
-            MessageComposeView { title, body, audience, priority, type, stationNumberTarget in
+            MessageComposeView { title, body, audience, priority, type, stationNumberTarget, isPinned in
                 try await viewModel.createMessage(
                     title: title,
                     body: body,
                     audience: audience,
                     priority: priority,
                     type: type,
-                    stationNumberTarget: stationNumberTarget
+                    stationNumberTarget: stationNumberTarget,
+                    isPinned: isPinned
                 )
 
                 selectedTab = .department
@@ -484,6 +497,16 @@ struct MessageCenterView: View {
             documentId: nil
         )
     }
+
+    private func messagePriorityRank(_ priority: String) -> Int {
+        switch priority.uppercased() {
+        case "CRITICAL": return 0
+        case "HIGH": return 1
+        case "IMPORTANT", "NORMAL": return 2
+        case "INFO", "INFORMATION", "LOW": return 3
+        default: return 4
+        }
+    }
 }
 
 // MARK: - Compose
@@ -497,7 +520,8 @@ private struct MessageComposeView: View {
         _ audience: String,
         _ priority: String,
         _ type: String,
-        _ stationNumberTarget: Int?
+        _ stationNumberTarget: Int?,
+        _ isPinned: Bool
     ) async throws -> Void
 
     @State private var title = ""
@@ -507,6 +531,7 @@ private struct MessageComposeView: View {
     @State private var priority = "NORMAL"
     @State private var type = "ANNOUNCEMENT"
     @State private var stationText = ""
+    @State private var isPinned = false
     @State private var isSending = false
     @State private var errorMessage: String?
 
@@ -519,8 +544,9 @@ private struct MessageComposeView: View {
     ]
 
     private let priorities: [(label: String, value: String)] = [
-        ("Normal", "NORMAL"),
-        ("High", "HIGH"),
+        ("Information", "LOW"),
+        ("Important", "NORMAL"),
+        ("High Priority", "HIGH"),
         ("Critical", "CRITICAL")
     ]
 
@@ -582,6 +608,8 @@ private struct MessageComposeView: View {
                         }
                     }
 
+                    Toggle("Pin Message", isOn: $isPinned)
+
                     Picker("Type", selection: $type) {
                         ForEach(messageTypes, id: \.value) { option in
                             Text(option.label).tag(option.value)
@@ -631,7 +659,8 @@ private struct MessageComposeView: View {
                 audience,
                 priority,
                 type,
-                targetStation ? stationNumber : nil
+                targetStation ? stationNumber : nil,
+                isPinned
             )
 
             dismiss()

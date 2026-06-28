@@ -62,6 +62,13 @@ struct DashboardApparatusWorkOrder: Identifiable, Hashable {
     let status: String?
 }
 
+struct DashboardPendingPolicy: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let category: String
+    let folderName: String?
+}
+
 struct DashboardState {
     let greeting: String
     let role: UserRole
@@ -75,6 +82,7 @@ struct DashboardState {
     let progressItems: [DashboardProgressItem]
     let assignedTrainingPreview: [DashboardTrainingPreviewItem]
     let pendingDocumentSignatures: Int
+    var pendingPolicyDocuments: [DashboardPendingPolicy] = []
 
     // Legacy headline values, keep for compatibility
     var stationCallTotal: Int? = nil
@@ -110,6 +118,7 @@ struct DashboardState {
             progressItems: [],
             assignedTrainingPreview: [],
             pendingDocumentSignatures: 0,
+            pendingPolicyDocuments: [],
             stationCallTotal: nil,
             departmentCallTotal: nil,
             dashboardDepartment: nil,

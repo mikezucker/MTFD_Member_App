@@ -22,13 +22,28 @@ struct DashboardRecentCallsCard: View {
                     .foregroundStyle(AppTheme.gold.opacity(0.9))
             }
 
-            DashboardScrollableList(itemCount: calls.count, maxHeight: 410) {
+            DashboardScrollableList(itemCount: calls.count, visibleItemLimit: 3, maxHeight: 330) {
                 VStack(spacing: 10) {
                     ForEach(calls) { call in
                         callRow(call)
                     }
                 }
             }
+
+            Button(action: onTap) {
+                HStack {
+                    Text("View all past dispatches")
+                        .font(.caption.bold())
+
+                    Spacer()
+
+                    Image(systemName: "arrow.right")
+                        .font(.caption.bold())
+                }
+                .foregroundStyle(AppTheme.gold)
+                .padding(.top, 2)
+            }
+            .buttonStyle(.plain)
         }
         .padding(16)
         .background(Color.white.opacity(0.09))

@@ -133,6 +133,7 @@ final class DashboardViewModel: ObservableObject {
             progressItems: state.progressItems,
             assignedTrainingPreview: state.assignedTrainingPreview,
             pendingDocumentSignatures: state.pendingDocumentSignatures,
+            pendingPolicyDocuments: state.pendingPolicyDocuments,
             stationCallTotal: state.stationCallTotal,
             departmentCallTotal: state.departmentCallTotal,
             dashboardDepartment: state.dashboardDepartment,
@@ -160,6 +161,7 @@ final class DashboardViewModel: ObservableObject {
                 try await APIClient.shared.fetchMobileUpcomingSchedule()
             }
             async let departmentScheduleEntriesResponse = fetchDepartmentScheduleOutlook()
+            async let pendingPolicyDocumentsResponse = fetchPendingPolicyDocuments()
 
             let dashboard = try await dashboardResponse
 
@@ -183,6 +185,7 @@ final class DashboardViewModel: ObservableObject {
             }
 
             let departmentScheduleEntries = await departmentScheduleEntriesResponse
+            let pendingPolicyDocuments = await pendingPolicyDocumentsResponse
 
             let resolvedActiveDispatches =
                 dispatchHistory?.activeDispatches ??
@@ -218,7 +221,10 @@ final class DashboardViewModel: ObservableObject {
                 quickActions: [],
                 progressItems: buildProgressItems(for: role, summary: dashboard.trainingSummary),
                 assignedTrainingPreview: mapTrainingPreview(from: dashboard.assignedTrainingPreview ?? []),
-                pendingDocumentSignatures: dashboard.trainingSummary?.pendingDocumentSignatures ?? 0,
+                pendingDocumentSignatures: pendingPolicyDocuments.isEmpty
+                    ? (dashboard.trainingSummary?.pendingDocumentSignatures ?? 0)
+                    : pendingPolicyDocuments.count,
+                pendingPolicyDocuments: pendingPolicyDocuments,
                 stationCallTotal: stationYtd,
                 departmentCallTotal: departmentYtd,
                 dashboardDepartment: nil,
@@ -262,6 +268,7 @@ final class DashboardViewModel: ObservableObject {
                 progressItems: [],
                 assignedTrainingPreview: [],
                 pendingDocumentSignatures: 0,
+                pendingPolicyDocuments: [],
                 stationCallTotal: nil,
                 departmentCallTotal: nil,
                 dashboardDepartment: nil,
@@ -352,6 +359,7 @@ final class DashboardViewModel: ObservableObject {
                 progressItems: state.progressItems,
                 assignedTrainingPreview: state.assignedTrainingPreview,
                 pendingDocumentSignatures: state.pendingDocumentSignatures,
+                pendingPolicyDocuments: state.pendingPolicyDocuments,
                 stationCallTotal: state.stationCallTotal,
                 departmentCallTotal: state.departmentCallTotal,
                 dashboardDepartment: state.dashboardDepartment,
@@ -404,6 +412,29 @@ final class DashboardViewModel: ObservableObject {
         return entries
     }
 
+    private func fetchPendingPolicyDocuments() async -> [DashboardPendingPolicy] {
+        do {
+            let response = try await APIClient.shared.fetchDocuments()
+            let foldersById = Dictionary(uniqueKeysWithValues: response.folders.map { ($0.id, $0.name) })
+
+            return response.documents
+                .filter { $0.latestVersion?.requiresAcknowledgement == true }
+                .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                .prefix(6)
+                .map { document in
+                    DashboardPendingPolicy(
+                        id: document.id,
+                        title: document.title,
+                        category: document.category,
+                        folderName: document.folderId.flatMap { foldersById[$0] }
+                    )
+                }
+        } catch {
+            print("🧨 Pending policy preview failed:", error.localizedDescription)
+            return []
+        }
+    }
+
     private func loadDispatchStats() async {
         let startedAt = Date()
         print("⏱️ Dashboard separate stats load started")
@@ -422,6 +453,7 @@ final class DashboardViewModel: ObservableObject {
                 progressItems: state.progressItems,
                 assignedTrainingPreview: state.assignedTrainingPreview,
                 pendingDocumentSignatures: state.pendingDocumentSignatures,
+                pendingPolicyDocuments: state.pendingPolicyDocuments,
                 stationCallTotal: statsResponse.stats?.stationYtd,
                 departmentCallTotal: statsResponse.stats?.departmentYtd,
                 dashboardDepartment: statsResponse.department,
