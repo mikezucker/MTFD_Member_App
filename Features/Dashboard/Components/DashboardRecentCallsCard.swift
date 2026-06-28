@@ -67,31 +67,36 @@ struct DashboardRecentCallsCard: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(call.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    Text(call.timestamp)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.52))
-                        .lineLimit(1)
-                }
+                Text(call.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
 
                 Text(call.address)
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.66))
                     .lineLimit(1)
 
-                if let incidentNumber = call.incidentNumber,
-                   !incidentNumber.isEmpty {
-                    Text(incidentNumber)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.42))
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.fill")
+                        .font(.caption2.weight(.bold))
+
+                    Text(call.timestamp)
+                        .lineLimit(1)
+
+                    if !call.units.isEmpty {
+                        Text("/")
+                            .foregroundStyle(.white.opacity(0.34))
+
+                        Image(systemName: "truck.box.fill")
+                            .font(.caption2.weight(.bold))
+
+                        Text(call.units.prefix(5).joined(separator: ", "))
+                            .lineLimit(1)
+                    }
                 }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.48))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

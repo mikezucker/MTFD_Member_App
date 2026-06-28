@@ -557,7 +557,8 @@ final class DashboardViewModel: ObservableObject {
                 incidentNumber: dispatch.stableId,
                 title: dispatch.callType,
                 address: location,
-                timestamp: timestamp
+                timestamp: timestamp,
+                units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units)
             )
         }
     }

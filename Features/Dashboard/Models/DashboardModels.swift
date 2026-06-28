@@ -52,6 +52,7 @@ struct RecentDepartmentCall: Identifiable, Hashable {
     let title: String
     let address: String
     let timestamp: String
+    let units: [String]
 }
 
 struct DashboardApparatusWorkOrder: Identifiable, Hashable {
