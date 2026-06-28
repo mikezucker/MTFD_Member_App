@@ -178,6 +178,16 @@ struct ChiefDashboardView: View {
                         .minimumScaleFactor(0.78)
                         .fixedSize(horizontal: false, vertical: true)
 
+                    Text(chiefBriefStatusParagraph)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.86))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineSpacing(2)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white.opacity(0.07))
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
                     Text(chiefBriefSubheadline)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppTheme.gold)
@@ -322,7 +332,9 @@ struct ChiefDashboardView: View {
 
     private var todayScheduledMemberCount: Int {
         todayScheduleEntries
-            .flatMap(\.staffingDetails)
+            .flatMap { entry in
+                entry.staffingDetails.filter { chiefBriefIncludesStaffingDetail($0, in: entry) }
+            }
             .filter { !$0.isVacant }
             .compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -331,12 +343,42 @@ struct ChiefDashboardView: View {
 
     private var todayVacancyCount: Int {
         todayScheduleEntries.reduce(0) { total, entry in
-            total + entry.staffingDetails.filter { $0.isVacant }.count
+            total + entry.staffingDetails.filter {
+                $0.isVacant && chiefBriefIncludesStaffingDetail($0, in: entry)
+            }.count
         }
     }
 
     private var todayAssignmentCount: Int {
-        todayScheduleEntries.count
+        todayScheduleEntries.filter { entry in
+            entry.staffingDetails.contains { chiefBriefIncludesStaffingDetail($0, in: entry) }
+        }.count
+    }
+
+    private var todayWorkingNamesForChiefBrief: [String] {
+        var seen = Set<String>()
+
+        return todayScheduleEntries
+            .flatMap { entry in
+                entry.staffingDetails.filter { chiefBriefIncludesStaffingDetail($0, in: entry) }
+            }
+            .filter { !$0.isVacant }
+            .compactMap { $0.name?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    private var chiefBriefWorkingSummary: String {
+        let names = todayWorkingNamesForChiefBrief
+
+        guard !names.isEmpty else {
+            return todayAssignmentCount == 0 ? "staffing has not loaded" : "no staffed names are listed"
+        }
+
+        let preview = names.prefix(4).joined(separator: ", ")
+        let remaining = names.count - min(names.count, 4)
+
+        return remaining > 0 ? "\(preview), +\(remaining) more" : preview
     }
 
     private var chiefBriefHeadline: String {
@@ -391,6 +433,32 @@ struct ChiefDashboardView: View {
         }
 
         return "Calls, readiness, and coverage in one command snapshot"
+    }
+
+    private var chiefBriefStatusParagraph: String {
+        let callText: String
+        if activeDispatches.isEmpty {
+            callText = recentCalls.isEmpty
+                ? "No active calls are showing, and the recent call feed is quiet."
+                : "\(recentCalls.count) recent dispatch\(recentCalls.count == 1 ? " is" : "es are") available for review."
+        } else {
+            callText = "\(activeDispatches.count) active dispatch\(activeDispatches.count == 1 ? " is" : "es are") currently showing."
+        }
+
+        let staffingText = "Working today: \(chiefBriefWorkingSummary)."
+
+        let workOrderText: String
+        if workOrders.isEmpty {
+            workOrderText = "No open apparatus work orders are listed."
+        } else {
+            workOrderText = "\(workOrders.count) open apparatus work order\(workOrders.count == 1 ? "" : "s") need attention, led by \(chiefBriefWorkOrderSubtitle)."
+        }
+
+        return dailyStatusParagraph(from: [
+            "\(callText) \(staffingText) \(workOrderText)",
+            "\(staffingText) \(callText) \(workOrderText)",
+            "\(workOrderText) \(callText) \(staffingText)"
+        ])
     }
 
     private var chiefBriefLeadParagraph: String {
@@ -592,6 +660,22 @@ struct ChiefDashboardView: View {
         return "Today’s staffing shows \(todayScheduledMemberCount) scheduled across \(todayAssignmentCount) assignment\(todayAssignmentCount == 1 ? "" : "s")."
     }
 
+    private func chiefBriefIncludesStaffingDetail(
+        _ detail: APIClient.MobileScheduleStaffingDetail,
+        in entry: APIClient.MobileScheduleEntry
+    ) -> Bool {
+        let searchable = [
+            entry.title,
+            detail.qualifier ?? "",
+            detail.name ?? "",
+        ]
+        .joined(separator: " ")
+        .lowercased()
+
+        return !searchable.contains("career officer") &&
+            !searchable.contains("officer career")
+    }
+
     private func trimmedOptional(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed
@@ -647,6 +731,15 @@ struct ChiefDashboardView: View {
 
         let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
         return options[day % options.count]
+    }
+
+    private func dailyStatusParagraph(from options: [String]) -> String {
+        guard !options.isEmpty else {
+            return chiefBriefCallsSentence
+        }
+
+        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        return options[(day + todayScheduledMemberCount + workOrders.count + activeDispatches.count) % options.count]
     }
 
     private var notableRecentCallTypes: [String] {
