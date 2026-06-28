@@ -179,8 +179,8 @@ struct ChiefDashboardView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text(chiefBriefStatusParagraph)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.86))
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.82))
                         .fixedSize(horizontal: false, vertical: true)
                         .lineSpacing(2)
                         .padding(12)
@@ -375,8 +375,8 @@ struct ChiefDashboardView: View {
             return todayAssignmentCount == 0 ? "staffing has not loaded" : "no staffed names are listed"
         }
 
-        let preview = names.prefix(4).joined(separator: ", ")
-        let remaining = names.count - min(names.count, 4)
+        let preview = names.prefix(6).joined(separator: ", ")
+        let remaining = names.count - min(names.count, 6)
 
         return remaining > 0 ? "\(preview), +\(remaining) more" : preview
     }
@@ -445,13 +445,18 @@ struct ChiefDashboardView: View {
             callText = "\(activeDispatches.count) active dispatch\(activeDispatches.count == 1 ? " is" : "es are") currently showing."
         }
 
-        let staffingText = "Working today: \(chiefBriefWorkingSummary)."
+        let staffingText: String
+        if todayVacancyCount > 0 {
+            staffingText = "Working today: \(chiefBriefWorkingSummary), with \(todayVacancyCount) vacanc\(todayVacancyCount == 1 ? "y" : "ies") showing across \(todayAssignmentCount) assignment\(todayAssignmentCount == 1 ? "" : "s")."
+        } else {
+            staffingText = "Working today: \(chiefBriefWorkingSummary), with no vacancies showing across \(todayAssignmentCount) assignment\(todayAssignmentCount == 1 ? "" : "s")."
+        }
 
         let workOrderText: String
         if workOrders.isEmpty {
             workOrderText = "No open apparatus work orders are listed."
         } else {
-            workOrderText = "\(workOrders.count) open apparatus work order\(workOrders.count == 1 ? "" : "s") need attention, led by \(chiefBriefWorkOrderSubtitle)."
+            workOrderText = "\(workOrders.count) open apparatus work order\(workOrders.count == 1 ? "" : "s") need attention: \(chiefBriefDetailedWorkOrderSummary)."
         }
 
         return dailyStatusParagraph(from: [
