@@ -52,8 +52,6 @@ struct DashboardRecentCallsCard: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
     }
 
     private func callRow(_ call: RecentDepartmentCall) -> some View {

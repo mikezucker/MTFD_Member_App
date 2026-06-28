@@ -45,7 +45,8 @@ struct DashboardScrollableList<Content: View>: View {
             ScrollView(.vertical, showsIndicators: showsIndicators) {
                 content()
             }
-            .frame(maxHeight: maxHeight)
+            .frame(height: maxHeight)
+            .clipped()
         } else {
             content()
         }
