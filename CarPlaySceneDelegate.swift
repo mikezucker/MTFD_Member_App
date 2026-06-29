@@ -418,6 +418,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func makeActiveDispatchDetailTemplate(_ dispatch: APIClient.ActiveDispatch) -> CPListTemplate {
         var items: [CPListItem] = []
+        var navigationItem: CPListItem?
 
         if let lastRefreshAt {
             let statusItem = CPListItem(
@@ -449,13 +450,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 state: dispatch.state
             ) ?? displayAddress
 
-            items.append(
-                makeNavigateToCallItem(
-                    address: navigationAddress,
-                    displayAddress: displayAddress,
-                    displayName: activeTitle(dispatch),
-                    coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
-                )
+            navigationItem = makeNavigateToCallItem(
+                address: navigationAddress,
+                displayAddress: displayAddress,
+                displayName: activeTitle(dispatch),
+                coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
             )
 
             let locationItem = CPListItem(text: "Location", detailText: displayAddress)
@@ -481,11 +480,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             items.append(dispatchedItem)
         }
 
+        var sections = [CPListSection(items: items)]
+        if let navigationItem {
+            sections.append(CPListSection(items: [navigationItem]))
+        }
+
         return CPListTemplate(
             title: "Incident Details",
-            sections: [
-                CPListSection(items: items)
-            ]
+            sections: sections
         )
     }
 
@@ -539,6 +541,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     private func makeRecentDispatchDetailTemplate(_ dispatch: APIClient.DispatchHistoryItem) -> CPListTemplate {
         var items: [CPListItem] = []
+        var navigationItem: CPListItem?
 
         let typeItem = CPListItem(
             text: recentTitle(dispatch),
@@ -563,13 +566,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 state: dispatch.state
             ) ?? displayAddress
 
-            items.append(
-                makeNavigateToCallItem(
-                    address: navAddress,
-                    displayAddress: displayAddress,
-                    displayName: recentTitle(dispatch),
-                    coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
-                )
+            navigationItem = makeNavigateToCallItem(
+                address: navAddress,
+                displayAddress: displayAddress,
+                displayName: recentTitle(dispatch),
+                coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
             )
 
             let locationItem = CPListItem(text: "Location", detailText: displayAddress)
@@ -611,11 +612,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             items.append(dispatchedItem)
         }
 
+        var sections = [CPListSection(items: items)]
+        if let navigationItem {
+            sections.append(CPListSection(items: [navigationItem]))
+        }
+
         return CPListTemplate(
             title: "Dispatch Details",
-            sections: [
-                CPListSection(items: items)
-            ]
+            sections: sections
         )
     }
 
@@ -859,7 +863,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     ) -> CPListItem {
         let item = CPListItem(
             text: "Navigate to Call",
-            detailText: "Start driving directions"
+            detailText: displayAddress
         )
         item.setImage(carPlayPrimaryActionIcon("arrow.triangle.turn.up.right.circle.fill"))
         item.accessoryType = .disclosureIndicator
@@ -879,7 +883,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func carPlayPrimaryActionIcon(_ systemName: String) -> UIImage? {
-        let configuration = UIImage.SymbolConfiguration(pointSize: 28, weight: .bold)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 40, weight: .bold)
 
         return UIImage(systemName: systemName)?
             .applyingSymbolConfiguration(configuration)?
@@ -887,29 +891,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func carPlayIcon(_ systemName: String) -> UIImage? {
-        let color: UIColor
+        let configuration = UIImage.SymbolConfiguration.preferringMulticolor()
 
-        switch systemName {
-        case "cross.case.fill":
-            color = .systemBlue
-        case "car.fill":
-            color = .systemOrange
-        case "bell.fill":
-            color = .systemYellow
-        case "exclamationmark.triangle.fill":
-            color = .systemPurple
-        case "location.fill":
-            color = .systemGreen
-        case "checkmark.shield.fill":
-            color = .systemGreen
-        case "clock.fill", "clock.badge.xmark", "arrow.clockwise":
-            color = .systemGray
-        default:
-            color = .systemRed
-        }
-
-        return UIImage(systemName: systemName)?
-            .withTintColor(color, renderingMode: .alwaysOriginal)
+        return UIImage(systemName: systemName, withConfiguration: configuration)?
+            .withRenderingMode(.alwaysOriginal)
     }
 
     private func navigateToAddress(
