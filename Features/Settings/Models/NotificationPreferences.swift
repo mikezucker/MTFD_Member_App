@@ -144,6 +144,41 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum HapticAlertStyle: String, Codable, CaseIterable, Identifiable {
+    case off
+    case normal
+    case strong
+    case pagerStyle
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .off:
+            return "Off"
+        case .normal:
+            return "Normal"
+        case .strong:
+            return "Strong"
+        case .pagerStyle:
+            return "Pager Style"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .off:
+            return "The app will not play extra haptics for in-app dispatch alerts."
+        case .normal:
+            return "Uses the standard notification haptic feel."
+        case .strong:
+            return "Uses a more pronounced haptic for dispatch alerts."
+        case .pagerStyle:
+            return "Uses a short repeating urgent pattern for dispatch alerts."
+        }
+    }
+}
+
 struct NotificationPreferencesResponse: Codable {
     var hapticsEnabled: Bool?
     let success: Bool
@@ -156,6 +191,7 @@ struct NotificationPreferences: Codable, Equatable {
 
     var dispatchAlertsEnabled: Bool = true
     var hapticsEnabled: Bool = true
+    var hapticAlertStyle: HapticAlertStyle = .normal
     var criticalDispatchAlerts: Bool = false
     var criticalDispatchAlertMode: CriticalDispatchAlertMode = .seriousOnly
     var dispatchAlertTone: DispatchAlertTone = .systemDefault
@@ -187,6 +223,7 @@ struct NotificationPreferences: Codable, Equatable {
         case isEnabled
         case dispatchAlertsEnabled
         case hapticsEnabled
+        case hapticAlertStyle
         case criticalDispatchAlerts
         case criticalDispatchAlertMode
         case dispatchAlertTone
@@ -216,7 +253,10 @@ struct NotificationPreferences: Codable, Equatable {
 
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         dispatchAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .dispatchAlertsEnabled) ?? true
-        hapticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? true
+        let decodedHapticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? true
+        hapticAlertStyle = try container.decodeIfPresent(HapticAlertStyle.self, forKey: .hapticAlertStyle)
+            ?? (decodedHapticsEnabled ? .normal : .off)
+        hapticsEnabled = hapticAlertStyle != .off
         criticalDispatchAlerts = try container.decodeIfPresent(Bool.self, forKey: .criticalDispatchAlerts) ?? false
         criticalDispatchAlertMode = try container.decodeIfPresent(CriticalDispatchAlertMode.self, forKey: .criticalDispatchAlertMode) ?? .seriousOnly
         dispatchAlertTone = try container.decodeIfPresent(DispatchAlertTone.self, forKey: .dispatchAlertTone) ?? .systemDefault
@@ -254,7 +294,8 @@ struct NotificationPreferences: Codable, Equatable {
 
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(dispatchAlertsEnabled, forKey: .dispatchAlertsEnabled)
-        try container.encode(hapticsEnabled, forKey: .hapticsEnabled)
+        try container.encode(hapticAlertStyle != .off, forKey: .hapticsEnabled)
+        try container.encode(hapticAlertStyle, forKey: .hapticAlertStyle)
         try container.encode(criticalDispatchAlerts, forKey: .criticalDispatchAlerts)
         try container.encode(criticalDispatchAlertMode, forKey: .criticalDispatchAlertMode)
         try container.encode(dispatchAlertTone, forKey: .dispatchAlertTone)

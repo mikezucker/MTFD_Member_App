@@ -149,7 +149,7 @@ struct DashboardView: View {
 
                         case .officerVolunteer:
                             VolunteerOfficerDashboardView(
-                                activeDispatches: viewModel.activeDispatches,
+                                activeDispatches: dashboardActiveDispatches,
                                 departmentStats: viewModel.state.dashboardDepartment,
                                 stationStats: resolvedStationStats,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
@@ -233,6 +233,7 @@ struct DashboardView: View {
 
                         case .memberVolunteer:
                             VolunteerMemberDashboardView(
+                                activeDispatches: dashboardActiveDispatches,
                                 volunteerContext: viewModel.state.volunteerContext,
                                 stationDisplayName: stationDisplayName,
                                 stationStats: resolvedStationStats,
@@ -245,6 +246,11 @@ struct DashboardView: View {
                                 isLoading: viewModel.state.isLoading,
                                 onRefresh: {
                                     await refreshDashboard()
+                                },
+                                onOpenDispatch: { dispatch in
+                                    latestDispatch = dispatch
+
+                                    selectedDispatch = dispatch
                                 }
                             )
                         }
@@ -311,11 +317,11 @@ struct DashboardView: View {
                 latestDispatch = dispatch
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
 
-                if dashboardHapticsEnabled {
-                    let hapticGenerator = UINotificationFeedbackGenerator()
-                    hapticGenerator.prepare()
-                    hapticGenerator.notificationOccurred(dispatch.type == .dispatchCritical ? .warning : .success)
-                }
+                HapticAlertManager.shared.playDispatchAlert(
+                    dispatchId: dispatch.id,
+                    style: dashboardHapticAlertStyle,
+                    isCritical: dispatch.type == .dispatchCritical
+                )
                 dispatchNotificationCount += 1
 
                 isDispatchBellRinging = true
@@ -447,8 +453,156 @@ struct DashboardView: View {
         false
     }
 
+    private var dashboardActiveDispatches: [APIClient.ActiveDispatch] {
+        switch dashboardRole {
+        case .officerVolunteer, .memberVolunteer:
+            return stationScopedActiveDispatches
+        case .admin, .chief, .officerCareer, .memberCareer:
+            return viewModel.activeDispatches
+        }
+    }
+
+    private var stationScopedActiveDispatches: [APIClient.ActiveDispatch] {
+        let stationTokens = volunteerStationDispatchUnitTokens
+
+        guard !stationTokens.isEmpty else {
+            return []
+        }
+
+        return viewModel.activeDispatches.filter { dispatch in
+            let dispatchTokens = dispatch.units.flatMap(expandedDispatchUnitTokens)
+            return dispatchTokens.contains { stationTokens.contains($0) }
+        }
+    }
+
+    private var volunteerStationDispatchUnitTokens: Set<String> {
+        var tokens = Set<String>()
+        let context = viewModel.state.volunteerContext
+
+        for apparatus in context?.stationApparatus ?? [] {
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.dispatchUnitIds))
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.unitId))
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.apparatusApiId))
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.displayName))
+        }
+
+        if let apparatus = context?.apparatus {
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.dispatchUnitIds))
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.unitId))
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.apparatusApiId))
+            tokens.formUnion(expandedDispatchUnitTokens(apparatus.displayName))
+        }
+
+        if tokens.isEmpty, let stationNumber = volunteerStationNumber {
+            tokens.formUnion(defaultDispatchUnitTokens(forStationNumber: stationNumber))
+        }
+
+        return tokens
+    }
+
+    private var volunteerStationNumber: Int? {
+        let candidates = [
+            viewModel.state.volunteerContext?.station,
+            viewModel.state.volunteerContext?.company,
+            stationDisplayName,
+            session.currentUser?.company
+        ]
+        .compactMap { $0 }
+
+        for candidate in candidates {
+            if let number = stationNumber(from: candidate) {
+                return number
+            }
+        }
+
+        return nil
+    }
+
+    private func stationNumber(from value: String) -> Int? {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+
+        if let match = normalized.range(of: #"STATION\s*([1-5])"#, options: .regularExpression) {
+            let matched = String(normalized[match])
+            return Int(matched.filter(\.isNumber))
+        }
+
+        let displayName = StationMapper.displayName(from: value)
+        if displayName != value, let mapped = StationMapper.stationNumber(from: value) {
+            return mapped
+        }
+
+        if normalized.contains("MT KEMBLE") || normalized.contains("MT. KEMBLE") {
+            return 1
+        }
+        if normalized.contains("COLLINSVILLE") {
+            return 2
+        }
+        if normalized.contains("HILLSIDE") {
+            return 3
+        }
+        if normalized.contains("FAIRCHILD") {
+            return 4
+        }
+        if normalized.contains("WOODLAND") {
+            return 5
+        }
+
+        return nil
+    }
+
+    private func defaultDispatchUnitTokens(forStationNumber stationNumber: Int) -> Set<String> {
+        let unitIds: [String]
+
+        switch stationNumber {
+        case 1:
+            unitIds = ["F22E1", "Engine 1", "E1", "ENG1"]
+        case 2:
+            unitIds = ["F22E2", "Engine 2", "E2", "ENG2"]
+        case 3:
+            unitIds = ["F22E3", "Engine 3", "E3", "ENG3"]
+        case 4:
+            unitIds = ["F22E4", "Engine 4", "E4", "ENG4", "F22L2", "Ladder 2", "L2", "LAD2", "F22R6", "Rescue 6", "R6", "RES6"]
+        case 5:
+            unitIds = ["F22E5", "Engine 5", "E5", "ENG5", "F22E6", "Engine 6", "E6", "ENG6", "F22L1", "Ladder 1", "L1", "LAD1"]
+        default:
+            unitIds = []
+        }
+
+        return Set(unitIds.flatMap(expandedDispatchUnitTokens))
+    }
+
+    private func expandedDispatchUnitTokens(_ value: String?) -> [String] {
+        guard let value else {
+            return []
+        }
+
+        return value
+            .split { character in
+                character == "," || character == ";" || character == "|" || character.isNewline
+            }
+            .flatMap { part -> [String] in
+                let normalized = part
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .uppercased()
+                    .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+
+                guard !normalized.isEmpty else {
+                    return []
+                }
+
+                let compact = normalized
+                    .filter { $0.isLetter || $0.isNumber }
+
+                return Array(Set([normalized, compact].filter { !$0.isEmpty }))
+            }
+    }
+
     private var headerAlertMode: DashboardHeaderAlertMode {
-        if !viewModel.activeDispatches.isEmpty {
+        if !dashboardActiveDispatches.isEmpty {
             return .activeDispatch(messageCount: viewModel.state.unreadNonDispatchMessageCount)
         }
 
@@ -462,7 +616,7 @@ struct DashboardView: View {
     private func handleHeaderAlertTap() {
         isDispatchBellRinging = false
 
-        if let activeDispatch = viewModel.activeDispatches.first {
+        if let activeDispatch = dashboardActiveDispatches.first {
             let dispatch = makeDispatchPayload(from: activeDispatch)
             latestDispatch = dispatch
 
@@ -478,7 +632,7 @@ struct DashboardView: View {
     }
 
     private var activeDispatchLiveActivitySignature: String {
-        viewModel.activeDispatches
+        dashboardActiveDispatches
             .map { dispatch in
                 let priority = dispatch.priority ?? ""
                 let callType = dispatch.callType
@@ -492,9 +646,10 @@ struct DashboardView: View {
     }
 
     private func syncLiveActivityWithDashboardActiveDispatches() {
-        print("🟣 Dashboard LiveActivity sync. activeDispatches:", viewModel.activeDispatches.count)
+        let activeDispatches = dashboardActiveDispatches
+        print("🟣 Dashboard LiveActivity sync. activeDispatches:", activeDispatches.count)
 
-        guard let newestDispatch = viewModel.activeDispatches.first else {
+        guard let newestDispatch = activeDispatches.first else {
             print("🟣 Dashboard LiveActivity no active dispatches. Ending all.")
             DispatchLiveActivityManager.shared.endAll()
             return
@@ -502,7 +657,7 @@ struct DashboardView: View {
 
         let payload = makeDispatchPayload(
             from: newestDispatch,
-            activeCallCount: viewModel.activeDispatches.count
+            activeCallCount: activeDispatches.count
         )
         print("🟣 Dashboard LiveActivity newest dispatch:", payload.id, payload.title)
 
@@ -541,12 +696,17 @@ struct DashboardView: View {
         }
     }
 
-    private var dashboardHapticsEnabled: Bool {
-        if UserDefaults.standard.object(forKey: "notification_haptics_enabled") == nil {
-            return true
+    private var dashboardHapticAlertStyle: HapticAlertStyle {
+        if let rawValue = UserDefaults.standard.string(forKey: "notification_haptic_alert_style"),
+           let style = HapticAlertStyle(rawValue: rawValue) {
+            return style
         }
 
-        return UserDefaults.standard.bool(forKey: "notification_haptics_enabled")
+        if UserDefaults.standard.object(forKey: "notification_haptics_enabled") == nil {
+            return .normal
+        }
+
+        return UserDefaults.standard.bool(forKey: "notification_haptics_enabled") ? .normal : .off
     }
 
     private func makeDispatchPayload(

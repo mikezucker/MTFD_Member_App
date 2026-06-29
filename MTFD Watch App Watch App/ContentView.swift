@@ -6,6 +6,7 @@
 import SwiftUI
 import Combine
 import WatchKit
+import WatchConnectivity
 
 struct WatchDispatch: Identifiable, Codable {
     let id: String
@@ -29,6 +30,7 @@ private struct WatchSnapshotResponse: Decodable {
     let dispatches: WatchSnapshotDispatches?
     let schedule: WatchScheduleResponse?
     let workOrders: WatchWorkOrdersResponse?
+    let callTotals: WatchCallTotalsResponse?
 }
 
 private struct WatchSnapshotDispatches: Decodable {
@@ -86,12 +88,40 @@ private struct WatchWorkOrdersResponse: Decodable {
     let items: [WatchWorkOrder]
 }
 
+private struct WatchCallTotalsResponse: Codable {
+    let ok: Bool?
+    let message: String?
+    let sourceLabel: String?
+    let lastUpdated: String?
+    let department: WatchDispatchBucket?
+}
+
+private struct WatchDispatchBucket: Codable {
+    let total24h: Int?
+    let total7d: Int?
+    let total30d: Int?
+    let totalYtd: Int?
+    let fire24h: Int?
+    let fire7d: Int?
+    let fire30d: Int?
+    let fireYtd: Int?
+    let ems24h: Int?
+    let ems7d: Int?
+    let ems30d: Int?
+    let emsYtd: Int?
+    let other24h: Int?
+    let other7d: Int?
+    let other30d: Int?
+    let otherYtd: Int?
+}
+
 @MainActor
 private final class WatchDispatchViewModel: ObservableObject {
     @Published var activeDispatches: [WatchDispatch] = []
     @Published var recentDispatches: [WatchDispatch] = []
     @Published var scheduleEntries: [WatchScheduleEntry] = []
     @Published var workOrders: [WatchWorkOrder] = []
+    @Published var callTotals: WatchDispatchBucket?
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var lastLoadedAt: Date?
@@ -132,6 +162,7 @@ private final class WatchDispatchViewModel: ObservableObject {
             recentDispatches = Array(recent.prefix(20))
             scheduleEntries = Array((decoded.schedule?.entries ?? []).prefix(20))
             workOrders = Array((decoded.workOrders?.items ?? []).prefix(30))
+            callTotals = decoded.callTotals?.department
             lastLoadedAt = decoded.fetchedAt ?? Date()
             cacheDispatches()
         } catch {
@@ -152,6 +183,7 @@ private final class WatchDispatchViewModel: ObservableObject {
             recentDispatches = cached.recentDispatches ?? []
             scheduleEntries = cached.scheduleEntries ?? []
             workOrders = cached.workOrders ?? []
+            callTotals = cached.callTotals
             lastLoadedAt = cached.lastLoadedAt
         } catch {
             UserDefaults.standard.removeObject(forKey: cacheKey)
@@ -167,6 +199,7 @@ private final class WatchDispatchViewModel: ObservableObject {
                     recentDispatches: recentDispatches,
                     scheduleEntries: scheduleEntries,
                     workOrders: workOrders,
+                    callTotals: callTotals,
                     lastLoadedAt: lastLoadedAt
                 )
             )
@@ -305,6 +338,7 @@ private struct WatchDispatchCache: Codable {
     let recentDispatches: [WatchDispatch]?
     let scheduleEntries: [WatchScheduleEntry]?
     let workOrders: [WatchWorkOrder]?
+    let callTotals: WatchDispatchBucket?
     let lastLoadedAt: Date?
 }
 
@@ -342,17 +376,14 @@ struct ContentView: View {
                 }
 
                 NavigationLink {
-                    WatchStatsView(
-                        activeCount: viewModel.activeDispatches.count,
-                        recentCount: viewModel.recentDispatches.count,
-                        scheduleCount: viewModel.scheduleEntries.count,
-                        workOrderCount: viewModel.workOrders.count,
+                    WatchCallTotalsView(
+                        totals: viewModel.callTotals,
                         lastLoadedAt: viewModel.lastLoadedAt
                     )
                 } label: {
                     WatchMenuRow(
-                        title: "Stats",
-                        subtitle: "Dispatch snapshot",
+                        title: "Call Totals",
+                        subtitle: callTotalsSummaryText,
                         systemImage: "chart.bar.fill",
                         color: .purple
                     )
@@ -421,6 +452,14 @@ struct ContentView: View {
     private var workOrderCountText: String {
         let count = viewModel.workOrders.count
         return count == 1 ? "1 open item" : "\(count) open items"
+    }
+
+    private var callTotalsSummaryText: String {
+        guard let total = viewModel.callTotals?.totalYtd else {
+            return "Loading totals"
+        }
+
+        return "\(total) YTD calls"
     }
 }
 
@@ -632,19 +671,20 @@ private struct WatchMenuRow: View {
     }
 }
 
-private struct WatchStatsView: View {
-    let activeCount: Int
-    let recentCount: Int
-    let scheduleCount: Int
-    let workOrderCount: Int
+private struct WatchCallTotalsView: View {
+    let totals: WatchDispatchBucket?
     let lastLoadedAt: Date?
 
     var body: some View {
         List {
-            Label("\(activeCount) active", systemImage: "dot.radiowaves.left.and.right")
-            Label("\(recentCount) recent", systemImage: "clock.arrow.circlepath")
-            Label("\(scheduleCount) schedule", systemImage: "calendar")
-            Label("\(workOrderCount) work orders", systemImage: "wrench.and.screwdriver.fill")
+            if let totals {
+                totalsRow(title: "24 Hours", total: totals.total24h, fire: totals.fire24h, ems: totals.ems24h, other: totals.other24h)
+                totalsRow(title: "7 Days", total: totals.total7d, fire: totals.fire7d, ems: totals.ems7d, other: totals.other7d)
+                totalsRow(title: "30 Days", total: totals.total30d, fire: totals.fire30d, ems: totals.ems30d, other: totals.other30d)
+                totalsRow(title: "YTD", total: totals.totalYtd, fire: totals.fireYtd, ems: totals.emsYtd, other: totals.otherYtd)
+            } else {
+                Label("Call totals unavailable", systemImage: "chart.bar.xaxis")
+            }
 
             if let lastLoadedAt {
                 Label("Updated \(lastLoadedAt, style: .relative) ago", systemImage: "clock")
@@ -652,7 +692,40 @@ private struct WatchStatsView: View {
                 Label("Not synced yet", systemImage: "icloud.slash")
             }
         }
-        .navigationTitle("Stats")
+        .navigationTitle("Call Totals")
+    }
+
+    private func totalsRow(title: String, total: Int?, fire: Int?, ems: Int?, other: Int?) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.headline.weight(.bold))
+
+                Spacer(minLength: 0)
+
+                Text("\(total ?? 0)")
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(.purple)
+            }
+
+            HStack(spacing: 8) {
+                miniTotal("Fire", fire ?? 0, .red)
+                miniTotal("EMS", ems ?? 0, .blue)
+                miniTotal("Other", other ?? 0, .secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func miniTotal(_ label: String, _ value: Int, _ color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(value)")
+                .font(.caption.weight(.black))
+
+            Text(label)
+                .font(.caption2)
+        }
+        .foregroundStyle(color)
     }
 }
 
@@ -1077,7 +1150,7 @@ private struct WatchDispatchDetailView: View {
                     Button {
                         openNavigation()
                     } label: {
-                        Label("Navigate", systemImage: "location.fill")
+                        Label("Navigate to Call", systemImage: "location.fill")
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -1110,7 +1183,57 @@ private struct WatchDispatchDetailView: View {
             return
         }
 
+        WatchPhoneNavigationBridge.shared.sendNavigateToCall(address: dispatch.address)
         WKExtension.shared().openSystemURL(url)
+    }
+}
+
+private final class WatchPhoneNavigationBridge: NSObject, WCSessionDelegate {
+    static let shared = WatchPhoneNavigationBridge()
+
+    private override init() {
+        super.init()
+
+        guard WCSession.isSupported() else { return }
+
+        WCSession.default.delegate = self
+        WCSession.default.activate()
+    }
+
+    func sendNavigateToCall(address: String) {
+        guard WCSession.isSupported() else { return }
+
+        let session = WCSession.default
+        let message: [String: Any] = [
+            "action": "navigate_to_call",
+            "address": address
+        ]
+
+        if session.activationState != .activated {
+            session.activate()
+        }
+
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { error in
+                print("⌚️ Watch phone navigation handoff failed: \(error.localizedDescription)")
+            }
+        } else {
+            do {
+                try session.updateApplicationContext(message)
+            } catch {
+                print("⌚️ Watch phone navigation context failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        activationDidCompleteWith activationState: WCSessionActivationState,
+        error: Error?
+    ) {
+        if let error {
+            print("⌚️ WatchConnectivity activation failed: \(error.localizedDescription)")
+        }
     }
 }
 

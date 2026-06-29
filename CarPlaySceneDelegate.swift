@@ -23,7 +23,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var recentDispatches: [APIClient.DispatchHistoryItem] = []
     private var knownActiveDispatchIds = Set<String>()
     private var selectedActiveDispatchId: String?
-    private var activeNavigationSession: CPNavigationSession?
 
     private enum CarPlayScreen {
         case root
@@ -346,9 +345,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
         let headerItem = CPListItem(
             text: "Morris Township Fire Dept.",
-            detailText: activeCount == 0 ? "MTFD Dispatch Center • No Active Incidents" : "MTFD Dispatch Center • \(activeCount) Active Incident\(activeCount == 1 ? "" : "s")"
+            detailText: activeCount == 0 ? "Dispatch Center • No Active Incidents" : "Dispatch Center • \(activeCount) Active Incident\(activeCount == 1 ? "" : "s")"
         )
-        headerItem.setImage(UIImage(named: "MTFDLogo"))
+        headerItem.setImage(UIImage(named: "MTFDHeaderIcon"))
 
         var items: [CPListItem] = [headerItem, activeItem, recentItem, refreshItem]
 
@@ -362,7 +361,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
 
         return CPListTemplate(
-            title: "MTFD",
+            title: "",
             sections: [
                 CPListSection(items: items)
             ]
@@ -450,23 +449,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 state: dispatch.state
             ) ?? displayAddress
 
-            let navigateItem = CPListItem(
-                text: "Navigate",
-                detailText: displayAddress
+            items.append(
+                makeNavigateToCallItem(
+                    address: navigationAddress,
+                    displayAddress: displayAddress,
+                    displayName: activeTitle(dispatch),
+                    coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
+                )
             )
-            navigateItem.setImage(carPlayIcon("location.fill"))
-
-            navigateItem.handler = { [weak self] _, completion in
-                print("🚗 CarPlay Navigate row tapped")
-                self?.navigateToAddress(
-                    navigationAddress,
-                    displayName: self?.activeTitle(dispatch) ?? "Dispatch Location"
-                ) {
-                    completion()
-                }
-            }
-
-            items.append(navigateItem)
 
             let locationItem = CPListItem(text: "Location", detailText: displayAddress)
             locationItem.handler = { _, completion in
@@ -573,28 +563,20 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 state: dispatch.state
             ) ?? displayAddress
 
+            items.append(
+                makeNavigateToCallItem(
+                    address: navAddress,
+                    displayAddress: displayAddress,
+                    displayName: recentTitle(dispatch),
+                    coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
+                )
+            )
+
             let locationItem = CPListItem(text: "Location", detailText: displayAddress)
             locationItem.handler = { _, completion in
                 completion()
             }
             items.append(locationItem)
-
-            let navigateItem = CPListItem(
-                text: "Navigate",
-                detailText: displayAddress
-            )
-            navigateItem.setImage(carPlayIcon("location.fill"))
-
-            navigateItem.handler = { [weak self] _, completion in
-                self?.navigateToAddress(
-                    navAddress,
-                    displayName: self?.recentTitle(dispatch) ?? "Dispatch Location"
-                ) {
-                    completion()
-                }
-            }
-
-            items.append(navigateItem)
         }
 
         if !dispatch.units.isEmpty {
@@ -869,6 +851,41 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
     // MARK: - CarPlay Actions
 
+    private func makeNavigateToCallItem(
+        address: String,
+        displayAddress: String,
+        displayName: String,
+        coordinate: CLLocationCoordinate2D?
+    ) -> CPListItem {
+        let item = CPListItem(
+            text: "Navigate to Call",
+            detailText: "Start driving directions"
+        )
+        item.setImage(carPlayPrimaryActionIcon("arrow.triangle.turn.up.right.circle.fill"))
+        item.accessoryType = .disclosureIndicator
+
+        item.handler = { [weak self] _, completion in
+            print("🚗 CarPlay Navigate to Call tapped")
+            self?.navigateToAddress(
+                address,
+                displayName: displayName.isEmpty ? displayAddress : displayName,
+                coordinate: coordinate
+            ) {
+                completion()
+            }
+        }
+
+        return item
+    }
+
+    private func carPlayPrimaryActionIcon(_ systemName: String) -> UIImage? {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 28, weight: .bold)
+
+        return UIImage(systemName: systemName)?
+            .applyingSymbolConfiguration(configuration)?
+            .withTintColor(.systemBlue, renderingMode: .alwaysOriginal)
+    }
+
     private func carPlayIcon(_ systemName: String) -> UIImage? {
         let color: UIColor
 
@@ -898,6 +915,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func navigateToAddress(
         _ address: String,
         displayName: String,
+        coordinate: CLLocationCoordinate2D?,
         completion: @escaping () -> Void = {}
     ) {
         let searchAddress = address.localizedCaseInsensitiveContains("NJ")
@@ -905,6 +923,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             : "\(address), Morris Township, NJ"
 
         print("🚗 CarPlay navigation requested: \(searchAddress)")
+
+        if let coordinate {
+            let placemark = MKPlacemark(coordinate: coordinate)
+            let mapItem = MKMapItem(placemark: placemark)
+            mapItem.name = displayName.isEmpty ? searchAddress : displayName
+            openMapItemInMaps(mapItem)
+            completion()
+            return
+        }
 
         CLGeocoder().geocodeAddressString(searchAddress) { placemarks, error in
             DispatchQueue.main.async {
@@ -915,71 +942,53 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
                     print("🚗 CarPlay resolved navigation: \(searchAddress) @ \(coordinate.latitude), \(coordinate.longitude)")
 
-                    self.presentCarPlayNavigation(
-                        destination: mapItem,
-                        destinationTitle: displayName.isEmpty ? "Dispatch Location" : displayName,
-                        searchAddress: searchAddress
-                    )
+                    self.openMapItemInMaps(mapItem)
 
                     completion()
                     return
                 }
 
                 print("🚗 CarPlay navigation geocode failed: \(error?.localizedDescription ?? "Unknown error")")
-                self.presentCarPlayNavigationError(address: searchAddress)
-
-                completion()
+                self.openAddressInMaps(searchAddress) { opened in
+                    if !opened {
+                        self.presentCarPlayNavigationError(address: searchAddress)
+                    }
+                    completion()
+                }
             }
         }
     }
 
-    private func presentCarPlayNavigation(
-        destination: MKMapItem,
-        destinationTitle: String,
-        searchAddress: String
-    ) {
-        guard let interfaceController else {
-            presentCarPlayNavigationError(address: searchAddress)
+    private func openMapItemInMaps(_ mapItem: MKMapItem) {
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
+        ])
+    }
+
+    private func coordinate(latitude: Double?, longitude: Double?) -> CLLocationCoordinate2D? {
+        guard let latitude,
+              let longitude,
+              latitude >= -90,
+              latitude <= 90,
+              longitude >= -180,
+              longitude <= 180,
+              latitude != 0,
+              longitude != 0 else {
+            return nil
+        }
+
+        return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    private func openAddressInMaps(_ address: String, completion: @escaping (Bool) -> Void) {
+        let encodedAddress = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? address
+
+        guard let url = URL(string: "http://maps.apple.com/?daddr=\(encodedAddress)&dirflg=d") else {
+            completion(false)
             return
         }
 
-        let origin = MKMapItem.forCurrentLocation()
-        origin.name = "Current Location"
-
-        let routeChoice = CPRouteChoice(
-            summaryVariants: ["Driving Directions"],
-            additionalInformationVariants: [searchAddress],
-            selectionSummaryVariants: ["Navigate"]
-        )
-
-        let trip = CPTrip(
-            origin: origin,
-            destination: destination,
-            routeChoices: [routeChoice]
-        )
-
-        let mapTemplate = CPMapTemplate()
-        mapTemplate.showTripPreviews(
-            [trip],
-            textConfiguration: CPTripPreviewTextConfiguration(
-                startButtonTitle: "Navigate",
-                additionalRoutesButtonTitle: "Routes",
-                overviewButtonTitle: destinationTitle
-            )
-        )
-
-        interfaceController.pushTemplate(mapTemplate, animated: true) { [weak self] _, error in
-            guard let self else { return }
-
-            if let error {
-                print("🚗 CarPlay map template push failed: \(error.localizedDescription)")
-                self.presentCarPlayNavigationError(address: searchAddress)
-                return
-            }
-
-            self.activeNavigationSession = mapTemplate.startNavigationSession(for: trip)
-            print("🚗 CarPlay navigation session started: \(searchAddress)")
-        }
+        UIApplication.shared.open(url, options: [:], completionHandler: completion)
     }
 
     private func presentCarPlayNavigationError(address: String) {

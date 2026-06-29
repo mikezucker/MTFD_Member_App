@@ -1,7 +1,9 @@
 import UIKit
 import UserNotifications
+import MapKit
+import WatchConnectivity
 
-final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, WCSessionDelegate {
 
     static var latestAPNsToken: String?
 
@@ -12,6 +14,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         print("🔥 AppDelegate didFinishLaunching fired")
 
         UNUserNotificationCenter.current().delegate = self
+        configureWatchConnectivity()
 
         Task {
             await NotificationManager.shared.requestPermission()
@@ -45,6 +48,78 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         print("❌ Failed to register for remote notifications: \(error)")
+    }
+
+    // MARK: - Watch Navigation Handoff
+
+    private func configureWatchConnectivity() {
+        guard WCSession.isSupported() else { return }
+
+        WCSession.default.delegate = self
+        WCSession.default.activate()
+    }
+
+    private func handleWatchMessage(_ message: [String: Any]) {
+        guard message["action"] as? String == "navigate_to_call",
+              let address = message["address"] as? String else {
+            return
+        }
+
+        openMapsForWatchNavigation(address: address)
+    }
+
+    private func openMapsForWatchNavigation(address: String) {
+        let trimmedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedAddress.isEmpty else { return }
+
+        let searchAddress = trimmedAddress.localizedCaseInsensitiveContains("NJ")
+            ? trimmedAddress
+            : "\(trimmedAddress), Morris Township, NJ"
+
+        if let encodedAddress = searchAddress.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "http://maps.apple.com/?daddr=\(encodedAddress)&dirflg=d") {
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+
+    func session(
+        _ session: WCSession,
+        activationDidCompleteWith activationState: WCSessionActivationState,
+        error: Error?
+    ) {
+        if let error {
+            print("📱 WatchConnectivity activation failed: \(error.localizedDescription)")
+        }
+    }
+
+    func sessionDidBecomeInactive(_ session: WCSession) {}
+
+    func sessionDidDeactivate(_ session: WCSession) {
+        session.activate()
+    }
+
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        handleWatchMessage(message)
+    }
+
+    func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        handleWatchMessage(applicationContext)
+    }
+
+    private static func currentHapticAlertStyle() -> HapticAlertStyle {
+        if let rawValue = UserDefaults.standard.string(forKey: "notification_haptic_alert_style"),
+           let style = HapticAlertStyle(rawValue: rawValue) {
+            return style
+        }
+
+        if UserDefaults.standard.object(forKey: "notification_haptics_enabled") == nil {
+            return .normal
+        }
+
+        return UserDefaults.standard.bool(forKey: "notification_haptics_enabled") ? .normal : .off
     }
 
     // MARK: - Foreground Notifications
@@ -85,6 +160,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             print("✅ Notification allowed by preferences:", payload.id)
 
             DispatchQueue.main.async {
+                HapticAlertManager.shared.playDispatchAlert(
+                    dispatchId: payload.id,
+                    style: Self.currentHapticAlertStyle(),
+                    isCritical: payload.type == .dispatchCritical
+                )
+
                 NotificationCenter.default.post(
                     name: .didReceiveDispatchNotification,
                     object: payload

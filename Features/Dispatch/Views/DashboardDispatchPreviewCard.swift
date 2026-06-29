@@ -43,24 +43,28 @@ struct DashboardDispatchPreviewCard: View {
         dispatch.address ?? "Unknown Location"
     }
 
+    private var alertAccent: Color {
+        .red
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 12) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(dispatch.type == .dispatchCritical ? Color.red.opacity(0.24) : AppTheme.gold.opacity(0.18))
+                            .fill(alertAccent.opacity(0.22))
                             .frame(width: 48, height: 48)
 
                         Image(systemName: dispatch.type == .dispatchCritical ? "flame.fill" : "bell.and.waves.left.and.right.fill")
                             .font(.system(size: 21, weight: .bold))
-                            .foregroundStyle(dispatch.type == .dispatchCritical ? Color.red.opacity(0.95) : AppTheme.gold)
+                            .foregroundStyle(alertAccent.opacity(0.95))
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(dispatch.type == .dispatchCritical ? "Critical Dispatch" : "Active Dispatch")
                             .font(.caption2.weight(.bold))
-                            .foregroundStyle(AppTheme.gold)
+                            .foregroundStyle(alertAccent)
                             .textCase(.uppercase)
 
                         Text(callType)
@@ -76,7 +80,7 @@ struct DashboardDispatchPreviewCard: View {
                         if !dispatch.units.isEmpty {
                             Text(dispatch.units.joined(separator: ", "))
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(AppTheme.gold.opacity(0.95))
+                                .foregroundStyle(alertAccent.opacity(0.95))
                                 .lineLimit(1)
                         }
                     }
@@ -97,6 +101,12 @@ struct DashboardDispatchPreviewCard: View {
                         dispatchMetaPill(shortAddress(address))
                     }
                 }
+
+                if let dispatchAddress = dispatch.address, !dispatchAddress.isEmpty {
+                    DispatchLookAroundCardPreview(address: dispatchAddress)
+                        .frame(height: 130)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
             }
             .padding(16)
             .background(
@@ -114,7 +124,7 @@ struct DashboardDispatchPreviewCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24)
-                    .stroke(dispatch.type == .dispatchCritical ? Color.red.opacity(0.75) : AppTheme.gold.opacity(0.35), lineWidth: isHighlighted ? 2 : 1)
+                    .stroke(alertAccent.opacity(isHighlighted ? 0.78 : 0.42), lineWidth: isHighlighted ? 2 : 1)
             )
             .shadow(
                 color: isHighlighted ? Color.red.opacity(0.28) : Color.black.opacity(0.12),

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct VolunteerMemberDashboardView: View {
+    let activeDispatches: [APIClient.ActiveDispatch]
     let volunteerContext: APIClient.VolunteerContext?
     let stationDisplayName: String?
     let stationStats: APIClient.DispatchBucket?
@@ -12,6 +13,7 @@ struct VolunteerMemberDashboardView: View {
     let dashboardCards: [DashboardCardID]
     let isLoading: Bool
     let onRefresh: () async -> Void
+    let onOpenDispatch: (DispatchNotificationPayload) -> Void
 
     @State private var selectedAnnouncementScope: AnnouncementScope = .all
     @State private var selectedApparatusName: String = "All"
@@ -22,9 +24,19 @@ struct VolunteerMemberDashboardView: View {
         case department = "Department"
     }
 
+    private var primaryActiveDispatch: APIClient.ActiveDispatch? {
+        activeDispatches.first
+    }
+
+    private var secondaryActiveDispatches: [APIClient.ActiveDispatch] {
+        Array(activeDispatches.dropFirst())
+    }
+
     var body: some View {
         NonBouncingVerticalScrollView(showsIndicators: false, onRefresh: onRefresh) {
             VStack(alignment: .leading, spacing: 22) {
+                activeDispatchSection
+
                 ForEach(volunteerDashboardCards) { card in
                     dashboardCard(card)
                 }
@@ -59,6 +71,28 @@ struct VolunteerMemberDashboardView: View {
         return result.isEmpty
             ? [.commandOverview, .assignedTraining, .departmentUpdates, .apparatusWorkOrders, .recentCalls]
             : result
+    }
+
+    @ViewBuilder
+    private var activeDispatchSection: some View {
+        if let primaryActiveDispatch {
+            sectionTitle("Current Dispatch", systemImage: "firetruck.fill")
+
+            DashboardDispatchPreviewCard(
+                dispatch: makeDispatchPayload(from: primaryActiveDispatch),
+                isHighlighted: false
+            ) {
+                onOpenDispatch(makeDispatchPayload(from: primaryActiveDispatch))
+            }
+
+            if !secondaryActiveDispatches.isEmpty {
+                sectionTitle("Additional Active Dispatches", systemImage: "firetruck.fill")
+
+                ActiveDispatchStackView(dispatches: secondaryActiveDispatches) { activeDispatch in
+                    onOpenDispatch(makeDispatchPayload(from: activeDispatch))
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -422,6 +456,24 @@ struct VolunteerMemberDashboardView: View {
             .padding(.vertical, 7)
             .background(AppTheme.gold)
             .clipShape(Capsule())
+    }
+
+    private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {
+        DispatchNotificationPayload(
+            type: activeDispatch.priority == "CRITICAL" ? .dispatchCritical : .dispatch,
+            id: activeDispatch.id,
+            title: activeDispatch.callType,
+            body: activeDispatch.address ?? activeDispatch.message ?? "Dispatch details available",
+            callType: activeDispatch.callType,
+            address: activeDispatch.address,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: activeDispatch.units),
+            isWorkingFire: activeDispatch.isWorkingFire ?? false,
+            activeCallCount: activeDispatches.count,
+            stationId: nil,
+            messageId: nil,
+            trainingId: nil,
+            documentId: nil
+        )
     }
 
     private func totalColumn(_ label: String, _ value: Int) -> some View {

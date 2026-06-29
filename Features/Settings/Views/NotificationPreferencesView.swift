@@ -293,8 +293,16 @@ struct NotificationPreferencesView: View {
             await refreshScheduleLinkStatus()
         }
         .onChange(of: vm.preferences) { _, _ in
-            UserDefaults.standard.set(vm.preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+            UserDefaults.standard.set(vm.preferences.hapticAlertStyle.rawValue, forKey: "notification_haptic_alert_style")
+            UserDefaults.standard.set(vm.preferences.hapticAlertStyle != .off, forKey: "notification_haptics_enabled")
             vm.scheduleSave()
+        }
+        .onChange(of: vm.preferences.hapticAlertStyle) { _, _ in
+            vm.saveLocal()
+
+            Task {
+                await vm.saveImmediately()
+            }
         }
         .onChange(of: vm.preferences.criticalDispatchAlerts) { _, isEnabled in
             guard isEnabled else { return }
@@ -430,13 +438,34 @@ struct NotificationPreferencesView: View {
 
     private var hapticsSection: some View {
         Section {
-            settingToggle(
-                title: "Notification Haptics",
-                description: "Use vibration feedback for in-app dispatch and notification alerts when supported by iOS.",
-                isOn: $vm.preferences.hapticsEnabled
-            )
+            Picker("Haptic Alerts", selection: $vm.preferences.hapticAlertStyle) {
+                ForEach(HapticAlertStyle.allCases) { style in
+                    Text(style.displayName).tag(style)
+                }
+            }
+
+            Text(vm.preferences.hapticAlertStyle.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Test Normal") {
+                    HapticAlertManager.shared.play(style: .normal)
+                }
+                .buttonStyle(.borderless)
+
+                Button("Test Strong") {
+                    HapticAlertManager.shared.play(style: .strong)
+                }
+                .buttonStyle(.borderless)
+
+                Button("Test Pager") {
+                    HapticAlertManager.shared.play(style: .pagerStyle, isCritical: true)
+                }
+                .buttonStyle(.borderless)
+            }
         } header: {
-            Text("Haptics")
+            Text("Notification Preferences")
         }
     }
 

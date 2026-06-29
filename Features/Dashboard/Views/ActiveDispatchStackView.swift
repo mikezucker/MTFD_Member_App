@@ -9,7 +9,7 @@ struct ActiveDispatchStackView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(.red)
 
                     Text(dispatches.count == 1 ? "Other Active Dispatch" : "Other Active Dispatches")
                         .font(.headline)
@@ -22,7 +22,7 @@ struct ActiveDispatchStackView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
-                        .background(.orange.opacity(0.9))
+                        .background(.red.opacity(0.9))
                         .clipShape(Capsule())
                 }
 
@@ -50,12 +50,12 @@ private struct ActiveDispatchCard: View {
         HStack(alignment: .center, spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(.orange.opacity(0.18))
+                    .fill(.red.opacity(0.18))
                     .frame(width: 58, height: 58)
 
                 Image(systemName: iconName)
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(.red)
             }
 
             VStack(alignment: .leading, spacing: 5) {
@@ -82,7 +82,7 @@ private struct ActiveDispatchCard: View {
                 if !dispatch.units.isEmpty {
                     Text(dispatch.units.joined(separator: ", "))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.orange.opacity(0.95))
+                        .foregroundStyle(.red.opacity(0.95))
                         .lineLimit(1)
                 }
 
@@ -107,7 +107,7 @@ private struct ActiveDispatchCard: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.orange.opacity(0.45), lineWidth: 1)
+                .stroke(.red.opacity(0.45), lineWidth: 1)
         )
         .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }

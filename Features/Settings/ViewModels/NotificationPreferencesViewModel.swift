@@ -24,13 +24,14 @@ class NotificationPreferencesViewModel: ObservableObject {
         else { return }
 
         preferences = decoded
-        UserDefaults.standard.set(preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+        persistHapticSettings()
     }
 
     func saveLocal() {
         if let data = try? JSONEncoder().encode(preferences) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        persistHapticSettings()
     }
 
     func loadRemote() async {
@@ -47,7 +48,7 @@ class NotificationPreferencesViewModel: ObservableObject {
 
             if let serverPreferences = response.preferences {
                 preferences = serverPreferences
-                UserDefaults.standard.set(preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+                persistHapticSettings()
                 saveLocal()
             } else if let error = response.error {
                 errorMessage = error
@@ -132,5 +133,10 @@ class NotificationPreferencesViewModel: ObservableObject {
     func cancelPendingSave() {
         saveTask?.cancel()
         saveTask = nil
+    }
+
+    private func persistHapticSettings() {
+        UserDefaults.standard.set(preferences.hapticAlertStyle.rawValue, forKey: "notification_haptic_alert_style")
+        UserDefaults.standard.set(preferences.hapticAlertStyle != .off, forKey: "notification_haptics_enabled")
     }
 }
