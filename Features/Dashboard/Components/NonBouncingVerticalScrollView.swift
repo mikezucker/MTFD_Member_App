@@ -75,8 +75,12 @@ final class MTFDNonBouncingScrollCoordinator: NSObject {
 
 final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerDelegate {
     private let hostingController: UIHostingController<AnyView>
+    private let pullIndicatorContainer = UIView()
+    private let pullIndicatorImageView = UIImageView(image: UIImage(systemName: "arrow.down"))
+    private let pullHaptic = UIImpactFeedbackGenerator(style: .light)
     private var allowsPullToRefresh = false
     private var isClampingContentOffset = false
+    private var didTriggerPullHaptic = false
 
     init(rootView: AnyView) {
         self.hostingController = UIHostingController(rootView: rootView)
@@ -99,6 +103,19 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
         hostingController.view.backgroundColor = .clear
         hostingController.view.translatesAutoresizingMaskIntoConstraints = true
         addSubview(hostingController.view)
+
+        pullIndicatorContainer.backgroundColor = UIColor.white.withAlphaComponent(0.14)
+        pullIndicatorContainer.layer.cornerRadius = 14
+        pullIndicatorContainer.alpha = 0
+        pullIndicatorContainer.isUserInteractionEnabled = false
+
+        pullIndicatorImageView.tintColor = .white
+        pullIndicatorImageView.contentMode = .scaleAspectFit
+        pullIndicatorImageView.isUserInteractionEnabled = false
+
+        pullIndicatorContainer.addSubview(pullIndicatorImageView)
+        addSubview(pullIndicatorContainer)
+        pullHaptic.prepare()
     }
 
     required init?(coder: NSCoder) {
@@ -109,12 +126,13 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
         refreshControl = control
         allowsPullToRefresh = control != nil
 
-        bounces = false
+        bounces = allowsPullToRefresh
         bouncesZoom = false
-        alwaysBounceVertical = false
+        alwaysBounceVertical = allowsPullToRefresh
         alwaysBounceHorizontal = false
         contentInset = .zero
         scrollIndicatorInsets = .zero
+        updatePullIndicator()
     }
 
     func update(rootView: AnyView) {
@@ -126,6 +144,7 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
     override var contentOffset: CGPoint {
         didSet {
             clampCurrentContentOffset()
+            updatePullIndicator()
         }
     }
 
@@ -135,9 +154,11 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
 
     private func clampedContentOffset(_ proposedOffset: CGPoint) -> CGPoint {
         let maxOffsetY = max(0, contentSize.height - bounds.height)
+        let minOffsetY: CGFloat = allowsPullToRefresh ? -refreshPullDistanceLimit : 0
+
         return CGPoint(
             x: 0,
-            y: min(max(proposedOffset.y, 0), maxOffsetY)
+            y: min(max(proposedOffset.y, minOffsetY), maxOffsetY)
         )
     }
 
@@ -178,8 +199,9 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
             height: contentHeight
         )
 
-        isScrollEnabled = contentHeight > bounds.height
+        isScrollEnabled = allowsPullToRefresh || contentHeight > bounds.height
         clampCurrentContentOffset()
+        updatePullIndicator()
     }
 
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -193,14 +215,52 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
             return false
         }
 
-        guard contentSize.height > bounds.height else {
+        guard allowsPullToRefresh || contentSize.height > bounds.height else {
             return false
         }
 
         let velocity = panGestureRecognizer.velocity(in: self)
         return abs(velocity.y) > abs(velocity.x)
     }
+
+    private func updatePullIndicator() {
+        guard allowsPullToRefresh, refreshControl?.isRefreshing != true else {
+            pullIndicatorContainer.alpha = 0
+            didTriggerPullHaptic = false
+            return
+        }
+
+        let pullDistance = max(0, -contentOffset.y)
+        let progress = min(1, pullDistance / refreshTriggerDistance)
+
+        if progress >= 1, !didTriggerPullHaptic {
+            didTriggerPullHaptic = true
+            pullHaptic.impactOccurred()
+            pullHaptic.prepare()
+        } else if pullDistance <= 0 {
+            didTriggerPullHaptic = false
+        }
+
+        let indicatorSize: CGFloat = 28
+        pullIndicatorContainer.frame = CGRect(
+            x: (bounds.width - indicatorSize) / 2,
+            y: contentOffset.y + 12,
+            width: indicatorSize,
+            height: indicatorSize
+        )
+
+        pullIndicatorImageView.frame = pullIndicatorContainer.bounds.insetBy(dx: 7, dy: 7)
+        pullIndicatorContainer.alpha = progress
+        pullIndicatorContainer.transform = CGAffineTransform(
+            scaleX: 0.82 + (0.18 * progress),
+            y: 0.82 + (0.18 * progress)
+        )
+        bringSubviewToFront(pullIndicatorContainer)
+    }
 }
+
+private let refreshPullDistanceLimit: CGFloat = 180
+private let refreshTriggerDistance: CGFloat = 70
 
 private extension UIView {
     func isDescendantOfNestedScrollView(inside parentScrollView: UIScrollView) -> Bool {

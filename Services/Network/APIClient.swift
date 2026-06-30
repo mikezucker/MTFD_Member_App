@@ -1550,7 +1550,7 @@ extension APIClient {
         let error: String?
     }
 
-    struct DispatchStatsResponse: Decodable {
+    struct DispatchStatsResponse: Codable {
         let success: Bool?
         let stats: DispatchStats?
         let department: DispatchBucket?
@@ -1561,7 +1561,7 @@ extension APIClient {
         let message: String?
     }
 
-    struct ChiefStationStats: Decodable {
+    struct ChiefStationStats: Codable {
         let all: DispatchBucket?
         let station1: DispatchBucket?
         let station2: DispatchBucket?
@@ -1570,7 +1570,7 @@ extension APIClient {
         let station5: DispatchBucket?
     }
 
-    struct DispatchStats: Decodable {
+    struct DispatchStats: Codable {
         let department24h: Int?
         let department7d: Int?
         let department30d: Int?
@@ -1581,7 +1581,7 @@ extension APIClient {
         let stationYtd: Int?
     }
 
-    struct DispatchBucket: Decodable {
+    struct DispatchBucket: Codable {
         let total24h: Int?
         let total7d: Int?
         let total30d: Int?

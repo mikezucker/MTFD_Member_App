@@ -12,6 +12,8 @@ struct VolunteerOfficerDashboardView: View {
     let pendingDocuments: Int
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
+    let messagePreviews: [DashboardMessagePreview]
+    let unreadMessageCount: Int
     let dashboardCards: [DashboardCardID]
     let isLoading: Bool
     let onRefresh: () async -> Void
@@ -29,6 +31,10 @@ struct VolunteerOfficerDashboardView: View {
 
     private var selectedTotalsWindow: DashboardTotalsWindow {
         DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
+    }
+
+    private var selectedTotalsBucket: APIClient.DispatchBucket? {
+        selectedTotalsScope == .station ? stationStats : departmentStats
     }
 
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
@@ -215,7 +221,7 @@ struct VolunteerOfficerDashboardView: View {
                 }
             }
 
-            if isLoading && departmentStats == nil && stationStats == nil {
+            if selectedTotalsBucket == nil {
                 loadingCard("Loading call totals...")
             } else {
                 HStack(spacing: 6) {
@@ -225,7 +231,7 @@ struct VolunteerOfficerDashboardView: View {
 
                 totalsRow(
                     title: selectedTotalsScope == .station ? "Station" : "Department",
-                    stats: selectedTotalsScope == .station ? stationStats : departmentStats
+                    stats: selectedTotalsBucket
                 )
             }
         }
@@ -316,7 +322,10 @@ struct VolunteerOfficerDashboardView: View {
     private var messagesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Messages", systemImage: "envelope.fill")
-            DashboardMessageCenterCard {
+            DashboardMessageCenterCard(
+                messages: messagePreviews,
+                unreadCount: unreadMessageCount
+            ) {
                 onOpenMessages()
             }
         }
@@ -478,9 +487,15 @@ struct VolunteerOfficerDashboardView: View {
             } else if recentCalls.isEmpty {
                 emptyCard("No recent dispatches available.")
             } else {
-                DashboardRecentCallsCard(calls: recentCalls) {
-                    onOpenPastDispatches()
-                }
+                DashboardRecentCallsCard(
+                    calls: recentCalls,
+                    onOpenCall: { call in
+                        onOpenDispatch(DispatchNotificationPayload(recentDepartmentCall: call))
+                    },
+                    onViewAll: {
+                        onOpenPastDispatches()
+                    }
+                )
             }
         }
     }

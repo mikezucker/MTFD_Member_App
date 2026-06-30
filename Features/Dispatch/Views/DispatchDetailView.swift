@@ -30,6 +30,114 @@ private func morrisSearchRegion() -> MKCoordinateRegion {
     )
 }
 
+private func requestedAddressNumber(from address: String) -> String? {
+    let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+    let match = trimmed.range(of: #"^\d+[A-Za-z]?"#, options: .regularExpression)
+    return match.map { String(trimmed[$0]).lowercased() }
+}
+
+private func requestedStreetToken(from address: String) -> String? {
+    let trimmed = address
+        .replacingOccurrences(of: #",.*$"#, with: "", options: .regularExpression)
+        .replacingOccurrences(of: #"^\d+[A-Za-z]?\s+"#, with: "", options: .regularExpression)
+        .lowercased()
+    let ignored = Set(["street", "st", "road", "rd", "avenue", "ave", "lane", "ln", "drive", "dr", "court", "ct", "place", "pl", "circle", "cir", "way", "route", "rt"])
+
+    return trimmed
+        .split(separator: " ")
+        .map(String.init)
+        .first { token in
+            token.count > 2 && !ignored.contains(token)
+        }
+}
+
+private func isConfidentMorrisPlacemark(_ placemark: CLPlacemark, query: String) -> Bool {
+    guard let coordinate = placemark.location?.coordinate,
+          isLikelyMorrisArea(coordinate) else {
+        return false
+    }
+
+    let components = [
+        placemark.name,
+        placemark.thoroughfare,
+        placemark.locality,
+        placemark.subLocality,
+        placemark.subAdministrativeArea,
+        placemark.administrativeArea,
+        placemark.postalCode,
+    ]
+    .compactMap { $0?.lowercased() }
+    .joined(separator: " ")
+
+    let normalizedQuery = query.lowercased()
+    let hasNjContext = components.contains(" nj") || components.contains("new jersey") || placemark.administrativeArea == "NJ" || normalizedQuery.contains("nj")
+    let hasMorrisContext = components.contains("morris") || components.contains("morristown") || normalizedQuery.contains("morris township") || normalizedQuery.contains("morristown")
+
+    guard hasNjContext, hasMorrisContext else {
+        return false
+    }
+
+    if let requestedNumber = requestedAddressNumber(from: query),
+       let resolvedNumber = placemark.subThoroughfare?.lowercased(),
+       resolvedNumber != requestedNumber {
+        return false
+    }
+
+    if let requestedStreet = requestedStreetToken(from: query),
+       let resolvedStreet = [placemark.thoroughfare, placemark.name]
+        .compactMap({ $0?.lowercased() })
+        .first(where: { !$0.isEmpty }),
+       !resolvedStreet.contains(requestedStreet) {
+        return false
+    }
+
+    return true
+}
+
+private func isConfidentMorrisMapItem(_ item: MKMapItem, query: String) -> Bool {
+    let placemark = item.placemark
+    let coordinate = placemark.coordinate
+
+    guard isLikelyMorrisArea(coordinate) else {
+        return false
+    }
+
+    let components = [
+        placemark.name,
+        placemark.thoroughfare,
+        placemark.locality,
+        placemark.subLocality,
+        placemark.subAdministrativeArea,
+        placemark.postalCode,
+    ]
+    .compactMap { $0?.lowercased() }
+    .joined(separator: " ")
+
+    let normalizedQuery = query.lowercased()
+    let hasNjContext = components.contains(" nj") || components.contains("new jersey") || placemark.administrativeArea == "NJ" || normalizedQuery.contains("nj")
+    let hasMorrisContext = components.contains("morris") || components.contains("morristown") || normalizedQuery.contains("morris township") || normalizedQuery.contains("morristown")
+
+    guard hasNjContext, hasMorrisContext else {
+        return false
+    }
+
+    if let requestedNumber = requestedAddressNumber(from: query),
+       let resolvedNumber = placemark.subThoroughfare?.lowercased(),
+       resolvedNumber != requestedNumber {
+        return false
+    }
+
+    if let requestedStreet = requestedStreetToken(from: query),
+       let resolvedStreet = [placemark.thoroughfare, placemark.name]
+        .compactMap({ $0?.lowercased() })
+        .first(where: { !$0.isEmpty }),
+       !resolvedStreet.contains(requestedStreet) {
+        return false
+    }
+
+    return true
+}
+
 struct DispatchDetailView: View {
     let dispatch: DispatchNotificationPayload
 
@@ -398,7 +506,7 @@ struct DispatchDetailView: View {
                 let search = MKLocalSearch(request: request)
                 let response = try await search.start()
 
-                guard let item = response.mapItems.first else {
+                guard let item = response.mapItems.first(where: { isConfidentMorrisMapItem($0, query: searchAddress) }) else {
                     print("❌ No map item found")
                     return
                 }
@@ -511,8 +619,8 @@ private struct DispatchDetailLookAroundPreview: View {
             let lookupAddress = constrainedIncidentAddress(trimmedAddress)
             let placemarks = try await CLGeocoder().geocodeAddressString(lookupAddress)
 
-            guard let coordinate = placemarks.first?.location?.coordinate,
-                  isLikelyMorrisArea(coordinate) else {
+            guard let placemark = placemarks.first(where: { isConfidentMorrisPlacemark($0, query: lookupAddress) }),
+                  let coordinate = placemark.location?.coordinate else {
                 await MainActor.run {
                     scene = nil
                     isLoading = false

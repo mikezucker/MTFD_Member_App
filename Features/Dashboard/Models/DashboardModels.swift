@@ -46,6 +46,100 @@ struct DashboardBulletin: Identifiable, Hashable {
     let updatedAt: String?
 }
 
+enum DashboardMessageTypeFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case unread = "Unread"
+    case announcements = "Announcements"
+    case training = "Training"
+    case staffing = "Staffing"
+    case officer = "Officer"
+    case documents = "Documents"
+    case other = "Other"
+
+    var id: String { rawValue }
+
+    func includes(_ message: MobileMessage) -> Bool {
+        let type = message.type.uppercased()
+
+        if type == "DISPATCH" || type == "DISPATCH_UPDATE" || message.dispatchId != nil {
+            return false
+        }
+
+        return includes(type: type, isRead: message.isRead)
+    }
+
+    func includes(_ preview: DashboardMessagePreview) -> Bool {
+        includes(type: preview.type, isRead: preview.isRead)
+    }
+
+    private func includes(type rawType: String, isRead: Bool) -> Bool {
+        let type = rawType.uppercased()
+
+        switch self {
+        case .all:
+            return true
+        case .unread:
+            return !isRead
+        case .announcements:
+            return ["ANNOUNCEMENT", "EVENT", "GENERAL", "POLICY_LINK"].contains(type)
+        case .training:
+            return ["TRAINING", "TRAINING_REMINDER", "TRAINING_ASSIGNMENT"].contains(type)
+        case .staffing:
+            return type == "STAFFING"
+        case .officer:
+            return ["OFFICER_NOTE", "ADMIN_MESSAGE", "SYSTEM"].contains(type)
+        case .documents:
+            return ["POLICY_LINK", "DOCUMENT", "DOCUMENT_SIGNATURE"].contains(type)
+        case .other:
+            return !DashboardMessageTypeFilter.allPrimaryTypes.contains(type)
+        }
+    }
+
+    private static let allPrimaryTypes = Set([
+        "ANNOUNCEMENT",
+        "EVENT",
+        "GENERAL",
+        "TRAINING",
+        "TRAINING_REMINDER",
+        "TRAINING_ASSIGNMENT",
+        "STAFFING",
+        "OFFICER_NOTE",
+        "ADMIN_MESSAGE",
+        "SYSTEM",
+        "POLICY_LINK",
+        "DOCUMENT",
+        "DOCUMENT_SIGNATURE"
+    ])
+}
+
+struct DashboardMessagePreview: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let body: String?
+    let type: String
+    let priority: String
+    let audienceLabel: String
+    let typeLabel: String
+    let icon: String
+    let isRead: Bool
+    let isPinned: Bool
+    let createdAt: Date
+
+    init(message: MobileMessage) {
+        id = message.id
+        title = message.title
+        body = message.body
+        type = message.type
+        priority = message.priority
+        audienceLabel = message.audienceDisplayLabel
+        typeLabel = message.typeDisplayLabel
+        icon = message.displayIcon
+        isRead = message.isRead
+        isPinned = message.isPinned == true
+        createdAt = message.createdAt
+    }
+}
+
 struct RecentDepartmentCall: Identifiable, Hashable {
     let id: String
     let incidentNumber: String?
@@ -53,6 +147,27 @@ struct RecentDepartmentCall: Identifiable, Hashable {
     let address: String
     let timestamp: String
     let units: [String]
+    let rawUnits: [String]
+}
+
+extension AppNotificationPayload {
+    init(recentDepartmentCall call: RecentDepartmentCall) {
+        self.init(
+            type: .dispatch,
+            id: call.id,
+            title: call.title,
+            body: call.address,
+            callType: call.title,
+            address: call.address,
+            units: call.units,
+            isWorkingFire: call.title.localizedCaseInsensitiveContains("fire"),
+            activeCallCount: 1,
+            stationId: nil,
+            messageId: nil,
+            trainingId: nil,
+            documentId: nil
+        )
+    }
 }
 
 struct DashboardApparatusWorkOrder: Identifiable, Hashable {
@@ -77,6 +192,7 @@ struct DashboardState {
 
     let stationUpdates: [DashboardBulletin]
     let departmentUpdates: [DashboardBulletin]
+    var messagePreviews: [DashboardMessagePreview] = []
 
     let attentionItems: [DashboardAttentionItem]
     let quickActions: [DashboardQuickAction]

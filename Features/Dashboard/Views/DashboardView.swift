@@ -8,6 +8,7 @@ struct DashboardView: View {
     @EnvironmentObject var session: SessionManager
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = DashboardViewModel()
+    @StateObject private var statsStore = DashboardStatsStore.shared
     @StateObject private var unitCatalog = UnitCatalog()
     @StateObject private var router = NavigationRouter.shared
 
@@ -32,7 +33,9 @@ struct DashboardView: View {
     private func refreshDashboard() async {
         guard hasAuthToken else { return }
 
-        await viewModel.refreshAsync(role: mappedUserRole(from: session.currentUser?.role))
+        async let dashboardRefresh: Void = viewModel.refreshAsync(role: mappedUserRole(from: session.currentUser?.role))
+        async let statsRefresh: Void = statsStore.forceRefresh(reason: "pullToRefresh")
+        _ = await (dashboardRefresh, statsRefresh)
         scheduleLiveActivitySync()
     }
 
@@ -84,11 +87,13 @@ struct DashboardView: View {
                             ChiefDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
                                 workOrders: viewModel.state.apparatusWorkOrders,
-                                departmentStats: viewModel.state.dashboardDepartment,
+                                departmentStats: dashboardDepartmentStats,
                                 stationStats: resolvedStationStats,
-                                chiefStationStats: viewModel.state.dashboardStations,
-                                recentCalls: viewModel.state.recentDepartmentCalls,
-                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                chiefStationStats: dashboardStationStats,
+                                recentCalls: dashboardRecentCalls,
+                                messagePreviews: viewModel.state.messagePreviews,
+                                unreadMessageCount: viewModel.state.unreadNonDispatchMessageCount,
+                                isLoading: dashboardIsLoading,
                                 onRefresh: {
                                     await refreshDashboard()
                                 }
@@ -107,18 +112,20 @@ struct DashboardView: View {
                         case .officerCareer:
                             CareerOfficerDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
-                                departmentStats: viewModel.state.dashboardDepartment,
+                                departmentStats: dashboardDepartmentStats,
                                 stationStats: resolvedStationStats,
-                                chiefStationStats: viewModel.state.dashboardStations,
+                                chiefStationStats: dashboardStationStats,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
                                 workOrders: viewModel.state.apparatusWorkOrders,
-                                recentCalls: viewModel.state.recentDepartmentCalls,
+                                recentCalls: dashboardRecentCalls,
                                 assignedTraining: viewModel.state.assignedTrainingPreview,
                                 pendingDocuments: viewModel.state.pendingDocumentSignatures,
                                 pendingPolicies: viewModel.state.pendingPolicyDocuments,
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
-                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                messagePreviews: viewModel.state.messagePreviews,
+                                unreadMessageCount: viewModel.state.unreadNonDispatchMessageCount,
+                                isLoading: dashboardIsLoading,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -150,17 +157,19 @@ struct DashboardView: View {
                         case .officerVolunteer:
                             VolunteerOfficerDashboardView(
                                 activeDispatches: dashboardActiveDispatches,
-                                departmentStats: viewModel.state.dashboardDepartment,
+                                departmentStats: dashboardDepartmentStats,
                                 stationStats: resolvedStationStats,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
                                 workOrders: viewModel.state.apparatusWorkOrders,
-                                recentCalls: viewModel.state.recentDepartmentCalls,
+                                recentCalls: dashboardRecentCalls,
                                 assignedTraining: viewModel.state.assignedTrainingPreview,
                                 pendingDocuments: viewModel.state.pendingDocumentSignatures,
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
+                                messagePreviews: viewModel.state.messagePreviews,
+                                unreadMessageCount: viewModel.state.unreadNonDispatchMessageCount,
                                 dashboardCards: configuredDashboardCards,
-                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                isLoading: dashboardIsLoading,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -192,17 +201,19 @@ struct DashboardView: View {
                         case .memberCareer:
                             CareerMemberDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
-                                departmentStats: viewModel.state.dashboardDepartment,
+                                departmentStats: dashboardDepartmentStats,
                                 stationStats: resolvedStationStats,
                                 upcomingSchedule: viewModel.state.upcomingSchedule,
                                 workOrders: viewModel.state.apparatusWorkOrders,
-                                recentCalls: viewModel.state.recentDepartmentCalls,
+                                recentCalls: dashboardRecentCalls,
                                 assignedTraining: viewModel.state.assignedTrainingPreview,
                                 pendingDocuments: viewModel.state.pendingDocumentSignatures,
                                 departmentUpdates: viewModel.state.departmentUpdates,
                                 stationUpdates: viewModel.state.stationUpdates,
+                                messagePreviews: viewModel.state.messagePreviews,
+                                unreadMessageCount: viewModel.state.unreadNonDispatchMessageCount,
                                 dashboardCards: configuredDashboardCards,
-                                isLoading: viewModel.state.isLoading || viewModel.state.isLoadingStats,
+                                isLoading: dashboardIsLoading,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -236,14 +247,18 @@ struct DashboardView: View {
                                 activeDispatches: dashboardActiveDispatches,
                                 volunteerContext: viewModel.state.volunteerContext,
                                 stationDisplayName: stationDisplayName,
+                                departmentStats: dashboardDepartmentStats,
                                 stationStats: resolvedStationStats,
                                 workOrders: viewModel.state.apparatusWorkOrders,
                                 workOrdersMessage: viewModel.state.apparatusWorkOrdersMessage,
                                 assignedTrainingPreview: viewModel.state.assignedTrainingPreview,
+                                recentCalls: dashboardRecentCalls,
                                 stationUpdates: viewModel.state.stationUpdates,
                                 departmentUpdates: viewModel.state.departmentUpdates,
+                                messagePreviews: viewModel.state.messagePreviews,
+                                unreadMessageCount: viewModel.state.unreadNonDispatchMessageCount,
                                 dashboardCards: configuredDashboardCards,
-                                isLoading: viewModel.state.isLoading,
+                                isLoading: dashboardIsLoading,
                                 onRefresh: {
                                     await refreshDashboard()
                                 },
@@ -251,10 +266,16 @@ struct DashboardView: View {
                                     latestDispatch = dispatch
 
                                     selectedDispatch = dispatch
+                                },
+                                onOpenPastDispatches: {
+                                    openMessageCenter(mode: .dispatchesOnly)
+                                },
+                                onOpenMessages: {
+                                    openMessageCenter(mode: .messagesOnly)
                                 }
                             )
                         }
-}
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     .clipped()
                     .zIndex(0)
@@ -263,13 +284,17 @@ struct DashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
-
                 showContent = true
+
                 if hasAuthToken {
                     viewModel.loadIfNeeded(role: mappedUserRole(from: session.currentUser?.role))
+
+                    Task {
+                        await statsStore.refreshIfNeeded(reason: "dashboardAppear")
+                    }
+
                     scheduleLiveActivitySync()
                 }
-
 
                 if !hasLoadedDispatchUnits {
                     hasLoadedDispatchUnits = true
@@ -303,6 +328,9 @@ struct DashboardView: View {
                 guard hasAuthToken else { return }
 
                 viewModel.refreshIfStale(role: mappedUserRole(from: session.currentUser?.role))
+                Task {
+                    await statsStore.refreshIfNeeded(reason: "foreground")
+                }
                 scheduleLiveActivitySync()
             }
             .onReceive(NotificationCenter.default.publisher(for: .didReceiveDispatchNotification)) { notification in
@@ -316,6 +344,9 @@ struct DashboardView: View {
 
                 latestDispatch = dispatch
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
+                Task {
+                    await statsStore.refreshIfNeeded(reason: "pushDispatch")
+                }
 
                 HapticAlertManager.shared.playDispatchAlert(
                     dispatchId: dispatch.id,
@@ -336,6 +367,9 @@ struct DashboardView: View {
 
                 latestDispatch = dispatch
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
+                Task {
+                    await statsStore.refreshIfNeeded(reason: "pushDispatch")
+                }
 
                 selectedDispatch = dispatch
 
@@ -393,9 +427,21 @@ struct DashboardView: View {
         StationMapper.displayName(from: session.currentUser?.company)
     }
 
+    private var dashboardDepartmentStats: APIClient.DispatchBucket? {
+        statsStore.stats?.department
+    }
+
+    private var dashboardStationStats: APIClient.ChiefStationStats? {
+        statsStore.stats?.stations
+    }
+
+    private var dashboardIsLoading: Bool {
+        viewModel.state.isLoading || (statsStore.isLoading && statsStore.stats == nil)
+    }
+
     private var resolvedStationStats: APIClient.DispatchBucket? {
-        if viewModel.state.dashboardStations == nil {
-            return viewModel.state.dashboardStation
+        if dashboardStationStats == nil {
+            return statsStore.stats?.station
         }
 
         let candidates = [
@@ -412,7 +458,7 @@ struct DashboardView: View {
             }
         }
 
-        return viewModel.state.dashboardStation
+        return statsStore.stats?.station
     }
 
     private func stationStatsBucket(for stationName: String) -> APIClient.DispatchBucket? {
@@ -424,7 +470,7 @@ struct DashboardView: View {
 
         let displayName = StationMapper.displayName(from: stationName).uppercased()
         let combined = "\(normalized) \(displayName)"
-        let stations = viewModel.state.dashboardStations
+        let stations = dashboardStationStats
 
         if combined.contains("STATION 1") || combined.contains("MT KEMBLE") || combined.contains("MT. KEMBLE") {
             return stations?.station1
@@ -460,6 +506,31 @@ struct DashboardView: View {
         case .admin, .chief, .officerCareer, .memberCareer:
             return viewModel.activeDispatches
         }
+    }
+
+    private var dashboardRecentCalls: [RecentDepartmentCall] {
+        switch dashboardRole {
+        case .officerVolunteer, .memberVolunteer:
+            return stationScopedRecentCalls
+        case .admin, .chief, .officerCareer, .memberCareer:
+            return Array(viewModel.state.recentDepartmentCalls.prefix(3))
+        }
+    }
+
+    private var stationScopedRecentCalls: [RecentDepartmentCall] {
+        let stationTokens = volunteerStationDispatchUnitTokens
+
+        guard !stationTokens.isEmpty else {
+            return []
+        }
+
+        let stationCalls = viewModel.state.recentDepartmentCalls.filter { call in
+            let unitValues = call.rawUnits.isEmpty ? call.units : call.rawUnits
+            let callTokens = unitValues.flatMap(expandedDispatchUnitTokens)
+            return callTokens.contains { stationTokens.contains($0) }
+        }
+
+        return Array(stationCalls.prefix(3))
     }
 
     private var stationScopedActiveDispatches: [APIClient.ActiveDispatch] {

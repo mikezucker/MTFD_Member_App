@@ -4,24 +4,52 @@ struct VolunteerMemberDashboardView: View {
     let activeDispatches: [APIClient.ActiveDispatch]
     let volunteerContext: APIClient.VolunteerContext?
     let stationDisplayName: String?
+    let departmentStats: APIClient.DispatchBucket?
     let stationStats: APIClient.DispatchBucket?
     let workOrders: [DashboardApparatusWorkOrder]
     let workOrdersMessage: String?
     let assignedTrainingPreview: [DashboardTrainingPreviewItem]
+    let recentCalls: [RecentDepartmentCall]
     let stationUpdates: [DashboardBulletin]
     let departmentUpdates: [DashboardBulletin]
+    let messagePreviews: [DashboardMessagePreview]
+    let unreadMessageCount: Int
     let dashboardCards: [DashboardCardID]
     let isLoading: Bool
     let onRefresh: () async -> Void
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
+    let onOpenPastDispatches: () -> Void
+    let onOpenMessages: () -> Void
 
     @State private var selectedAnnouncementScope: AnnouncementScope = .all
     @State private var selectedApparatusName: String = "All"
+    @AppStorage("volunteerMemberDashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
+    @State private var selectedTotalsScope: TotalsScope = .station
 
     private enum AnnouncementScope: String, CaseIterable {
         case all = "All"
         case station = "Station"
         case department = "Department"
+    }
+
+    private enum TotalsScope {
+        case station
+        case department
+    }
+
+    private enum TotalKind {
+        case total
+        case fire
+        case ems
+        case other
+    }
+
+    private var selectedTotalsWindow: DashboardTotalsWindow {
+        DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
+    }
+
+    private var selectedTotalsBucket: APIClient.DispatchBucket? {
+        selectedTotalsScope == .station ? stationStats : departmentStats
     }
 
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
@@ -36,6 +64,8 @@ struct VolunteerMemberDashboardView: View {
         NonBouncingVerticalScrollView(showsIndicators: false, onRefresh: onRefresh) {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
+                belongingCard
+                contributionCard
 
                 ForEach(volunteerDashboardCards) { card in
                     dashboardCard(card)
@@ -54,7 +84,7 @@ struct VolunteerMemberDashboardView: View {
 
         for card in dashboardCards {
             switch card {
-            case .commandOverview, .assignedTraining, .apparatusWorkOrders, .recentCalls:
+            case .assignedTraining, .apparatusWorkOrders, .recentCalls:
                 result.append(card)
 
             case .departmentUpdates, .stationUpdates:
@@ -63,13 +93,13 @@ struct VolunteerMemberDashboardView: View {
                     hasAnnouncements = true
                 }
 
-            case .messages, .documents, .scheduleEvents, .needsAttention:
+            case .commandOverview, .messages, .documents, .scheduleEvents, .needsAttention:
                 break
             }
         }
 
         return result.isEmpty
-            ? [.commandOverview, .assignedTraining, .departmentUpdates, .apparatusWorkOrders, .recentCalls]
+            ? [.assignedTraining, .departmentUpdates, .apparatusWorkOrders, .recentCalls]
             : result
     }
 
@@ -99,7 +129,7 @@ struct VolunteerMemberDashboardView: View {
     private func dashboardCard(_ card: DashboardCardID) -> some View {
         switch card {
         case .commandOverview:
-            belongingCard
+            EmptyView()
 
         case .assignedTraining:
             nextStepCard
@@ -111,16 +141,22 @@ struct VolunteerMemberDashboardView: View {
             apparatusStatusCard
 
         case .recentCalls:
-            contributionCard
+            pastDispatchesSection
 
-            if volunteerContext?.officer != nil {
-                officerCard
-            } else {
-                quietOfficerCard
-            }
+        case .messages:
+            messagesCard
 
-        case .messages, .documents, .scheduleEvents, .needsAttention:
+        case .documents, .scheduleEvents, .needsAttention:
             EmptyView()
+        }
+    }
+
+    private var messagesCard: some View {
+        DashboardMessageCenterCard(
+            messages: messagePreviews,
+            unreadCount: unreadMessageCount
+        ) {
+            onOpenMessages()
         }
     }
 
@@ -150,6 +186,40 @@ struct VolunteerMemberDashboardView: View {
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.66))
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if let officer = volunteerContext?.officer {
+                        Divider()
+                            .background(Color.white.opacity(0.16))
+                            .padding(.vertical, 4)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text("Volunteer Officer")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(AppTheme.gold)
+
+                                Text(officer.name ?? "Assigned Officer")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.75)
+                            }
+
+                            HStack(spacing: 10) {
+                                if let phone = cleanValue(officer.phone), let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
+                                    Link(destination: url) {
+                                        contactButtonLabel("Call", systemImage: "phone.fill")
+                                    }
+                                }
+
+                                if let email = cleanValue(officer.email), let url = URL(string: "mailto:\(email)") {
+                                    Link(destination: url) {
+                                        contactButtonLabel("Email", systemImage: "envelope.fill")
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer()
@@ -330,77 +400,184 @@ struct VolunteerMemberDashboardView: View {
     }
 
 
-    private var contributionCard: some View {
+    private var pastDispatchesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Station Contribution", systemImage: "chart.bar.fill")
+            sectionTitle("Station Dispatches", systemImage: "clock.arrow.circlepath")
 
-            volunteerCard {
-                VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 0) {
-                    totalColumn("Total", stationStats?.totalYtd ?? 0)
-                    Divider().frame(height: 44).background(Color.white.opacity(0.18))
-                    totalColumn("Fire", stationStats?.fireYtd ?? 0)
-                    Divider().frame(height: 44).background(Color.white.opacity(0.18))
-                    totalColumn("EMS", stationStats?.emsYtd ?? 0)
-                    Divider().frame(height: 44).background(Color.white.opacity(0.18))
-                    totalColumn("Other", stationStats?.otherYtd ?? 0)
+            if isLoading && recentCalls.isEmpty {
+                volunteerCard {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(.white)
+
+                        Text("Loading station dispatches...")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.66))
+                    }
                 }
+            } else if recentCalls.isEmpty {
+                EmptyView()
+            } else {
+                DashboardRecentCallsCard(
+                    calls: recentCalls,
+                    onOpenCall: { call in
+                        onOpenDispatch(DispatchNotificationPayload(recentDepartmentCall: call))
+                    },
+                    onViewAll: {
+                        onOpenPastDispatches()
+                    }
+                )
             }
         }
     }
-    }
 
 
-    private var officerCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Volunteer Officer", systemImage: "person.crop.circle.badge.checkmark")
+    private var contributionCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionTitle("Station Contribution", systemImage: "chart.bar.fill")
+                Spacer()
 
-            volunteerCard {
-                VStack(alignment: .leading, spacing: 12) {
-                if let officer = volunteerContext?.officer {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(officer.name ?? "Assigned Officer")
-                            .font(.headline)
-                            .foregroundStyle(.white)
-
-                        Text("For drill questions, training help, station info, or apparatus concerns.")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.68))
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        HStack(spacing: 10) {
-                            if let phone = cleanValue(officer.phone), let url = URL(string: "tel:\(phone.filter { $0.isNumber || $0 == "+" })") {
-                                Link(destination: url) {
-                                    contactButtonLabel("Call", systemImage: "phone.fill")
-                                }
-                            }
-
-                            if let email = cleanValue(officer.email), let url = URL(string: "mailto:\(email)") {
-                                Link(destination: url) {
-                                    contactButtonLabel("Email", systemImage: "envelope.fill")
-                                }
-                            }
+                HStack(spacing: 6) {
+                    ForEach(DashboardTotalsWindow.allCases, id: \.rawValue) { window in
+                        Button {
+                            selectedWindowRawValue = window.rawValue
+                        } label: {
+                            Text(window.rawValue)
+                                .font(.caption.bold())
+                                .foregroundStyle(selectedTotalsWindow == window ? AppTheme.navy : .white.opacity(0.72))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(selectedTotalsWindow == window ? AppTheme.gold : Color.white.opacity(0.10))
+                                )
                         }
+                        .buttonStyle(.plain)
                     }
                 }
             }
-        }
-    }
-    }
 
-
-    private var quietOfficerCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Volunteer Officer", systemImage: "person.crop.circle.badge.checkmark")
-
-            volunteerCard {
-                VStack(alignment: .leading, spacing: 8) {
-                    emptyText("No volunteer officer is assigned yet.")
+            if selectedTotalsBucket == nil {
+                loadingCard("Loading call totals...")
+            } else {
+                HStack(spacing: 6) {
+                    totalsScopeButton(.station, title: "Station")
+                    totalsScopeButton(.department, title: "Dept")
                 }
+
+                totalsRow(
+                    title: selectedTotalsScope == .station ? "Station" : "Department",
+                    stats: selectedTotalsBucket
+                )
             }
         }
     }
 
+    private func totalsRow(title: String, stats: APIClient.DispatchBucket?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(AppTheme.gold)
+
+            HStack(spacing: 0) {
+                inlineTotal(value: callTotal(stats, .total), label: "Total")
+                Divider().frame(height: 44).background(Color.white.opacity(0.18))
+                inlineTotal(value: callTotal(stats, .fire), label: "🔥 Fire")
+                Divider().frame(height: 44).background(Color.white.opacity(0.18))
+                inlineTotal(value: callTotal(stats, .ems), label: "🚑 EMS")
+                Divider().frame(height: 44).background(Color.white.opacity(0.18))
+                inlineTotal(value: callTotal(stats, .other), label: "Other")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private func inlineTotal(value: Int, label: String) -> some View {
+        VStack(alignment: .center, spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 26, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func loadingCard(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView().tint(.white)
+
+            Text(message)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.78))
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        }
+    }
+
+    private func totalsScopeButton(_ scope: TotalsScope, title: String) -> some View {
+        let isSelected = selectedTotalsScope == scope
+
+        return Button {
+            selectedTotalsScope = scope
+        } label: {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(isSelected ? AppTheme.navy : .white.opacity(0.72))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? AppTheme.gold : Color.white.opacity(0.10))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func callTotal(_ stats: APIClient.DispatchBucket?, _ kind: TotalKind) -> Int {
+        switch (selectedTotalsWindow, kind) {
+        case (.last24h, .total): return stats?.total24h ?? 0
+        case (.last24h, .fire): return stats?.fire24h ?? 0
+        case (.last24h, .ems): return stats?.ems24h ?? 0
+        case (.last24h, .other): return stats?.other24h ?? 0
+
+        case (.last7d, .total): return stats?.total7d ?? 0
+        case (.last7d, .fire): return stats?.fire7d ?? 0
+        case (.last7d, .ems): return stats?.ems7d ?? 0
+        case (.last7d, .other): return stats?.other7d ?? 0
+
+        case (.last30d, .total): return stats?.total30d ?? 0
+        case (.last30d, .fire): return stats?.fire30d ?? 0
+        case (.last30d, .ems): return stats?.ems30d ?? 0
+        case (.last30d, .other): return stats?.other30d ?? 0
+
+        case (.ytd, .total): return stats?.totalYtd ?? 0
+        case (.ytd, .fire): return stats?.fireYtd ?? 0
+        case (.ytd, .ems): return stats?.emsYtd ?? 0
+        case (.ytd, .other): return stats?.otherYtd ?? 0
+        }
+    }
 
 
     private func volunteerCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {

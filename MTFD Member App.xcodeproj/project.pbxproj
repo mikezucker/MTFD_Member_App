@@ -103,6 +103,7 @@
 		408911452F902A5F0035C355 /* DashboardAttentionCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408911442F902A5E0035C355 /* DashboardAttentionCard.swift */; };
 		408911472F902B0A0035C355 /* AppDestination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408911462F902B080035C355 /* AppDestination.swift */; };
 		408911492F9033CE0035C355 /* DashboardResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408911482F9033CC0035C355 /* DashboardResponse.swift */; };
+		4089114B2FE1A0010035C355 /* DashboardStatsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4089114A2FE1A0010035C355 /* DashboardStatsStore.swift */; };
 		40A5322D2F993DBF0031965E /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A5322C2F993DBF0031965E /* AppDelegate.swift */; };
 		40B22B482F9F9C9A00808F42 /* Notification+Extensions.swift.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B22B472F9F9C9500808F42 /* Notification+Extensions.swift.swift */; };
 		40B22B6E2F9FDD5A00808F42 /* DispatchNotificationPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B22B672F9FDD5A00808F42 /* DispatchNotificationPayload.swift */; };
@@ -281,6 +282,7 @@
 		408911442F902A5E0035C355 /* DashboardAttentionCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardAttentionCard.swift; sourceTree = "<group>"; };
 		408911462F902B080035C355 /* AppDestination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDestination.swift; sourceTree = "<group>"; };
 		408911482F9033CC0035C355 /* DashboardResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardResponse.swift; sourceTree = "<group>"; };
+		4089114A2FE1A0010035C355 /* DashboardStatsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardStatsStore.swift; sourceTree = "<group>"; };
 		40A5322C2F993DBF0031965E /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		40B22B472F9F9C9500808F42 /* Notification+Extensions.swift.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Notification+Extensions.swift.swift"; sourceTree = "<group>"; };
 		40B22B672F9FDD5A00808F42 /* DispatchNotificationPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DispatchNotificationPayload.swift; sourceTree = "<group>"; };
@@ -938,6 +940,7 @@
 			isa = PBXGroup;
 			children = (
 				4089113C2F9029800035C355 /* DashboardViewModel.swift */,
+				4089114A2FE1A0010035C355 /* DashboardStatsStore.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1197,7 +1200,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2650;
-				LastUpgradeCheck = 2650;
+				LastUpgradeCheck = 2660;
 				TargetAttributes = {
 					403298DE2FD2F2EB004D53EE = {
 						CreatedOnToolsVersion = 26.5;
@@ -1356,6 +1359,7 @@
 				408910F52F8FED410035C355 /* User.swift in Sources */,
 				408910F62F8FED410035C355 /* ModuleCard.swift in Sources */,
 				4089113D2F9029890035C355 /* DashboardViewModel.swift in Sources */,
+				4089114B2FE1A0010035C355 /* DashboardStatsStore.swift in Sources */,
 				408911452F902A5F0035C355 /* DashboardAttentionCard.swift in Sources */,
 				403298DA2FD2E0AD004D53EE /* CarPlaySceneDelegate.swift in Sources */,
 				408911472F902B0A0035C355 /* AppDestination.swift in Sources */,
@@ -1443,6 +1447,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 48J5KADD5V;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -1487,6 +1492,7 @@
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 4;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 48J5KADD5V;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;

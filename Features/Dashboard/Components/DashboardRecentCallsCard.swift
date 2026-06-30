@@ -2,7 +2,8 @@ import SwiftUI
 
 struct DashboardRecentCallsCard: View {
     let calls: [RecentDepartmentCall]
-    let onTap: () -> Void
+    let onOpenCall: (RecentDepartmentCall) -> Void
+    let onViewAll: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -13,24 +14,34 @@ struct DashboardRecentCallsCard: View {
 
                 Spacer()
 
-                Text("View")
-                    .font(.caption.bold())
-                    .foregroundStyle(AppTheme.gold)
+                Button(action: onViewAll) {
+                    HStack(spacing: 4) {
+                        Text("View")
+                            .font(.caption.bold())
 
-                Image(systemName: "chevron.right")
-                    .font(.caption.bold())
-                    .foregroundStyle(AppTheme.gold.opacity(0.9))
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                    }
+                    .foregroundStyle(AppTheme.gold)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
 
             DashboardScrollableList(itemCount: calls.count, visibleItemLimit: 4, maxHeight: 300) {
                 VStack(spacing: 8) {
                     ForEach(calls) { call in
-                        callRow(call)
+                        Button {
+                            onOpenCall(call)
+                        } label: {
+                            callRow(call)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
 
-            Button(action: onTap) {
+            Button(action: onViewAll) {
                 HStack {
                     Text("View all past dispatches")
                         .font(.caption.bold())
@@ -56,15 +67,10 @@ struct DashboardRecentCallsCard: View {
 
     private func callRow(_ call: RecentDepartmentCall) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(AppTheme.gold.opacity(0.14))
-                    .frame(width: 36, height: 36)
-
-                Image(systemName: iconName(for: call.title))
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(AppTheme.gold)
-            }
+            Text(emoji(for: call.title))
+                .font(.system(size: 24))
+                .frame(width: 36, height: 36)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(call.title)
@@ -105,21 +111,21 @@ struct DashboardRecentCallsCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    private func iconName(for title: String) -> String {
+    private func emoji(for title: String) -> String {
         let normalized = title.lowercased()
 
         if normalized.contains("fire") || normalized.contains("alarm") {
-            return "flame.fill"
+            return "🔥"
         }
 
         if normalized.contains("ems") || normalized.contains("medical") || normalized.contains("sick") {
-            return "cross.case.fill"
+            return "🚑"
         }
 
         if normalized.contains("mva") || normalized.contains("accident") {
-            return "car.fill"
+            return "🚗"
         }
 
-        return "bell.fill"
+        return "🚨"
     }
 }

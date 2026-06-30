@@ -9,6 +9,8 @@ struct ChiefDashboardView: View {
     let stationStats: APIClient.DispatchBucket?
     let chiefStationStats: APIClient.ChiefStationStats?
     let recentCalls: [RecentDepartmentCall]
+    let messagePreviews: [DashboardMessagePreview]
+    let unreadMessageCount: Int
     let isLoading: Bool
     let onRefresh: () async -> Void
 
@@ -829,7 +831,7 @@ struct ChiefDashboardView: View {
                 }
             }
 
-            if isLoading && departmentStats == nil {
+            if selectedTotalsBucket == nil {
                 loadingCard("Loading call totals...")
             } else {
                 HStack(spacing: 0) {
@@ -1092,7 +1094,10 @@ private func selectNextScheduleDay() {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Command Messages", systemImage: "envelope.fill")
 
-            DashboardMessageCenterCard {
+            DashboardMessageCenterCard(
+                messages: messagePreviews,
+                unreadCount: unreadMessageCount
+            ) {
                 onOpenMessages()
             }
         }
@@ -1109,10 +1114,14 @@ private func selectNextScheduleDay() {
                 emptyCard("No recent dispatches available.")
             } else {
                 DashboardRecentCallsCard(
-                    calls: recentCalls
-                ) {
-                    onOpenPastDispatches()
-                }
+                    calls: recentCalls,
+                    onOpenCall: { call in
+                        onOpenDispatch(DispatchNotificationPayload(recentDepartmentCall: call))
+                    },
+                    onViewAll: {
+                        onOpenPastDispatches()
+                    }
+                )
             }
         }
     }

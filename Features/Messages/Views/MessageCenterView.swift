@@ -17,6 +17,7 @@ struct MessageCenterView: View {
     @State private var selectedDispatch: DispatchNotificationPayload?
     @State private var highlightedDispatchId: String?
     @State private var selectedTab: MessageCenterTab
+    @State private var selectedMessageFilter: DashboardMessageTypeFilter = .all
     @State private var showComposer = false
 
     init(mode: Mode = .combined) {
@@ -52,9 +53,7 @@ struct MessageCenterView: View {
     private var departmentMessages: [MobileMessage] {
         viewModel.messages
             .filter { message in
-                message.type != "DISPATCH" &&
-                message.type != "DISPATCH_UPDATE" &&
-                message.dispatchId == nil
+                selectedMessageFilter.includes(message)
             }
             .sorted { lhs, rhs in
                 if (lhs.isPinned ?? false) != (rhs.isPinned ?? false) {
@@ -392,10 +391,14 @@ struct MessageCenterView: View {
                 : "Training, uniforms, documents, and announcements.",
             systemImage: "tray.full.fill"
         ) {
+            messageTypeFilterBar
+
             if departmentMessages.isEmpty {
                 EmptySectionRow(
                     systemImage: "tray",
-                    title: canCreateMessages ? "No active messages" : "No department messages",
+                    title: selectedMessageFilter == .all
+                        ? (canCreateMessages ? "No active messages" : "No department messages")
+                        : "No \(selectedMessageFilter.rawValue.lowercased()) messages",
                     subtitle: canCreateMessages
                         ? "Create a message to add it to the current queue."
                         : "Training, uniform, and department updates will appear here."
@@ -444,6 +447,27 @@ struct MessageCenterView: View {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private var messageTypeFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(DashboardMessageTypeFilter.allCases) { filter in
+                    Button {
+                        selectedMessageFilter = filter
+                    } label: {
+                        Text(filter.rawValue)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(selectedMessageFilter == filter ? Color.black : Color.white.opacity(0.78))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(selectedMessageFilter == filter ? AppTheme.gold : Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }

@@ -14,6 +14,8 @@ struct CareerOfficerDashboardView: View {
     let pendingPolicies: [DashboardPendingPolicy]
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
+    let messagePreviews: [DashboardMessagePreview]
+    let unreadMessageCount: Int
     let isLoading: Bool
     let onRefresh: () async -> Void
 
@@ -201,7 +203,7 @@ struct CareerOfficerDashboardView: View {
                 }
             }
 
-            if isLoading && departmentStats == nil && stationStats == nil {
+            if selectedTotalsBucket == nil {
                 loadingCard("Loading call totals...")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -297,7 +299,10 @@ struct CareerOfficerDashboardView: View {
     private var messagesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Messages", systemImage: "envelope.fill")
-            DashboardMessageCenterCard {
+            DashboardMessageCenterCard(
+                messages: messagePreviews,
+                unreadCount: unreadMessageCount
+            ) {
                 onOpenMessages()
             }
         }
@@ -453,9 +458,15 @@ struct CareerOfficerDashboardView: View {
             } else if recentCalls.isEmpty {
                 emptyCard("No recent dispatches available.")
             } else {
-                DashboardRecentCallsCard(calls: recentCalls) {
-                    onOpenPastDispatches()
-                }
+                DashboardRecentCallsCard(
+                    calls: recentCalls,
+                    onOpenCall: { call in
+                        onOpenDispatch(DispatchNotificationPayload(recentDepartmentCall: call))
+                    },
+                    onViewAll: {
+                        onOpenPastDispatches()
+                    }
+                )
             }
         }
     }

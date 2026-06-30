@@ -128,6 +128,7 @@ final class DashboardViewModel: ObservableObject {
             alerts: state.alerts,
             stationUpdates: state.stationUpdates,
             departmentUpdates: state.departmentUpdates,
+            messagePreviews: state.messagePreviews,
             attentionItems: state.attentionItems,
             quickActions: [],
             progressItems: state.progressItems,
@@ -148,7 +149,7 @@ final class DashboardViewModel: ObservableObject {
             departmentScheduleEntries: state.departmentScheduleEntries,
             tomorrowScheduleEntries: state.tomorrowScheduleEntries,
             unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
-            isLoadingStats: true,
+            isLoadingStats: state.isLoadingStats,
             isLoading: true,
             errorMessage: nil
         )
@@ -167,8 +168,8 @@ final class DashboardViewModel: ObservableObject {
 
             let dispatchHistory: APIClient.DispatchHistoryResponse?
             do {
-                dispatchHistory = try await timedDashboardRequest("dispatch history 24h") {
-                    try await APIClient.shared.fetchDispatchHistory(window: "24h")
+                dispatchHistory = try await timedDashboardRequest("dispatch history 7d") {
+                    try await APIClient.shared.fetchDispatchHistory(window: "7d")
                 }
             } catch {
                 dispatchHistory = nil
@@ -208,15 +209,13 @@ final class DashboardViewModel: ObservableObject {
             )
             cachedVolunteerContext = resolvedVolunteerContext
 
-            let departmentYtd: Int? = nil
-            let stationYtd: Int? = nil
-
             state = DashboardState(
                 greeting: "Welcome",
                 role: role,
                 alerts: [],
                 stationUpdates: mapBulletins(from: dashboard.stationUpdates ?? []),
                 departmentUpdates: mapBulletins(from: dashboard.departmentUpdates ?? []),
+                messagePreviews: state.messagePreviews,
                 attentionItems: mapAttentionItems(from: dashboard.attentionItems ?? []),
                 quickActions: [],
                 progressItems: buildProgressItems(for: role, summary: dashboard.trainingSummary),
@@ -225,11 +224,11 @@ final class DashboardViewModel: ObservableObject {
                     ? (dashboard.trainingSummary?.pendingDocumentSignatures ?? 0)
                     : pendingPolicyDocuments.count,
                 pendingPolicyDocuments: pendingPolicyDocuments,
-                stationCallTotal: stationYtd,
-                departmentCallTotal: departmentYtd,
-                dashboardDepartment: nil,
-                dashboardStation: nil,
-                dashboardStations: nil,
+                stationCallTotal: state.stationCallTotal,
+                departmentCallTotal: state.departmentCallTotal,
+                dashboardDepartment: state.dashboardDepartment,
+                dashboardStation: state.dashboardStation,
+                dashboardStations: state.dashboardStations,
                 volunteerContext: resolvedVolunteerContext,
                 lastUpdated: nil,
                 recentDepartmentCalls: mapRecentCalls(from: resolvedHistoricalDispatches),
@@ -239,17 +238,13 @@ final class DashboardViewModel: ObservableObject {
                 departmentScheduleEntries: departmentScheduleEntries,
                 tomorrowScheduleEntries: [],
                 unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
-                isLoadingStats: true,
+                isLoadingStats: state.isLoadingStats,
                 isLoading: false,
                 errorMessage: nil
             )
 
             hasLoaded = true
             lastLoadedAt = Date()
-
-            Task {
-                await loadDispatchStats()
-            }
 
             Task {
                 await loadUnreadNonDispatchMessageCount()
@@ -263,6 +258,7 @@ final class DashboardViewModel: ObservableObject {
                 alerts: [],
                 stationUpdates: [],
                 departmentUpdates: [],
+                messagePreviews: state.messagePreviews,
                 attentionItems: [],
                 quickActions: [],
                 progressItems: [],
@@ -341,12 +337,30 @@ final class DashboardViewModel: ObservableObject {
     private func loadUnreadNonDispatchMessageCount() async {
         do {
             let response = try await APIClient.shared.fetchMessages()
-            let unreadCount = response.messages.filter { message in
+            let messageSource = combinedMessageSource(
+                visibleMessages: response.messages,
+                manageableMessages: response.manageableMessages
+            )
+            let unreadCount = messageSource.filter { message in
                 message.type != "DISPATCH" &&
                 message.type != "DISPATCH_UPDATE" &&
                 message.dispatchId == nil &&
                 !message.isRead
             }.count
+            let previews = messageSource
+                .filter { DashboardMessageTypeFilter.all.includes($0) }
+                .sorted { lhs, rhs in
+                    if (lhs.isPinned ?? false) != (rhs.isPinned ?? false) {
+                        return lhs.isPinned == true
+                    }
+
+                    if messagePriorityRank(lhs.priority) != messagePriorityRank(rhs.priority) {
+                        return messagePriorityRank(lhs.priority) < messagePriorityRank(rhs.priority)
+                    }
+
+                    return lhs.createdAt > rhs.createdAt
+                }
+                .map(DashboardMessagePreview.init)
 
             state = DashboardState(
                 greeting: state.greeting,
@@ -354,6 +368,7 @@ final class DashboardViewModel: ObservableObject {
                 alerts: state.alerts,
                 stationUpdates: state.stationUpdates,
                 departmentUpdates: state.departmentUpdates,
+                messagePreviews: previews,
                 attentionItems: state.attentionItems,
                 quickActions: state.quickActions,
                 progressItems: state.progressItems,
@@ -379,6 +394,23 @@ final class DashboardViewModel: ObservableObject {
         } catch {
             print("Dashboard unread non-dispatch message count failed:", error.localizedDescription)
         }
+    }
+
+    private func combinedMessageSource(
+        visibleMessages: [MobileMessage],
+        manageableMessages: [MobileMessage]?
+    ) -> [MobileMessage] {
+        var messagesById: [String: MobileMessage] = [:]
+
+        for message in visibleMessages {
+            messagesById[message.id] = message
+        }
+
+        for message in manageableMessages ?? [] {
+            messagesById[message.id] = message
+        }
+
+        return Array(messagesById.values)
     }
 
     private func fetchDepartmentScheduleOutlook() async -> [APIClient.MobileScheduleEntry] {
@@ -435,52 +467,6 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    private func loadDispatchStats() async {
-        let startedAt = Date()
-        print("⏱️ Dashboard separate stats load started")
-
-        do {
-            let statsResponse = try await APIClient.shared.fetchDispatchStats()
-
-            state = DashboardState(
-                greeting: state.greeting,
-                role: state.role,
-                alerts: state.alerts,
-                stationUpdates: state.stationUpdates,
-                departmentUpdates: state.departmentUpdates,
-                attentionItems: state.attentionItems,
-                quickActions: state.quickActions,
-                progressItems: state.progressItems,
-                assignedTrainingPreview: state.assignedTrainingPreview,
-                pendingDocumentSignatures: state.pendingDocumentSignatures,
-                pendingPolicyDocuments: state.pendingPolicyDocuments,
-                stationCallTotal: statsResponse.stats?.stationYtd,
-                departmentCallTotal: statsResponse.stats?.departmentYtd,
-                dashboardDepartment: statsResponse.department,
-                dashboardStation: statsResponse.station,
-                dashboardStations: statsResponse.stations,
-                volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
-                lastUpdated: statsResponse.lastUpdated,
-                recentDepartmentCalls: state.recentDepartmentCalls,
-                apparatusWorkOrders: state.apparatusWorkOrders,
-                apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
-                upcomingSchedule: state.upcomingSchedule,
-                departmentScheduleEntries: state.departmentScheduleEntries,
-                tomorrowScheduleEntries: state.tomorrowScheduleEntries,
-                unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
-                isLoadingStats: false,
-                isLoading: state.isLoading,
-                errorMessage: state.errorMessage
-            )
-
-            print("✅ Dashboard separate stats load finished in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s")
-        } catch {
-            print("🧨 Dashboard separate stats load failed in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s: \(error.localizedDescription)")
-        }
-    }
-
-
-
     private func mapBulletins(from updates: [APIClient.DashboardUpdate]) -> [DashboardBulletin] {
         updates.map {
             DashboardBulletin(
@@ -531,7 +517,7 @@ final class DashboardViewModel: ObservableObject {
     private func mapRecentCalls(
         from dispatches: [APIClient.DispatchHistoryItem]
     ) -> [RecentDepartmentCall] {
-        dispatches.prefix(3).map { dispatch in
+        dispatches.map { dispatch in
             let location = [
                 dispatch.placeName,
                 dispatch.address,
@@ -558,7 +544,8 @@ final class DashboardViewModel: ObservableObject {
                 title: dispatch.callType,
                 address: location,
                 timestamp: timestamp,
-                units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units)
+                units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units),
+                rawUnits: dispatch.units
             )
         }
     }
@@ -575,6 +562,17 @@ final class DashboardViewModel: ObservableObject {
                 progressPercent: $0.progressPercent,
                 isOverdue: $0.isOverdue ?? false
             )
+        }
+    }
+
+    private func messagePriorityRank(_ priority: String) -> Int {
+        switch priority {
+        case "CRITICAL":
+            return 0
+        case "HIGH":
+            return 1
+        default:
+            return 2
         }
     }
 
