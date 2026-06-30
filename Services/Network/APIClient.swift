@@ -985,6 +985,38 @@ final class APIClient {
         _ = try await performRequest(request)
     }
 
+    func recordDispatchPushReceipt(
+        dispatchId: String,
+        event: String,
+        notificationType: String,
+        deviceToken: String?
+    ) async throws {
+        struct Body: Encodable {
+            let dispatchId: String
+            let event: String
+            let notificationType: String
+            let deviceToken: String?
+        }
+
+        let data = try JSONEncoder().encode(
+            Body(
+                dispatchId: dispatchId,
+                event: event,
+                notificationType: notificationType,
+                deviceToken: deviceToken
+            )
+        )
+
+        let request = try makeRequest(
+            path: "/api/mobile/push/receipt",
+            method: "POST",
+            body: data,
+            requiresAuth: true
+        )
+
+        _ = try await performRequest(request)
+    }
+
     func fetchMobileSchedule(date: String? = nil) async throws -> MobileScheduleResponse {
         let path: String
 

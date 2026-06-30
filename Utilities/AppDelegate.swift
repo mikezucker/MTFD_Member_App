@@ -141,6 +141,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
 
+        recordDispatchPushReceipt(payload: payload, event: "foreground_received")
+
         Task {
             let preferences = NotificationPreferencesViewModel().preferences
             let scheduleContext = await makeScheduleNotificationContext()
@@ -193,6 +195,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             completionHandler()
             return
         }
+
+        recordDispatchPushReceipt(payload: payload, event: "opened")
 
         Task {
             let preferences = NotificationPreferencesViewModel().preferences
@@ -253,6 +257,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         } catch {
             print("⚠️ Failed to fetch schedule for notification context:", error.localizedDescription)
             return (canUseScheduleBasedNotifications, false)
+        }
+    }
+
+    private func recordDispatchPushReceipt(payload: AppNotificationPayload, event: String) {
+        guard payload.type == .dispatch || payload.type == .dispatchCritical else {
+            return
+        }
+
+        Task {
+            do {
+                try await APIClient.shared.recordDispatchPushReceipt(
+                    dispatchId: payload.id,
+                    event: event,
+                    notificationType: payload.type.rawValue,
+                    deviceToken: Self.latestAPNsToken
+                )
+                print("📬 Dispatch push receipt recorded:", event, payload.id)
+            } catch {
+                print("⚠️ Dispatch push receipt failed:", event, payload.id, error.localizedDescription)
+            }
         }
     }
 
