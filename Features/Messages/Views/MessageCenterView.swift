@@ -589,10 +589,9 @@ private struct MessageComposeView: View {
     @State private var title = ""
     @State private var messageBody = ""
     @State private var audience = "ALL_MEMBERS"
-    @State private var targetStation = false
     @State private var priority = "NORMAL"
     @State private var type = "ANNOUNCEMENT"
-    @State private var stationText = ""
+    @State private var selectedStationNumber = 1
     @State private var isPinned = false
     @State private var isSending = false
     @State private var errorMessage: String?
@@ -602,7 +601,16 @@ private struct MessageComposeView: View {
         ("Officers", "ALL_OFFICERS"),
         ("Chiefs", "CHIEFS"),
         ("Career", "CAREER_MEMBERS"),
-        ("Volunteers", "VOLUNTEER_MEMBERS")
+        ("Volunteers", "VOLUNTEER_MEMBERS"),
+        ("Specific Station", "STATION")
+    ]
+
+    private let stationOptions: [(label: String, value: Int)] = [
+        ("Station 1 - Mt. Kemble", 1),
+        ("Station 2 - Collinsville", 2),
+        ("Station 3 - Hillside", 3),
+        ("Station 4 - Fairchild", 4),
+        ("Station 5 - Woodland", 5)
     ]
 
     private let priorities: [(label: String, value: String)] = [
@@ -627,15 +635,14 @@ private struct MessageComposeView: View {
         messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var stationNumber: Int? {
-        Int(stationText.trimmingCharacters(in: .whitespacesAndNewlines))
+    private var stationNumberTarget: Int? {
+        audience == "STATION" ? selectedStationNumber : nil
     }
 
     private var canSend: Bool {
         !trimmedTitle.isEmpty
             && !trimmedBody.isEmpty
             && !isSending
-            && (!targetStation || stationNumber != nil)
     }
 
     var body: some View {
@@ -657,11 +664,12 @@ private struct MessageComposeView: View {
                         }
                     }
 
-                    Toggle("Target a station", isOn: $targetStation)
-
-                    if targetStation {
-                        TextField("Station number", text: $stationText)
-                            .keyboardType(.numberPad)
+                    if audience == "STATION" {
+                        Picker("Station", selection: $selectedStationNumber) {
+                            ForEach(stationOptions, id: \.value) { option in
+                                Text(option.label).tag(option.value)
+                            }
+                        }
                     }
 
                     Picker("Priority", selection: $priority) {
@@ -721,7 +729,7 @@ private struct MessageComposeView: View {
                 audience,
                 priority,
                 type,
-                targetStation ? stationNumber : nil,
+                stationNumberTarget,
                 isPinned
             )
 
