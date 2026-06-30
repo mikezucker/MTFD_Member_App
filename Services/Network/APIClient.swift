@@ -632,9 +632,6 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(NotificationPreferencesResponse.self, from: data)
-        } catch APIError.unauthorized {
-            clearSession()
-            throw APIError.sessionExpired
         } catch {
             throw error
         }
@@ -653,9 +650,6 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(NotificationPreferencesResponse.self, from: data)
-        } catch APIError.unauthorized {
-            clearSession()
-            throw APIError.sessionExpired
         } catch {
             throw error
         }
@@ -831,6 +825,24 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(MarkMessageReadResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func deleteMessage(id: String) async throws -> DeleteMessageResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/messages/\(id)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(DeleteMessageResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired

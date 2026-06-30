@@ -4,6 +4,7 @@ struct MobileMessagesResponse: Decodable {
     let success: Bool
     let unreadCount: Int
     let messages: [MobileMessage]
+    let manageableMessages: [MobileMessage]?
 }
 
 struct MarkMessageReadResponse: Decodable {
@@ -15,6 +16,11 @@ struct MarkMessageReadResponse: Decodable {
 struct CreateCommandMessageResponse: Decodable {
     let success: Bool
     let message: MobileMessage
+    let error: String?
+}
+
+struct DeleteMessageResponse: Decodable {
+    let success: Bool
     let error: String?
 }
 
@@ -39,6 +45,7 @@ struct MobileMessage: Identifiable, Decodable, Equatable {
     let trainingId: String?
     let isPinned: Bool?
     let isActive: Bool?
+    let canDelete: Bool?
     let isRead: Bool
     let readAt: Date?
     let createdAt: Date

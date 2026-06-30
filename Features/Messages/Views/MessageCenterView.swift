@@ -69,6 +69,10 @@ struct MessageCenterView: View {
             }
     }
 
+    private func canDeleteMessage(_ message: MobileMessage) -> Bool {
+        message.canDelete == true || viewModel.manageableMessages.contains(where: { $0.id == message.id })
+    }
+
     private var unreadDepartmentMessageCount: Int {
         departmentMessages.filter { !$0.isRead }.count
     }
@@ -382,29 +386,63 @@ struct MessageCenterView: View {
 
     private var departmentMessagesSection: some View {
         MessageSectionContainer(
-            title: "Department Messages",
-            subtitle: "Training, uniforms, documents, and announcements.",
+            title: canCreateMessages ? "Current Message Queue" : "Department Messages",
+            subtitle: canCreateMessages
+                ? "Active messages visible in the app and station displays."
+                : "Training, uniforms, documents, and announcements.",
             systemImage: "tray.full.fill"
         ) {
             if departmentMessages.isEmpty {
                 EmptySectionRow(
                     systemImage: "tray",
-                    title: "No department messages",
-                    subtitle: "Training, uniform, and department updates will appear here."
+                    title: canCreateMessages ? "No active messages" : "No department messages",
+                    subtitle: canCreateMessages
+                        ? "Create a message to add it to the current queue."
+                        : "Training, uniform, and department updates will appear here."
                 )
             } else {
                 VStack(spacing: 10) {
                     ForEach(departmentMessages) { message in
-                        Button {
-                            selectedMessage = message
+                        HStack(spacing: 10) {
+                            Button {
+                                selectedMessage = message
 
-                            Task {
-                                await viewModel.markRead(message)
+                                Task {
+                                    await viewModel.markRead(message)
+                                }
+                            } label: {
+                                DepartmentMessageRow(message: message)
                             }
-                        } label: {
-                            DepartmentMessageRow(message: message)
+                            .buttonStyle(.plain)
+
+                            if canDeleteMessage(message) {
+                                Button {
+                                    Task {
+                                        await viewModel.deleteMessage(message)
+                                    }
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(.red)
+                                        .frame(width: 42, height: 42)
+                                        .background(Color.red.opacity(0.12))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Delete message")
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .contextMenu {
+                            if canDeleteMessage(message) {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.deleteMessage(message)
+                                    }
+                                } label: {
+                                    Label("Delete Message", systemImage: "trash")
+                                }
+                            }
+                        }
                     }
                 }
             }

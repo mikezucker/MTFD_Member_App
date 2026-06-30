@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class MessageCenterViewModel: ObservableObject {
     @Published var messages: [MobileMessage] = []
+    @Published var manageableMessages: [MobileMessage] = []
     @Published var unreadCount: Int = 0
     @Published var activeDispatches: [APIClient.ActiveDispatch] = []
     @Published var historicalDispatches: [APIClient.DispatchHistoryItem] = []
@@ -74,6 +75,7 @@ final class MessageCenterViewModel: ObservableObject {
             let resolvedDispatchHistory = try await dispatchHistoryResponse
 
             messages = resolvedMessages.messages
+            manageableMessages = resolvedMessages.manageableMessages ?? resolvedMessages.messages.filter { $0.canDelete == true }
             unreadCount = resolvedMessages.unreadCount
             activeDispatches = resolvedDispatchHistory.activeDispatches
             historicalDispatches = resolvedDispatchHistory.historicalDispatches
@@ -190,8 +192,31 @@ final class MessageCenterViewModel: ObservableObject {
 
         messages.removeAll { $0.id == response.message.id }
         messages.insert(response.message, at: 0)
+        manageableMessages.removeAll { $0.id == response.message.id }
+        manageableMessages.insert(response.message, at: 0)
         unreadCount += response.message.isRead ? 0 : 1
         updateBadgeCount()
+    }
+
+    func deleteMessage(_ message: MobileMessage) async {
+        do {
+            let response = try await APIClient.shared.deleteMessage(id: message.id)
+
+            if response.success {
+                messages.removeAll { $0.id == message.id }
+                manageableMessages.removeAll { $0.id == message.id }
+
+                if !message.isRead && unreadCount > 0 {
+                    unreadCount -= 1
+                }
+
+                updateBadgeCount()
+            } else {
+                errorMessage = response.error ?? "Unable to delete message."
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func updateBadgeCount() {
