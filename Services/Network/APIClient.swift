@@ -1109,6 +1109,8 @@ extension APIClient {
         let company: String?
         let reportsToUserId: String?
         let badgeNumber: String?
+        let stationMessageDelegate: Bool?
+        let attributeIds: [String]?
     }
 
     struct MemberAccessRequest: Encodable {
@@ -1213,12 +1215,21 @@ extension APIClient {
     struct MobileAdminUsersResponse: Decodable {
         let success: Bool
         let canEditDepartmentRoles: Bool
+        let attributes: [MobileAdminAttribute]?
         let users: [MobileAdminUser]
     }
 
     struct MobileAdminUserUpdateResponse: Decodable {
         let success: Bool
         let user: MobileAdminUser
+    }
+
+    struct MobileAdminAttribute: Decodable, Identifiable, Equatable {
+        let id: String
+        let name: String
+        let slug: String
+        let description: String?
+        let isActive: Bool
     }
 
     struct MobileAdminUser: Decodable, Identifiable, Equatable {
@@ -1231,6 +1242,9 @@ extension APIClient {
         let company: String?
         let badgeNumber: String?
         let reportsToUserId: String?
+        let attributes: [MobileAdminAttribute]?
+        let canPostStationMessages: Bool?
+        let stationMessageDelegate: Bool?
         let updatedAt: String?
 
         var displayName: String {
@@ -1245,7 +1259,8 @@ extension APIClient {
                 phone,
                 roleLabel,
                 companyLabel,
-                badgeNumber
+                badgeNumber,
+                attributes?.map(\.name).joined(separator: " ")
             ]
             .compactMap { $0 }
             .joined(separator: " ")

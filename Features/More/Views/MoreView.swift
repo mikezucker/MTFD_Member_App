@@ -326,6 +326,7 @@ private struct UserAdminView: View {
             UserAdminEditView(
                 user: user,
                 users: viewModel.users,
+                attributes: viewModel.attributes,
                 canEditDepartmentRoles: viewModel.canEditDepartmentRoles
             ) { payload in
                 try await viewModel.save(payload)
@@ -353,6 +354,7 @@ private struct UserAdminView: View {
 @MainActor
 private final class UserAdminViewModel: ObservableObject {
     @Published var users: [APIClient.MobileAdminUser] = []
+    @Published var attributes: [APIClient.MobileAdminAttribute] = []
     @Published var canEditDepartmentRoles = false
     @Published var isLoading = false
     @Published var errorMessage: String?
@@ -365,6 +367,7 @@ private final class UserAdminViewModel: ObservableObject {
         do {
             let response = try await APIClient.shared.fetchMobileAdminUsers()
             users = response.users
+            attributes = response.attributes ?? []
             canEditDepartmentRoles = response.canEditDepartmentRoles
         } catch {
             errorMessage = error.localizedDescription
@@ -405,6 +408,18 @@ private struct UserAdminRow: View {
                     .font(.caption2)
                     .foregroundColor(.white.opacity(0.52))
                     .lineLimit(1)
+
+                if let attributes = user.attributes, !attributes.isEmpty {
+                    Text(attributes.map(\.name).joined(separator: ", "))
+                        .font(.caption2)
+                        .foregroundColor(AppTheme.gold.opacity(0.85))
+                        .lineLimit(1)
+                } else if user.canPostStationMessages == true {
+                    Text("Can send station messages")
+                        .font(.caption2)
+                        .foregroundColor(AppTheme.gold.opacity(0.85))
+                        .lineLimit(1)
+                }
             }
 
             Spacer()
@@ -430,6 +445,7 @@ private struct UserAdminEditView: View {
 
     let user: APIClient.MobileAdminUser
     let users: [APIClient.MobileAdminUser]
+    let attributes: [APIClient.MobileAdminAttribute]
     let canEditDepartmentRoles: Bool
     let onSave: (APIClient.MobileAdminUserUpdateRequest) async throws -> APIClient.MobileAdminUser
 
@@ -438,17 +454,21 @@ private struct UserAdminEditView: View {
     @State private var company: String?
     @State private var reportsToUserId: String?
     @State private var badgeNumber: String
+    @State private var stationMessageDelegate: Bool
+    @State private var selectedAttributeIds: Set<String>
     @State private var isSaving = false
     @State private var errorMessage: String?
 
     init(
         user: APIClient.MobileAdminUser,
         users: [APIClient.MobileAdminUser],
+        attributes: [APIClient.MobileAdminAttribute],
         canEditDepartmentRoles: Bool,
         onSave: @escaping (APIClient.MobileAdminUserUpdateRequest) async throws -> APIClient.MobileAdminUser
     ) {
         self.user = user
         self.users = users
+        self.attributes = attributes
         self.canEditDepartmentRoles = canEditDepartmentRoles
         self.onSave = onSave
         _role = State(initialValue: user.role)
@@ -456,6 +476,8 @@ private struct UserAdminEditView: View {
         _company = State(initialValue: user.company)
         _reportsToUserId = State(initialValue: user.reportsToUserId)
         _badgeNumber = State(initialValue: user.badgeNumber ?? "")
+        _stationMessageDelegate = State(initialValue: user.stationMessageDelegate == true)
+        _selectedAttributeIds = State(initialValue: Set(user.attributes?.map(\.id) ?? []))
     }
 
     var body: some View {
@@ -502,6 +524,41 @@ private struct UserAdminEditView: View {
                     TextField("Badge #", text: $badgeNumber)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
+                }
+
+                Section("Delegates") {
+                    Toggle("Can Send Station Messages", isOn: $stationMessageDelegate)
+                        .onChange(of: stationMessageDelegate) { _, isEnabled in
+                            guard let stationDelegateAttributeId else { return }
+                            if isEnabled {
+                                selectedAttributeIds.insert(stationDelegateAttributeId)
+                            } else {
+                                selectedAttributeIds.remove(stationDelegateAttributeId)
+                            }
+                        }
+
+                    if stationMessageDelegate && company == nil {
+                        Text("Assign a company before saving a station message delegate.")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+
+                if !attributes.isEmpty {
+                    Section("Member Attributes") {
+                        ForEach(attributes.filter { $0.isActive }) { attribute in
+                            Toggle(isOn: attributeBinding(attribute.id)) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(attribute.name)
+                                    if let description = attribute.description, !description.isEmpty {
+                                        Text(description)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if let errorMessage {
@@ -569,6 +626,29 @@ private struct UserAdminEditView: View {
         ]
     }
 
+    private var stationDelegateAttributeId: String? {
+        attributes.first { attribute in
+            attribute.slug == "station_message_delegate"
+        }?.id
+    }
+
+    private func attributeBinding(_ attributeId: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedAttributeIds.contains(attributeId) },
+            set: { isSelected in
+                if isSelected {
+                    selectedAttributeIds.insert(attributeId)
+                } else {
+                    selectedAttributeIds.remove(attributeId)
+                }
+
+                if attributeId == stationDelegateAttributeId {
+                    stationMessageDelegate = isSelected
+                }
+            }
+        )
+    }
+
     private func save() async {
         isSaving = true
         errorMessage = nil
@@ -582,7 +662,9 @@ private struct UserAdminEditView: View {
             reportsToUserId: reportsToUserId,
             badgeNumber: badgeNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? nil
-                : badgeNumber.trimmingCharacters(in: .whitespacesAndNewlines)
+                : badgeNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+            stationMessageDelegate: stationMessageDelegate,
+            attributeIds: Array(selectedAttributeIds)
         )
 
         do {
