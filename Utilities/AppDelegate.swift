@@ -122,6 +122,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         return UserDefaults.standard.bool(forKey: "notification_haptics_enabled") ? .normal : .off
     }
 
+    private static func currentDispatchAlertTone(isCritical: Bool) -> DispatchAlertTone {
+        let key = isCritical
+            ? "notification_critical_dispatch_alert_tone"
+            : "notification_dispatch_alert_tone"
+
+        if let rawValue = UserDefaults.standard.string(forKey: key),
+           let tone = DispatchAlertTone(rawValue: rawValue) {
+            return tone
+        }
+
+        guard let data = UserDefaults.standard.data(forKey: "notification_preferences"),
+              let preferences = try? JSONDecoder().decode(NotificationPreferences.self, from: data)
+        else {
+            return isCritical ? .airHornBlast : .systemDefault
+        }
+
+        return isCritical ? preferences.criticalDispatchAlertTone : preferences.dispatchAlertTone
+    }
+
     // MARK: - Foreground Notifications
 
     func userNotificationCenter(
@@ -162,10 +181,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             print("✅ Notification allowed by preferences:", payload.id)
 
             DispatchQueue.main.async {
+                let isCritical = payload.type == .dispatchCritical
+
+                DispatchAlertSoundManager.shared.playDispatchAlert(
+                    dispatchId: payload.id,
+                    tone: Self.currentDispatchAlertTone(isCritical: isCritical),
+                    isCritical: isCritical
+                )
+
                 HapticAlertManager.shared.playDispatchAlert(
                     dispatchId: payload.id,
                     style: Self.currentHapticAlertStyle(),
-                    isCritical: payload.type == .dispatchCritical
+                    isCritical: isCritical
                 )
 
                 NotificationCenter.default.post(

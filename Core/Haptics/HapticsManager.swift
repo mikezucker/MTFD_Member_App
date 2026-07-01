@@ -1,3 +1,5 @@
+import AVFoundation
+import AudioToolbox
 import UIKit
 
 final class HapticsManager {
@@ -22,6 +24,85 @@ final class HapticsManager {
 
     func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
+    }
+}
+
+@MainActor
+final class DispatchAlertSoundManager {
+    static let shared = DispatchAlertSoundManager()
+
+    private var playedDispatchIds = Set<String>()
+    private var player: AVAudioPlayer?
+    private var stopTask: Task<Void, Never>?
+
+    private init() {}
+
+    func playDispatchAlert(
+        dispatchId: String,
+        tone: DispatchAlertTone,
+        isCritical: Bool
+    ) {
+        guard !playedDispatchIds.contains(dispatchId) else {
+            return
+        }
+
+        playedDispatchIds.insert(dispatchId)
+        play(tone: tone, isCritical: isCritical)
+    }
+
+    func play(tone: DispatchAlertTone, isCritical: Bool = false) {
+        stop()
+
+        guard tone != .silent else {
+            return
+        }
+
+        guard let soundName = tone.previewSoundName else {
+            AudioServicesPlaySystemSound(isCritical ? 1027 : 1007)
+            return
+        }
+
+        let resource = (soundName as NSString).deletingPathExtension
+        let extensionName = (soundName as NSString).pathExtension
+
+        guard let url = Bundle.main.url(
+            forResource: resource,
+            withExtension: extensionName.isEmpty ? nil : extensionName
+        ) else {
+            AudioServicesPlaySystemSound(isCritical ? 1027 : 1007)
+            return
+        }
+
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.duckOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.prepareToPlay()
+            player.play()
+            self.player = player
+
+            stopTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+
+                guard !Task.isCancelled else {
+                    return
+                }
+
+                stop()
+            }
+        } catch {
+            AudioServicesPlaySystemSound(isCritical ? 1027 : 1007)
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        }
+    }
+
+    private func stop() {
+        stopTask?.cancel()
+        stopTask = nil
+        player?.stop()
+        player = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 }
 

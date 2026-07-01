@@ -348,10 +348,18 @@ struct DashboardView: View {
                     await statsStore.refreshIfNeeded(reason: "pushDispatch")
                 }
 
+                let isCritical = dispatch.type == .dispatchCritical
+
+                DispatchAlertSoundManager.shared.playDispatchAlert(
+                    dispatchId: dispatch.id,
+                    tone: dashboardDispatchAlertTone(isCritical: isCritical),
+                    isCritical: isCritical
+                )
+
                 HapticAlertManager.shared.playDispatchAlert(
                     dispatchId: dispatch.id,
                     style: dashboardHapticAlertStyle,
-                    isCritical: dispatch.type == .dispatchCritical
+                    isCritical: isCritical
                 )
                 dispatchNotificationCount += 1
 
@@ -778,6 +786,25 @@ struct DashboardView: View {
         }
 
         return UserDefaults.standard.bool(forKey: "notification_haptics_enabled") ? .normal : .off
+    }
+
+    private func dashboardDispatchAlertTone(isCritical: Bool) -> DispatchAlertTone {
+        let key = isCritical
+            ? "notification_critical_dispatch_alert_tone"
+            : "notification_dispatch_alert_tone"
+
+        if let rawValue = UserDefaults.standard.string(forKey: key),
+           let tone = DispatchAlertTone(rawValue: rawValue) {
+            return tone
+        }
+
+        guard let data = UserDefaults.standard.data(forKey: "notification_preferences"),
+              let preferences = try? JSONDecoder().decode(NotificationPreferences.self, from: data)
+        else {
+            return isCritical ? .airHornBlast : .systemDefault
+        }
+
+        return isCritical ? preferences.criticalDispatchAlertTone : preferences.dispatchAlertTone
     }
 
     private func makeDispatchPayload(
