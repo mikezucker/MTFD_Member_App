@@ -1,5 +1,63 @@
 import Foundation
 
+enum DispatchUnitFilter {
+    static func visibleRespondingUnits(from units: [String]) -> [String] {
+        units.filter { unit in
+            let normalized = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            guard !normalized.isEmpty else { return false }
+
+            let blockedUnits = [
+                "hq",
+                "oem",
+                "station",
+                "station 1",
+                "station 2",
+                "station 3",
+                "station 4",
+                "station 5"
+            ]
+
+            if blockedUnits.contains(normalized) { return false }
+            if normalized.hasPrefix("station ") { return false }
+
+            return true
+        }
+    }
+}
+
+extension APIClient.ActiveDispatch {
+    var isVisibleActiveDispatch: Bool {
+        if isClosed == true {
+            return false
+        }
+
+        if let status,
+           status.range(of: "closed", options: .caseInsensitive) != nil ||
+            status.range(of: "clear", options: .caseInsensitive) != nil ||
+            status.range(of: "complete", options: .caseInsensitive) != nil ||
+            status.range(of: "cancel", options: .caseInsensitive) != nil {
+            return false
+        }
+
+        guard let latestTimestamp = [lastActivityAt, dispatchedAt]
+            .compactMap({ $0 })
+            .max() else {
+            return false
+        }
+
+        return Date().timeIntervalSince(latestTimestamp) <= 90 * 60
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
+        }
+    }
+}
+
 final class APIClient {
     static let shared = APIClient()
 
@@ -25,6 +83,20 @@ final class APIClient {
 
     private var baseURL: String {
         environment.baseURL
+    }
+
+    func absoluteURL(from pathOrURL: String?) -> URL? {
+        guard let rawValue = pathOrURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return nil
+        }
+
+        if let url = URL(string: rawValue), url.scheme != nil {
+            return url
+        }
+
+        let normalizedPath = rawValue.hasPrefix("/") ? rawValue : "/\(rawValue)"
+        return URL(string: baseURL + normalizedPath)
     }
 
     // MARK: - Auth
@@ -77,6 +149,12 @@ final class APIClient {
         }
 
         if requiresAuth {
+            if authToken?.isEmpty != false,
+               let savedToken = KeychainService.shared.loadToken(),
+               !savedToken.isEmpty {
+                authToken = savedToken
+            }
+
             guard let token = authToken, !token.isEmpty else {
                 throw APIError.missingAuthToken
             }
@@ -192,9 +270,18 @@ final class APIClient {
             }
         }
 
-        if let rawString = String(data: data, encoding: .utf8),
-           !rawString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return rawString
+        if let rawString = String(data: data, encoding: .utf8) {
+            let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                return nil
+            }
+
+            let lowercased = trimmed.lowercased()
+            if lowercased.hasPrefix("<!doctype html") || lowercased.hasPrefix("<html") {
+                return nil
+            }
+
+            return String(trimmed.prefix(300))
         }
 
         return nil
@@ -236,6 +323,172 @@ final class APIClient {
             throw error
         }
     }
+
+    func updateTrainingProgress(
+        courseId: String,
+        request payload: TrainingProgressUpdateRequest
+    ) async throws -> TrainingProgressUpdateResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)/progress",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingProgressUpdateResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func fetchTrainingManageCourses() async throws -> MobileTrainingManageCoursesResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training/manage/courses",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileTrainingManageCoursesResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+
+    func createTrainingCourse(
+        request payload: CreateTrainingCourseRequest
+    ) async throws -> CreateTrainingCourseResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/manage/courses",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(CreateTrainingCourseResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateTrainingCourse(
+        courseId: String,
+        request payload: UpdateTrainingCourseRequest
+    ) async throws -> TrainingMutationResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)",
+            method: "PATCH",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingMutationResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func deleteTrainingCourse(courseId: String) async throws -> TrainingMutationResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingMutationResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func uploadTrainingContent(
+        data: Data,
+        fileName: String,
+        mimeType: String
+    ) async throws -> TrainingUploadResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n")
+        body.append("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+
+        var request = try makeRequest(
+            path: "/api/mobile/training/uploads",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingUploadResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func assignTrainingCourse(
+        courseId: String,
+        request payload: AssignTrainingCourseRequest
+    ) async throws -> AssignTrainingCourseResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)/assignments",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(AssignTrainingCourseResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     
     // MARK: - Session Helpers
 
@@ -249,6 +502,10 @@ final class APIClient {
 
     func clearSession() {
         authToken = nil
+        KeychainService.shared.deleteToken()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .didInvalidateSession, object: nil)
+        }
     }
     
 
@@ -328,6 +585,43 @@ final class APIClient {
         }
     }
 
+    func fetchMobileAdminUsers() async throws -> MobileAdminUsersResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/admin/users",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileAdminUsersResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateMobileAdminUser(_ payload: MobileAdminUserUpdateRequest) async throws -> MobileAdminUserUpdateResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/admin/users",
+            method: "PATCH",
+            body: try encode(payload),
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileAdminUserUpdateResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     func fetchNotificationPreferences() async throws -> NotificationPreferencesResponse {
         let request = try makeRequest(
             path: "/api/mobile/notification-preferences",
@@ -338,9 +632,6 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(NotificationPreferencesResponse.self, from: data)
-        } catch APIError.unauthorized {
-            clearSession()
-            throw APIError.sessionExpired
         } catch {
             throw error
         }
@@ -359,6 +650,42 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(NotificationPreferencesResponse.self, from: data)
+        } catch {
+            throw error
+        }
+    }
+
+    func fetchUniforms() async throws -> MobileUniformsResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/uniforms",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileUniformsResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func submitUniformRequest(_ payload: UniformRequestSubmissionRequest) async throws -> MobileUniformsResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/uniforms",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileUniformsResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -386,6 +713,63 @@ final class APIClient {
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    // MARK: - Documents
+
+    func fetchDocuments() async throws -> MobileDocumentsResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/documents",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileDocumentsResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func downloadDocumentVersion(versionId: String) async throws -> Data {
+        let request = try makeRequest(
+            path: "/api/mobile/documents/version/\(versionId)/file",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            return try await performRequest(request)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func acknowledgeDocumentVersion(versionId: String, password: String) async throws -> MobileDocumentAcknowledgementResponse {
+        let payload = MobileDocumentAcknowledgementRequest(password: password)
+        let body = try encode(payload)
+        let request = try makeRequest(
+            path: "/api/mobile/documents/version/\(versionId)/acknowledge",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileDocumentAcknowledgementResponse.self, from: data)
+        } catch APIError.unauthorized {
+            throw APIError.serverError(statusCode: 401, message: "Incorrect password.")
         } catch {
             throw error
         }
@@ -449,14 +833,36 @@ final class APIClient {
         }
     }
 
+    func deleteMessage(id: String) async throws -> DeleteMessageResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/messages/\(id)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(DeleteMessageResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
 
     func createCommandMessage(
         title: String,
-        body: String?,
+        body: String,
         audience: String,
         priority: String = "NORMAL",
         type: String,
-        actionType: String = "NONE"
+        stationNumberTarget: Int? = nil,
+        expiresAt: String? = nil,
+        isPinned: Bool = false,
+        linkUrl: String? = nil,
+        linkLabel: String? = nil
     ) async throws -> CreateCommandMessageResponse {
         let payload = CreateCommandMessageRequest(
             title: title,
@@ -464,11 +870,15 @@ final class APIClient {
             audience: audience,
             priority: priority,
             type: type,
-            actionType: actionType
+            stationNumberTarget: stationNumberTarget,
+            expiresAt: expiresAt,
+            isPinned: isPinned,
+            linkUrl: linkUrl,
+            linkLabel: linkLabel
         )
 
         let request = try makeRequest(
-            path: "/api/mobile/command/messages",
+            path: "/api/mobile/messages",
             method: "POST",
             body: try encode(payload),
             requiresAuth: true
@@ -534,7 +944,15 @@ final class APIClient {
 
         do {
             let data = try await performRequest(request)
-            return try decode(DispatchHistoryResponse.self, from: data)
+            let response = try decode(DispatchHistoryResponse.self, from: data)
+            return DispatchHistoryResponse(
+                success: response.success,
+                window: response.window,
+                fetchedAt: response.fetchedAt,
+                sourceLabel: response.sourceLabel,
+                activeDispatches: response.activeDispatches.filter(\.isVisibleActiveDispatch),
+                historicalDispatches: response.historicalDispatches
+            )
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -559,6 +977,38 @@ final class APIClient {
 
         let request = try makeRequest(
             path: "/api/mobile/live-activities/push-to-start/register",
+            method: "POST",
+            body: data,
+            requiresAuth: true
+        )
+
+        _ = try await performRequest(request)
+    }
+
+    func recordDispatchPushReceipt(
+        dispatchId: String,
+        event: String,
+        notificationType: String,
+        deviceToken: String?
+    ) async throws {
+        struct Body: Encodable {
+            let dispatchId: String
+            let event: String
+            let notificationType: String
+            let deviceToken: String?
+        }
+
+        let data = try JSONEncoder().encode(
+            Body(
+                dispatchId: dispatchId,
+                event: event,
+                notificationType: notificationType,
+                deviceToken: deviceToken
+            )
+        )
+
+        let request = try makeRequest(
+            path: "/api/mobile/push/receipt",
             method: "POST",
             body: data,
             requiresAuth: true
@@ -673,16 +1123,44 @@ extension APIClient {
 
     struct CreateCommandMessageRequest: Encodable {
         let title: String
-        let body: String?
+        let body: String
         let audience: String
         let priority: String
         let type: String
-        let actionType: String
+        let stationNumberTarget: Int?
+        let expiresAt: String?
+        let isPinned: Bool
+        let linkUrl: String?
+        let linkLabel: String?
+    }
+
+    struct MobileAdminUserUpdateRequest: Encodable {
+        let id: String
+        let role: String
+        let status: String
+        let company: String?
+        let reportsToUserId: String?
+        let badgeNumber: String?
+        let stationMessageDelegate: Bool?
+        let attributeIds: [String]?
     }
 
     struct MemberAccessRequest: Encodable {
         let email: String
         let type: String
+    }
+
+    struct UniformRequestSubmissionRequest: Encodable {
+        let comments: String?
+        let replacementAcknowledged: Bool
+        let items: [UniformRequestSubmissionItem]
+    }
+
+    struct UniformRequestSubmissionItem: Encodable {
+        let sectionId: String
+        let style: String
+        let quantity: Int
+        let size: String
     }
 }
 
@@ -716,6 +1194,17 @@ extension APIClient {
         let email: String?
         let phone: String?
         let attributes: [String]?
+        let permissions: MobileMemberPermissions?
+
+        var canPostStationMessages: Bool {
+            permissions?.canPostStationMessages == true
+        }
+
+        var canManageUsers: Bool {
+            permissions?.canManageReporting == true
+                || role == "OFFICER_CAREER"
+                || isFireHeadquarters
+        }
 
         var isReliefDriver: Bool {
             attributes?.contains { attribute in
@@ -728,6 +1217,130 @@ extension APIClient {
                 return normalized == "RELIEF_DRIVER"
                     || normalized == "RELIEFDRIVER"
             } == true
+        }
+
+        var isFireHeadquarters: Bool {
+            let normalized = (company ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+
+            return normalized == "FIRE_HQ"
+                || normalized == "HQ"
+                || normalized == "FIRE_HEADQUARTERS"
+        }
+
+        var canAccessUniforms: Bool {
+            role == "MEMBER_CAREER"
+                || role == "OFFICER_CAREER"
+                || isFireHeadquarters
+                || isReliefDriver
+        }
+    }
+
+    struct MobileMemberPermissions: Decodable {
+        let canPostStationMessages: Bool?
+        let canManageReporting: Bool?
+    }
+
+    struct MobileAdminUsersResponse: Decodable {
+        let success: Bool
+        let canEditDepartmentRoles: Bool
+        let attributes: [MobileAdminAttribute]?
+        let users: [MobileAdminUser]
+    }
+
+    struct MobileAdminUserUpdateResponse: Decodable {
+        let success: Bool
+        let user: MobileAdminUser
+    }
+
+    struct MobileAdminAttribute: Decodable, Identifiable, Equatable {
+        let id: String
+        let name: String
+        let slug: String
+        let description: String?
+        let isActive: Bool
+    }
+
+    struct MobileAdminUser: Decodable, Identifiable, Equatable {
+        let id: String
+        let email: String
+        let name: String?
+        let phone: String?
+        let role: String
+        let status: String
+        let company: String?
+        let badgeNumber: String?
+        let reportsToUserId: String?
+        let attributes: [MobileAdminAttribute]?
+        let canPostStationMessages: Bool?
+        let stationMessageDelegate: Bool?
+        let updatedAt: String?
+
+        var displayName: String {
+            let trimmedName = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedName.isEmpty ? email : trimmedName
+        }
+
+        var searchableText: String {
+            [
+                name,
+                email,
+                phone,
+                roleLabel,
+                companyLabel,
+                badgeNumber,
+                attributes?.map(\.name).joined(separator: " ")
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        }
+
+        var roleLabel: String {
+            APIClient.MobileAdminUser.roleLabel(for: role)
+        }
+
+        var roleEmoji: String {
+            switch role {
+            case "ADMIN": return "🛠️"
+            case "CHIEF", "BATTALION_CHIEF": return "🛡️"
+            case "OFFICER_CAREER", "OFFICER_VOLUNTEER": return "🚒"
+            case "MEMBER_CAREER", "MEMBER_VOLUNTEER": return "👤"
+            default: return "👥"
+            }
+        }
+
+        var companyLabel: String {
+            APIClient.MobileAdminUser.companyLabel(for: company)
+        }
+
+        static func roleLabel(for role: String) -> String {
+            switch role {
+            case "ADMIN": return "Admin"
+            case "CHIEF": return "Chief"
+            case "BATTALION_CHIEF": return "Battalion Chief"
+            case "OFFICER_CAREER": return "Officer (Career)"
+            case "OFFICER_VOLUNTEER": return "Officer (Volunteer)"
+            case "MEMBER_CAREER": return "Member (Career)"
+            case "MEMBER_VOLUNTEER": return "Member (Volunteer)"
+            default: return role
+            }
+        }
+
+        static func companyLabel(for company: String?) -> String {
+            switch company {
+            case "MT_KEMBLE": return "Mt. Kemble Fire Company (Station 1)"
+            case "COLLINSVILLE": return "Collinsville Fire Company (Station 2)"
+            case "HILLSIDE": return "Hillside Fire Company (Station 3)"
+            case "FAIRCHILD": return "Fairchild Fire Company (Station 4)"
+            case "WOODLAND": return "Woodland Fire Company (Station 5)"
+            case "FIRE_HQ": return "Fire Headquarters"
+            case .some(let value): return value
+            case .none: return "No company assigned"
+            }
         }
     }
 
@@ -743,6 +1356,65 @@ extension APIClient {
         let publishedAt: String?
     }
 
+    struct MobileUniformsResponse: Decodable {
+        let success: Bool
+        let canSubmit: Bool
+        let memberType: String?
+        let badgeNumber: String?
+        let catalog: [UniformCatalogSection]
+        let requests: [UniformRequest]
+        let request: UniformRequest?
+        let error: String?
+    }
+
+    struct UniformCatalogSection: Decodable, Identifiable {
+        let id: String
+        let title: String
+        let note: String
+        let items: [UniformCatalogItem]
+    }
+
+    struct UniformCatalogItem: Decodable, Identifiable {
+        let style: String
+        let description: String
+
+        var id: String { style }
+    }
+
+    struct UniformRequest: Decodable, Identifiable {
+        let id: String
+        let referenceCode: String
+        let memberType: String
+        let badgeNumber: String?
+        let comments: String?
+        let totalItems: Int
+        let status: String
+        let statusLabel: String
+        let reviewNote: String?
+        let requestedAt: Date?
+        let reviewedAt: Date?
+        let updatedAt: Date?
+        let assignedTo: UniformRequestPerson?
+        let reviewedBy: UniformRequestPerson?
+        let items: [UniformRequestItem]
+    }
+
+    struct UniformRequestPerson: Decodable {
+        let id: String
+        let name: String?
+        let email: String?
+    }
+
+    struct UniformRequestItem: Decodable, Identifiable {
+        let id: String
+        let sectionId: String
+        let sectionTitle: String
+        let style: String
+        let description: String
+        let quantity: Int
+        let size: String
+    }
+
     struct DashboardResponse: Decodable {
         let success: Bool?
         let member: Member?
@@ -750,6 +1422,7 @@ extension APIClient {
         let latestUpdates: [LatestUpdate]?
         let trainingSummary: TrainingSummary?
         let assignedTrainingPreview: [DashboardTrainingPreviewItem]?
+        let volunteerContext: VolunteerContext?
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
@@ -762,9 +1435,34 @@ extension APIClient {
         let departmentUpdates: [DashboardUpdate]?
         let apparatusWorkOrders: [ApparatusWorkOrder]?
         let apparatusWorkOrdersMessage: String?
+        let historicalDispatches: [DispatchHistoryItem]?
         let notesConfigured: Bool?
         let notesMessage: String?
         let error: String?
+    }
+
+    struct VolunteerContext: Decodable {
+        let company: String?
+        let station: String?
+        let officer: VolunteerOfficer?
+        let apparatus: VolunteerApparatus?
+        let stationApparatus: [VolunteerApparatus]?
+    }
+
+    struct VolunteerOfficer: Decodable {
+        let id: String?
+        let name: String?
+        let email: String?
+        let phone: String?
+        let role: String?
+    }
+
+    struct VolunteerApparatus: Decodable {
+        let displayName: String?
+        let station: String?
+        let dispatchUnitIds: String?
+        let apparatusApiId: String?
+        let unitId: String?
     }
 
     struct ApparatusWorkOrder: Decodable, Identifiable {
@@ -788,8 +1486,11 @@ extension APIClient {
         let message: String?
         let units: [String]
         let dispatchedAt: Date?
+        let lastActivityAt: Date?
         let priority: String?
         let isWorkingFire: Bool?
+        let status: String?
+        let isClosed: Bool?
     }
 
     struct MessageSummary: Decodable {
@@ -851,17 +1552,72 @@ extension APIClient {
         let updatedAt: String?
     }
 
-    struct DispatchStatsResponse: Decodable {
+    struct MobileDocumentsResponse: Decodable {
+        let success: Bool
+        let folders: [MobileDocumentFolder]
+        let documents: [MobileDocument]
+        let error: String?
+    }
+
+    struct MobileDocumentFolder: Decodable, Identifiable {
+        let id: String
+        let name: String
+        let parentId: String?
+    }
+
+    struct MobileDocument: Decodable, Identifiable {
+        let id: String
+        let title: String
+        let description: String?
+        let category: String
+        let folderId: String?
+        let updatedAt: Date?
+        let latestVersion: MobileDocumentVersion?
+    }
+
+    struct MobileDocumentVersion: Decodable, Identifiable {
+        let id: String
+        let version: Int
+        let fileName: String
+        let mimeType: String
+        let sizeBytes: Int
+        let publishedAt: Date?
+        let assigned: Bool
+        let acknowledgedAt: Date?
+        let requiresAcknowledgement: Bool
+    }
+
+    private struct MobileDocumentAcknowledgementRequest: Encodable {
+        let password: String
+    }
+
+    struct MobileDocumentAcknowledgementResponse: Decodable {
+        let success: Bool
+        let acknowledgedAt: Date?
+        let error: String?
+    }
+
+    struct DispatchStatsResponse: Codable {
         let success: Bool?
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
+        let stations: ChiefStationStats?
         let lastUpdated: String?
         let sourceLabel: String?
         let message: String?
     }
 
-    struct DispatchStats: Decodable {
+    struct ChiefStationStats: Codable {
+        let all: DispatchBucket?
+        let station1: DispatchBucket?
+        let station2: DispatchBucket?
+        let station3: DispatchBucket?
+        let station4: DispatchBucket?
+        let station5: DispatchBucket?
+    }
+
+    struct DispatchStats: Codable {
         let department24h: Int?
         let department7d: Int?
         let department30d: Int?
@@ -872,7 +1628,7 @@ extension APIClient {
         let stationYtd: Int?
     }
 
-    struct DispatchBucket: Decodable {
+    struct DispatchBucket: Codable {
         let total24h: Int?
         let total7d: Int?
         let total30d: Int?
@@ -885,6 +1641,10 @@ extension APIClient {
         let ems7d: Int?
         let ems30d: Int?
         let emsYtd: Int?
+        let other24h: Int?
+        let other7d: Int?
+        let other30d: Int?
+        let otherYtd: Int?
     }
 
     struct DispatchHistoryResponse: Decodable {

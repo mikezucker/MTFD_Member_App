@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 struct MoreView: View {
@@ -6,13 +7,11 @@ struct MoreView: View {
 
     var body: some View {
         NavigationStack {
-            AppScreen(title: "More") {
-                AppDetailHeader(
-                    title: "More",
-                    subtitle: "Settings, profile, and additional tools.",
-                    systemImage: "gearshape.fill"
-                )
-
+            AppScreen(
+                title: "More",
+                subtitle: "Settings, profile, and additional tools.",
+                systemImage: "ellipsis.circle.fill"
+            ) {
                 ScrollView {
                     VStack(spacing: 18) {
                         if let member = sessionManager.currentUser {
@@ -27,34 +26,60 @@ struct MoreView: View {
 
                         VStack(spacing: 12) {
                             NavigationLink {
+                                MessageCenterView(mode: .combined)
+                            } label: {
+                                    menuRow(
+                                        title: "Messages",
+                                        subtitle: "Dispatches, department messages, and announcements",
+                                        emoji: "📬"
+                                    )
+                            }
+                            .buttonStyle(.plain)
+
+                            NavigationLink {
                                 ScheduleView()
                             } label: {
-                                menuRow(
-                                    title: "Schedule",
-                                    subtitle: "Today’s FirstDue staffing and assignments",
-                                    systemImage: "calendar.badge.clock"
-                                )
+                                    menuRow(
+                                        title: "Schedule",
+                                        subtitle: "Today’s FirstDue staffing and assignments",
+                                        emoji: "📅"
+                                    )
                             }
                             .buttonStyle(.plain)
-                            NavigationLink {
-                                UniformsView()
-                            } label: {
-                                menuRow(
-                                    title: "Uniforms",
-                                    subtitle: "Uniform requests and gear information",
-                                    systemImage: "tshirt.fill"
-                                )
+                            if sessionManager.currentUser?.canAccessUniforms == true {
+                                NavigationLink {
+                                    UniformsView()
+                                } label: {
+                                    menuRow(
+                                        title: "Uniforms",
+                                        subtitle: "Uniform requests and gear information",
+                                        emoji: "👕"
+                                    )
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
+
+                            if sessionManager.currentUser?.canManageUsers == true {
+                                NavigationLink {
+                                    UserAdminView()
+                                } label: {
+                                    menuRow(
+                                        title: "User Admin",
+                                        subtitle: "Review members and update reporting details",
+                                        emoji: "👥"
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
                             
                             NavigationLink {
                                 SettingsView()
                             } label: {
-                                menuRow(
-                                    title: "Settings",
-                                    subtitle: "Notification filters and app preferences",
-                                    systemImage: "gearshape.fill"
-                                )
+                                    menuRow(
+                                        title: "Settings",
+                                        subtitle: "Notification filters and app preferences",
+                                        emoji: "⚙️"
+                                    )
                             }
                             .buttonStyle(.plain)
                         }
@@ -115,9 +140,7 @@ struct MoreView: View {
 
     private func profileCard(member: APIClient.Member) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 46))
-                .foregroundStyle(AppTheme.gold)
+            emojiBadge("👤", size: 54, fontSize: 30)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(member.name)
@@ -154,13 +177,10 @@ struct MoreView: View {
     private func menuRow(
         title: String,
         subtitle: String,
-        systemImage: String
+        emoji: String
     ) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(AppTheme.gold)
-                .frame(width: 28)
+            emojiBadge(emoji)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -181,6 +201,14 @@ struct MoreView: View {
         .padding()
         .background(Color.white.opacity(0.09))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func emojiBadge(_ emoji: String, size: CGFloat = 42, fontSize: CGFloat = 24) -> some View {
+        Text(emoji)
+            .font(.system(size: fontSize))
+            .frame(width: size, height: size)
+            .background(AppTheme.gold.opacity(0.15))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     private func sendTestPush() async {
@@ -222,4 +250,428 @@ struct MoreView: View {
         }
     }
     
+}
+
+private struct UserAdminView: View {
+    @StateObject private var viewModel = UserAdminViewModel()
+    @State private var searchText = ""
+    @State private var selectedUser: APIClient.MobileAdminUser?
+
+    private var filteredUsers: [APIClient.MobileAdminUser] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return viewModel.users }
+        return viewModel.users.filter { $0.searchableText.contains(query) }
+    }
+
+    var body: some View {
+        AppScreen(
+            title: "User Admin",
+            subtitle: "Member roles, reporting, and station assignments.",
+            systemImage: "person.2.fill"
+        ) {
+            ScrollView {
+                VStack(spacing: 16) {
+                    if viewModel.isLoading && viewModel.users.isEmpty {
+                        ProgressView()
+                            .tint(AppTheme.gold)
+                            .padding(.top, 40)
+                    } else if let errorMessage = viewModel.errorMessage, viewModel.users.isEmpty {
+                        VStack(spacing: 12) {
+                            Text(errorMessage)
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.72))
+                                .multilineTextAlignment(.center)
+
+                            Button("Retry") {
+                                Task { await viewModel.loadUsers() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(AppTheme.gold)
+                        }
+                        .padding(24)
+                    } else {
+                        searchField
+
+                        LazyVStack(spacing: 10) {
+                            ForEach(filteredUsers) { user in
+                                Button {
+                                    selectedUser = user
+                                } label: {
+                                    UserAdminRow(user: user)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 24)
+
+                        if filteredUsers.isEmpty {
+                            Text("No users match that search.")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.65))
+                                .padding(.top, 20)
+                        }
+                    }
+                }
+                .padding(.top, 20)
+                .padding(.bottom, 30)
+            }
+            .refreshable {
+                await viewModel.loadUsers()
+            }
+        }
+        .task {
+            await viewModel.loadUsers()
+        }
+        .sheet(item: $selectedUser) { user in
+            UserAdminEditView(
+                user: user,
+                users: viewModel.users,
+                attributes: viewModel.attributes,
+                canEditDepartmentRoles: viewModel.canEditDepartmentRoles
+            ) { payload in
+                try await viewModel.save(payload)
+            }
+        }
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.white.opacity(0.52))
+
+            TextField("Search users", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .foregroundColor(.white)
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 24)
+    }
+}
+
+@MainActor
+private final class UserAdminViewModel: ObservableObject {
+    @Published var users: [APIClient.MobileAdminUser] = []
+    @Published var attributes: [APIClient.MobileAdminAttribute] = []
+    @Published var canEditDepartmentRoles = false
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+
+    func loadUsers() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            let response = try await APIClient.shared.fetchMobileAdminUsers()
+            users = response.users
+            attributes = response.attributes ?? []
+            canEditDepartmentRoles = response.canEditDepartmentRoles
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func save(_ payload: APIClient.MobileAdminUserUpdateRequest) async throws -> APIClient.MobileAdminUser {
+        let response = try await APIClient.shared.updateMobileAdminUser(payload)
+        if let index = users.firstIndex(where: { $0.id == response.user.id }) {
+            users[index] = response.user
+        }
+        return response.user
+    }
+}
+
+private struct UserAdminRow: View {
+    let user: APIClient.MobileAdminUser
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(user.roleEmoji)
+                .font(.system(size: 24))
+                .frame(width: 42, height: 42)
+                .background(AppTheme.gold.opacity(0.15))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(user.displayName)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                Text(user.roleLabel)
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.68))
+
+                Text(user.companyLabel)
+                    .font(.caption2)
+                    .foregroundColor(.white.opacity(0.52))
+                    .lineLimit(1)
+
+                if let attributes = user.attributes, !attributes.isEmpty {
+                    Text(attributes.map(\.name).joined(separator: ", "))
+                        .font(.caption2)
+                        .foregroundColor(AppTheme.gold.opacity(0.85))
+                        .lineLimit(1)
+                } else if user.canPostStationMessages == true {
+                    Text("Can send station messages")
+                        .font(.caption2)
+                        .foregroundColor(AppTheme.gold.opacity(0.85))
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(user.status == "ACTIVE" ? "Active" : "Suspended")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(user.status == "ACTIVE" ? .green : .orange)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.42))
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.09))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+private struct UserAdminEditView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let user: APIClient.MobileAdminUser
+    let users: [APIClient.MobileAdminUser]
+    let attributes: [APIClient.MobileAdminAttribute]
+    let canEditDepartmentRoles: Bool
+    let onSave: (APIClient.MobileAdminUserUpdateRequest) async throws -> APIClient.MobileAdminUser
+
+    @State private var role: String
+    @State private var status: String
+    @State private var company: String?
+    @State private var reportsToUserId: String?
+    @State private var badgeNumber: String
+    @State private var stationMessageDelegate: Bool
+    @State private var selectedAttributeIds: Set<String>
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    init(
+        user: APIClient.MobileAdminUser,
+        users: [APIClient.MobileAdminUser],
+        attributes: [APIClient.MobileAdminAttribute],
+        canEditDepartmentRoles: Bool,
+        onSave: @escaping (APIClient.MobileAdminUserUpdateRequest) async throws -> APIClient.MobileAdminUser
+    ) {
+        self.user = user
+        self.users = users
+        self.attributes = attributes
+        self.canEditDepartmentRoles = canEditDepartmentRoles
+        self.onSave = onSave
+        _role = State(initialValue: user.role)
+        _status = State(initialValue: user.status)
+        _company = State(initialValue: user.company)
+        _reportsToUserId = State(initialValue: user.reportsToUserId)
+        _badgeNumber = State(initialValue: user.badgeNumber ?? "")
+        _stationMessageDelegate = State(initialValue: user.stationMessageDelegate == true)
+        _selectedAttributeIds = State(initialValue: Set(user.attributes?.map(\.id) ?? []))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Member") {
+                    LabeledContent("Name", value: user.displayName)
+                    LabeledContent("Email", value: user.email)
+                    if let phone = user.phone, !phone.isEmpty {
+                        LabeledContent("Phone", value: phone)
+                    }
+                }
+
+                Section("Access") {
+                    Picker("Role / member type", selection: $role) {
+                        ForEach(roleOptions, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+                    .disabled(!canEditDepartmentRoles)
+
+                    Picker("Status", selection: $status) {
+                        Text("Active").tag("ACTIVE")
+                        Text("Suspended").tag("SUSPENDED")
+                    }
+                }
+
+                Section("Assignment") {
+                    Picker("Company", selection: $company) {
+                        Text("No company assigned").tag(nil as String?)
+                        ForEach(companyOptions, id: \.value) { option in
+                            Text(option.label).tag(option.value as String?)
+                        }
+                    }
+
+                    Picker("Reports to", selection: $reportsToUserId) {
+                        Text("No manager").tag(nil as String?)
+                        ForEach(managerOptions, id: \.id) { manager in
+                            Text("\(manager.displayName) (\(manager.roleLabel))")
+                                .tag(manager.id as String?)
+                        }
+                    }
+
+                    TextField("Badge #", text: $badgeNumber)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
+                }
+
+                Section("Delegates") {
+                    Toggle("Can Send Station Messages", isOn: $stationMessageDelegate)
+                        .onChange(of: stationMessageDelegate) { _, isEnabled in
+                            guard let stationDelegateAttributeId else { return }
+                            if isEnabled {
+                                selectedAttributeIds.insert(stationDelegateAttributeId)
+                            } else {
+                                selectedAttributeIds.remove(stationDelegateAttributeId)
+                            }
+                        }
+
+                    if stationMessageDelegate && company == nil {
+                        Text("Assign a company before saving a station message delegate.")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
+
+                if !attributes.isEmpty {
+                    Section("Member Attributes") {
+                        ForEach(attributes.filter { $0.isActive }) { attribute in
+                            Toggle(isOn: attributeBinding(attribute.id)) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(attribute.name)
+                                    if let description = attribute.description, !description.isEmpty {
+                                        Text(description)
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundColor(.red)
+                    }
+                }
+            }
+            .navigationTitle("Edit User")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSaving ? "Saving" : "Save") {
+                        Task { await save() }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+        }
+    }
+
+    private var managerOptions: [APIClient.MobileAdminUser] {
+        users
+            .filter { $0.id != user.id && $0.status == "ACTIVE" }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+    }
+
+    private var roleOptions: [(value: String, label: String)] {
+        let allOptions = [
+            ("ADMIN", "Admin"),
+            ("CHIEF", "Chief"),
+            ("BATTALION_CHIEF", "Battalion Chief"),
+            ("OFFICER_CAREER", "Officer (Career)"),
+            ("OFFICER_VOLUNTEER", "Officer (Volunteer)"),
+            ("MEMBER_CAREER", "Member (Career)"),
+            ("MEMBER_VOLUNTEER", "Member (Volunteer)")
+        ]
+
+        if canEditDepartmentRoles {
+            return allOptions
+        }
+
+        return allOptions.filter { option in
+            option.0 == "OFFICER_VOLUNTEER"
+                || option.0 == "MEMBER_CAREER"
+                || option.0 == "MEMBER_VOLUNTEER"
+        }
+    }
+
+    private var companyOptions: [(value: String, label: String)] {
+        [
+            ("MT_KEMBLE", "Mt. Kemble Fire Company (Station 1)"),
+            ("COLLINSVILLE", "Collinsville Fire Company (Station 2)"),
+            ("HILLSIDE", "Hillside Fire Company (Station 3)"),
+            ("FAIRCHILD", "Fairchild Fire Company (Station 4)"),
+            ("WOODLAND", "Woodland Fire Company (Station 5)"),
+            ("FIRE_HQ", "Fire Headquarters")
+        ]
+    }
+
+    private var stationDelegateAttributeId: String? {
+        attributes.first { attribute in
+            attribute.slug == "station_message_delegate"
+        }?.id
+    }
+
+    private func attributeBinding(_ attributeId: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedAttributeIds.contains(attributeId) },
+            set: { isSelected in
+                if isSelected {
+                    selectedAttributeIds.insert(attributeId)
+                } else {
+                    selectedAttributeIds.remove(attributeId)
+                }
+
+                if attributeId == stationDelegateAttributeId {
+                    stationMessageDelegate = isSelected
+                }
+            }
+        )
+    }
+
+    private func save() async {
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        let payload = APIClient.MobileAdminUserUpdateRequest(
+            id: user.id,
+            role: role,
+            status: status,
+            company: company,
+            reportsToUserId: reportsToUserId,
+            badgeNumber: badgeNumber.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? nil
+                : badgeNumber.trimmingCharacters(in: .whitespacesAndNewlines),
+            stationMessageDelegate: stationMessageDelegate,
+            attributeIds: Array(selectedAttributeIds)
+        )
+
+        do {
+            _ = try await onSave(payload)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 }

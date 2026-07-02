@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class MessageCenterViewModel: ObservableObject {
     @Published var messages: [MobileMessage] = []
+    @Published var manageableMessages: [MobileMessage] = []
     @Published var unreadCount: Int = 0
     @Published var activeDispatches: [APIClient.ActiveDispatch] = []
     @Published var historicalDispatches: [APIClient.DispatchHistoryItem] = []
@@ -68,16 +69,15 @@ final class MessageCenterViewModel: ObservableObject {
 
         do {
             async let messagesResponse = APIClient.shared.fetchMessages()
-            async let dashboardResponse = APIClient.shared.fetchDashboard()
             async let dispatchHistoryResponse = APIClient.shared.fetchDispatchHistory(window: selectedDispatchWindow)
 
             let resolvedMessages = try await messagesResponse
-            let resolvedDashboard = try await dashboardResponse
             let resolvedDispatchHistory = try await dispatchHistoryResponse
 
             messages = resolvedMessages.messages
+            manageableMessages = resolvedMessages.manageableMessages ?? resolvedMessages.messages.filter { $0.canDelete == true }
             unreadCount = resolvedMessages.unreadCount
-            activeDispatches = resolvedDashboard.activeDispatches ?? resolvedDispatchHistory.activeDispatches
+            activeDispatches = resolvedDispatchHistory.activeDispatches
             historicalDispatches = resolvedDispatchHistory.historicalDispatches
 
             pruneOldReadDispatchIds()
@@ -123,6 +123,20 @@ final class MessageCenterViewModel: ObservableObject {
         isLoadingDispatchHistory = false
     }
 
+    func refreshActiveDispatches() async {
+        do {
+            let response = try await APIClient.shared.fetchDispatchHistory(window: selectedDispatchWindow)
+
+            activeDispatches = response.activeDispatches
+            historicalDispatches = response.historicalDispatches
+
+            pruneOldReadDispatchIds()
+            updateBadgeCount()
+        } catch {
+            print("Message Center dispatch refresh failed: \(error.localizedDescription)")
+        }
+    }
+
     func markRead(_ message: MobileMessage) async {
         guard !message.isRead else {
             return
@@ -155,6 +169,54 @@ final class MessageCenterViewModel: ObservableObject {
 
     func refresh() async {
         await loadMessages(force: true)
+    }
+
+    func createMessage(
+        title: String,
+        body: String,
+        audience: String,
+        priority: String,
+        type: String,
+        stationNumberTarget: Int?,
+        isPinned: Bool
+    ) async throws {
+        let response = try await APIClient.shared.createCommandMessage(
+            title: title,
+            body: body,
+            audience: audience,
+            priority: priority,
+            type: type,
+            stationNumberTarget: stationNumberTarget,
+            isPinned: isPinned
+        )
+
+        messages.removeAll { $0.id == response.message.id }
+        messages.insert(response.message, at: 0)
+        manageableMessages.removeAll { $0.id == response.message.id }
+        manageableMessages.insert(response.message, at: 0)
+        unreadCount += response.message.isRead ? 0 : 1
+        updateBadgeCount()
+    }
+
+    func deleteMessage(_ message: MobileMessage) async {
+        do {
+            let response = try await APIClient.shared.deleteMessage(id: message.id)
+
+            if response.success {
+                messages.removeAll { $0.id == message.id }
+                manageableMessages.removeAll { $0.id == message.id }
+
+                if !message.isRead && unreadCount > 0 {
+                    unreadCount -= 1
+                }
+
+                updateBadgeCount()
+            } else {
+                errorMessage = response.error ?? "Unable to delete message."
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func updateBadgeCount() {

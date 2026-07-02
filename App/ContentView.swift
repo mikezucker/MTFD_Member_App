@@ -15,6 +15,9 @@ struct ContentView: View {
                 }
             } else if session.isLoggedIn {
                 MainTabView()
+                    .onAppear {
+                        NavigationRouter.shared.resetToHome()
+                    }
             } else {
                 LoginView()
             }

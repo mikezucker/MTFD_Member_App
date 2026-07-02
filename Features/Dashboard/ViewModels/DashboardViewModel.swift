@@ -7,7 +7,10 @@ final class DashboardViewModel: ObservableObject {
     @Published var activeDispatches: [APIClient.ActiveDispatch] = []
 
     private var hasLoaded = false
+    private var cachedVolunteerContext: APIClient.VolunteerContext?
     private var isLoadingDashboard = false
+    private var isRefreshingDispatchFeed = false
+    private var pendingForceRefresh = false
     private var lastLoadedAt: Date?
     private let minimumRefreshInterval: TimeInterval = 60
 
@@ -25,6 +28,10 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
+    func refreshAsync(role: UserRole) async {
+        await loadDashboard(role: role, force: true)
+    }
+
     func refreshIfStale(role: UserRole) {
         if let lastLoadedAt, Date().timeIntervalSince(lastLoadedAt) < minimumRefreshInterval {
             return
@@ -35,26 +42,41 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
-    func addActiveDispatch(from dispatch: DispatchNotificationPayload) {
-        let activeDispatch = APIClient.ActiveDispatch(
-            id: dispatch.id,
-            callType: dispatch.callType ?? dispatch.title,
-            address: dispatch.address,
-            address2: nil,
-            placeName: nil,
-            city: nil,
-            state: nil,
-            latitude: nil,
-            longitude: nil,
-            message: dispatch.address,
-            units: dispatch.units,
-            dispatchedAt: Date(),
-            priority: "HIGH",
-            isWorkingFire: isLikelyWorkingFire(dispatch)
-        )
+    func refreshAfterDispatchNotification(role: UserRole) {
+        Task {
+            await refreshActiveDispatchesAfterNotification(role: role)
+        }
+    }
 
-        activeDispatches.removeAll { $0.id == activeDispatch.id }
-        activeDispatches.insert(activeDispatch, at: 0)
+    func refreshDispatchFeed() async {
+        guard !isRefreshingDispatchFeed else { return }
+
+        isRefreshingDispatchFeed = true
+        defer {
+            isRefreshingDispatchFeed = false
+        }
+
+        do {
+            let dispatchHistory = try await APIClient.shared.fetchDispatchHistory(window: "24h")
+            activeDispatches = dispatchHistory.activeDispatches
+
+            logActiveDispatches(
+                sourceLabel: dispatchHistory.sourceLabel,
+                activeDispatches: dispatchHistory.activeDispatches
+            )
+        } catch {
+            print("Dispatch feed refresh failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func refreshActiveDispatchesAfterNotification(role: UserRole) async {
+        await loadDashboard(role: role, force: true)
+
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        await loadDashboard(role: role, force: true)
+
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        await loadDashboard(role: role, force: true)
     }
 
     private func timedDashboardRequest<T>(_ label: String, operation: () async throws -> T) async throws -> T {
@@ -72,7 +94,12 @@ final class DashboardViewModel: ObservableObject {
     }
 
     private func loadDashboard(role: UserRole, force: Bool) async {
-        guard !isLoadingDashboard else { return }
+        if isLoadingDashboard {
+            if force {
+                pendingForceRefresh = true
+            }
+            return
+        }
 
         let dashboardLoadStartedAt = Date()
         print("⏱️ Dashboard load started. force=\(force), role=\(role.rawValue)")
@@ -85,6 +112,14 @@ final class DashboardViewModel: ObservableObject {
         defer {
             isLoadingDashboard = false
             print("⏱️ Dashboard load finished in \(String(format: "%.2f", Date().timeIntervalSince(dashboardLoadStartedAt)))s")
+
+            if pendingForceRefresh {
+                pendingForceRefresh = false
+
+                Task {
+                    await loadDashboard(role: role, force: true)
+                }
+            }
         }
 
         state = DashboardState(
@@ -93,15 +128,19 @@ final class DashboardViewModel: ObservableObject {
             alerts: state.alerts,
             stationUpdates: state.stationUpdates,
             departmentUpdates: state.departmentUpdates,
+            messagePreviews: state.messagePreviews,
             attentionItems: state.attentionItems,
             quickActions: [],
             progressItems: state.progressItems,
             assignedTrainingPreview: state.assignedTrainingPreview,
             pendingDocumentSignatures: state.pendingDocumentSignatures,
+            pendingPolicyDocuments: state.pendingPolicyDocuments,
             stationCallTotal: state.stationCallTotal,
             departmentCallTotal: state.departmentCallTotal,
             dashboardDepartment: state.dashboardDepartment,
             dashboardStation: state.dashboardStation,
+            dashboardStations: state.dashboardStations,
+            volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
             lastUpdated: state.lastUpdated,
             recentDepartmentCalls: state.recentDepartmentCalls,
             apparatusWorkOrders: state.apparatusWorkOrders,
@@ -110,7 +149,7 @@ final class DashboardViewModel: ObservableObject {
             departmentScheduleEntries: state.departmentScheduleEntries,
             tomorrowScheduleEntries: state.tomorrowScheduleEntries,
             unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
-            isLoadingStats: true,
+            isLoadingStats: state.isLoadingStats,
             isLoading: true,
             errorMessage: nil
         )
@@ -119,16 +158,23 @@ final class DashboardViewModel: ObservableObject {
             async let dashboardResponse = timedDashboardRequest("mobile dashboard") {
                 try await APIClient.shared.fetchDashboard()
             }
-            async let dispatchHistoryResponse = timedDashboardRequest("dispatch history 24h") {
-                try await APIClient.shared.fetchDispatchHistory(window: "24h")
-            }
             async let upcomingScheduleResponse = timedDashboardRequest("upcoming schedule") {
                 try await APIClient.shared.fetchMobileUpcomingSchedule()
             }
             async let departmentScheduleEntriesResponse = fetchDepartmentScheduleOutlook()
+            async let pendingPolicyDocumentsResponse = fetchPendingPolicyDocuments()
 
             let dashboard = try await dashboardResponse
-            let dispatchHistory = try await dispatchHistoryResponse
+
+            let dispatchHistory: APIClient.DispatchHistoryResponse?
+            do {
+                dispatchHistory = try await timedDashboardRequest("dispatch history 7d") {
+                    try await APIClient.shared.fetchDispatchHistory(window: "7d")
+                }
+            } catch {
+                dispatchHistory = nil
+                print("🧨 Dispatch history failed:", error.localizedDescription)
+            }
 
             let upcomingSchedule: APIClient.MobileUpcomingScheduleResponse?
             do {
@@ -140,11 +186,28 @@ final class DashboardViewModel: ObservableObject {
             }
 
             let departmentScheduleEntries = await departmentScheduleEntriesResponse
+            let pendingPolicyDocuments = await pendingPolicyDocumentsResponse
 
-            activeDispatches = dashboard.activeDispatches ?? dispatchHistory.activeDispatches
+            let resolvedActiveDispatches =
+                dispatchHistory?.activeDispatches ??
+                dashboard.activeDispatches?.filter(\.isVisibleActiveDispatch) ??
+                []
+            let resolvedHistoricalDispatches =
+                dispatchHistory?.historicalDispatches ??
+                dashboard.historicalDispatches ??
+                []
 
-            let departmentYtd: Int? = nil
-            let stationYtd: Int? = nil
+            activeDispatches = resolvedActiveDispatches
+            logActiveDispatches(
+                sourceLabel: dispatchHistory?.sourceLabel ?? dashboard.sourceLabel,
+                activeDispatches: resolvedActiveDispatches
+            )
+
+            let resolvedVolunteerContext = mergedVolunteerContext(
+                incoming: dashboard.volunteerContext,
+                existing: cachedVolunteerContext ?? state.volunteerContext
+            )
+            cachedVolunteerContext = resolvedVolunteerContext
 
             state = DashboardState(
                 greeting: "Welcome",
@@ -152,34 +215,36 @@ final class DashboardViewModel: ObservableObject {
                 alerts: [],
                 stationUpdates: mapBulletins(from: dashboard.stationUpdates ?? []),
                 departmentUpdates: mapBulletins(from: dashboard.departmentUpdates ?? []),
+                messagePreviews: state.messagePreviews,
                 attentionItems: mapAttentionItems(from: dashboard.attentionItems ?? []),
                 quickActions: [],
                 progressItems: buildProgressItems(for: role, summary: dashboard.trainingSummary),
                 assignedTrainingPreview: mapTrainingPreview(from: dashboard.assignedTrainingPreview ?? []),
-                pendingDocumentSignatures: dashboard.trainingSummary?.pendingDocumentSignatures ?? 0,
-                stationCallTotal: stationYtd,
-                departmentCallTotal: departmentYtd,
-                dashboardDepartment: nil,
-                dashboardStation: nil,
+                pendingDocumentSignatures: pendingPolicyDocuments.isEmpty
+                    ? (dashboard.trainingSummary?.pendingDocumentSignatures ?? 0)
+                    : pendingPolicyDocuments.count,
+                pendingPolicyDocuments: pendingPolicyDocuments,
+                stationCallTotal: state.stationCallTotal,
+                departmentCallTotal: state.departmentCallTotal,
+                dashboardDepartment: state.dashboardDepartment,
+                dashboardStation: state.dashboardStation,
+                dashboardStations: state.dashboardStations,
+                volunteerContext: resolvedVolunteerContext,
                 lastUpdated: nil,
-                recentDepartmentCalls: mapRecentCalls(from: dispatchHistory.historicalDispatches),
+                recentDepartmentCalls: mapRecentCalls(from: resolvedHistoricalDispatches),
                 apparatusWorkOrders: mapApparatusWorkOrders(from: dashboard.apparatusWorkOrders ?? []),
                 apparatusWorkOrdersMessage: dashboard.apparatusWorkOrdersMessage,
                 upcomingSchedule: upcomingSchedule,
                 departmentScheduleEntries: departmentScheduleEntries,
                 tomorrowScheduleEntries: [],
                 unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
-                isLoadingStats: true,
+                isLoadingStats: state.isLoadingStats,
                 isLoading: false,
                 errorMessage: nil
             )
 
             hasLoaded = true
             lastLoadedAt = Date()
-
-            Task {
-                await loadDispatchStats()
-            }
 
             Task {
                 await loadUnreadNonDispatchMessageCount()
@@ -193,16 +258,20 @@ final class DashboardViewModel: ObservableObject {
                 alerts: [],
                 stationUpdates: [],
                 departmentUpdates: [],
+                messagePreviews: state.messagePreviews,
                 attentionItems: [],
                 quickActions: [],
                 progressItems: [],
                 assignedTrainingPreview: [],
                 pendingDocumentSignatures: 0,
+                pendingPolicyDocuments: [],
                 stationCallTotal: nil,
                 departmentCallTotal: nil,
                 dashboardDepartment: nil,
                 dashboardStation: nil,
-                lastUpdated: nil,
+                dashboardStations: nil,
+                volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
+                lastUpdated: state.lastUpdated,
                 recentDepartmentCalls: [],
                 apparatusWorkOrders: [],
                 apparatusWorkOrdersMessage: nil,
@@ -217,15 +286,81 @@ final class DashboardViewModel: ObservableObject {
         }
     }
 
+
+    private func mergedVolunteerContext(
+        incoming: APIClient.VolunteerContext?,
+        existing: APIClient.VolunteerContext?
+    ) -> APIClient.VolunteerContext? {
+        guard let incoming else {
+            return existing
+        }
+
+        guard incoming.officer == nil, let existingOfficer = existing?.officer else {
+            return incoming
+        }
+
+        return APIClient.VolunteerContext(
+            company: incoming.company ?? existing?.company,
+            station: incoming.station ?? existing?.station,
+            officer: existingOfficer,
+            apparatus: incoming.apparatus ?? existing?.apparatus,
+            stationApparatus: incoming.stationApparatus ?? existing?.stationApparatus
+        )
+    }
+
+    private func logActiveDispatches(
+        sourceLabel: String?,
+        activeDispatches: [APIClient.ActiveDispatch]
+    ) {
+        #if DEBUG
+        print("🚒 Active dispatch source: /api/mobile/dispatches source=\(sourceLabel ?? "unknown") count=\(activeDispatches.count)")
+
+        for dispatch in activeDispatches {
+            print(
+                """
+                🚒 Active dispatch normalized:
+                  id=\(dispatch.id)
+                  incidentType=\(dispatch.callType)
+                  address=\(dispatch.address ?? "nil")
+                  city=\(dispatch.city ?? "nil")
+                  category=\(dispatch.priority ?? "nil")
+                  assignedUnits=\(dispatch.units.joined(separator: ", "))
+                  activeStatus=active
+                  receivedAt=\(dispatch.dispatchedAt?.description ?? "nil")
+                  updatedAt=not provided
+                """
+            )
+        }
+        #endif
+    }
+
     private func loadUnreadNonDispatchMessageCount() async {
         do {
             let response = try await APIClient.shared.fetchMessages()
-            let unreadCount = response.messages.filter { message in
+            let messageSource = combinedMessageSource(
+                visibleMessages: response.messages,
+                manageableMessages: response.manageableMessages
+            )
+            let unreadCount = messageSource.filter { message in
                 message.type != "DISPATCH" &&
                 message.type != "DISPATCH_UPDATE" &&
                 message.dispatchId == nil &&
                 !message.isRead
             }.count
+            let previews = messageSource
+                .filter { DashboardMessageTypeFilter.all.includes($0) }
+                .sorted { lhs, rhs in
+                    if (lhs.isPinned ?? false) != (rhs.isPinned ?? false) {
+                        return lhs.isPinned == true
+                    }
+
+                    if messagePriorityRank(lhs.priority) != messagePriorityRank(rhs.priority) {
+                        return messagePriorityRank(lhs.priority) < messagePriorityRank(rhs.priority)
+                    }
+
+                    return lhs.createdAt > rhs.createdAt
+                }
+                .map(DashboardMessagePreview.init)
 
             state = DashboardState(
                 greeting: state.greeting,
@@ -233,15 +368,19 @@ final class DashboardViewModel: ObservableObject {
                 alerts: state.alerts,
                 stationUpdates: state.stationUpdates,
                 departmentUpdates: state.departmentUpdates,
+                messagePreviews: previews,
                 attentionItems: state.attentionItems,
                 quickActions: state.quickActions,
                 progressItems: state.progressItems,
                 assignedTrainingPreview: state.assignedTrainingPreview,
                 pendingDocumentSignatures: state.pendingDocumentSignatures,
+                pendingPolicyDocuments: state.pendingPolicyDocuments,
                 stationCallTotal: state.stationCallTotal,
                 departmentCallTotal: state.departmentCallTotal,
                 dashboardDepartment: state.dashboardDepartment,
                 dashboardStation: state.dashboardStation,
+                dashboardStations: state.dashboardStations,
+                volunteerContext: cachedVolunteerContext ?? state.volunteerContext,
                 lastUpdated: state.lastUpdated,
                 recentDepartmentCalls: state.recentDepartmentCalls,
                 apparatusWorkOrders: state.apparatusWorkOrders,
@@ -255,6 +394,23 @@ final class DashboardViewModel: ObservableObject {
         } catch {
             print("Dashboard unread non-dispatch message count failed:", error.localizedDescription)
         }
+    }
+
+    private func combinedMessageSource(
+        visibleMessages: [MobileMessage],
+        manageableMessages: [MobileMessage]?
+    ) -> [MobileMessage] {
+        var messagesById: [String: MobileMessage] = [:]
+
+        for message in visibleMessages {
+            messagesById[message.id] = message
+        }
+
+        for message in manageableMessages ?? [] {
+            messagesById[message.id] = message
+        }
+
+        return Array(messagesById.values)
     }
 
     private func fetchDepartmentScheduleOutlook() async -> [APIClient.MobileScheduleEntry] {
@@ -288,62 +444,27 @@ final class DashboardViewModel: ObservableObject {
         return entries
     }
 
-    private func loadDispatchStats() async {
-        let startedAt = Date()
-        print("⏱️ Dashboard separate stats load started")
-
+    private func fetchPendingPolicyDocuments() async -> [DashboardPendingPolicy] {
         do {
-            let statsResponse = try await APIClient.shared.fetchDispatchStats()
+            let response = try await APIClient.shared.fetchDocuments()
+            let foldersById = Dictionary(uniqueKeysWithValues: response.folders.map { ($0.id, $0.name) })
 
-            state = DashboardState(
-                greeting: state.greeting,
-                role: state.role,
-                alerts: state.alerts,
-                stationUpdates: state.stationUpdates,
-                departmentUpdates: state.departmentUpdates,
-                attentionItems: state.attentionItems,
-                quickActions: state.quickActions,
-                progressItems: state.progressItems,
-                assignedTrainingPreview: state.assignedTrainingPreview,
-                pendingDocumentSignatures: state.pendingDocumentSignatures,
-                stationCallTotal: statsResponse.stats?.stationYtd,
-                departmentCallTotal: statsResponse.stats?.departmentYtd,
-                dashboardDepartment: statsResponse.department,
-                dashboardStation: statsResponse.station,
-                lastUpdated: statsResponse.lastUpdated,
-                recentDepartmentCalls: state.recentDepartmentCalls,
-                apparatusWorkOrders: state.apparatusWorkOrders,
-                apparatusWorkOrdersMessage: state.apparatusWorkOrdersMessage,
-                upcomingSchedule: state.upcomingSchedule,
-                departmentScheduleEntries: state.departmentScheduleEntries,
-                tomorrowScheduleEntries: state.tomorrowScheduleEntries,
-                unreadNonDispatchMessageCount: state.unreadNonDispatchMessageCount,
-                isLoadingStats: false,
-                isLoading: state.isLoading,
-                errorMessage: state.errorMessage
-            )
-
-            print("✅ Dashboard separate stats load finished in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s")
+            return response.documents
+                .filter { $0.latestVersion?.requiresAcknowledgement == true }
+                .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                .prefix(6)
+                .map { document in
+                    DashboardPendingPolicy(
+                        id: document.id,
+                        title: document.title,
+                        category: document.category,
+                        folderName: document.folderId.flatMap { foldersById[$0] }
+                    )
+                }
         } catch {
-            print("🧨 Dashboard separate stats load failed in \(String(format: "%.2f", Date().timeIntervalSince(startedAt)))s: \(error.localizedDescription)")
+            print("🧨 Pending policy preview failed:", error.localizedDescription)
+            return []
         }
-    }
-
-    private func isLikelyWorkingFire(_ dispatch: DispatchNotificationPayload) -> Bool {
-        let combinedText = [
-            dispatch.title,
-            dispatch.callType,
-            dispatch.body
-        ]
-        .compactMap { $0 }
-        .joined(separator: " ")
-        .lowercased()
-
-        return combinedText.contains("working fire") ||
-            combinedText.contains("structure fire") ||
-            combinedText.contains("confirmed fire") ||
-            combinedText.contains("2nd alarm") ||
-            combinedText.contains("second alarm")
     }
 
     private func mapBulletins(from updates: [APIClient.DashboardUpdate]) -> [DashboardBulletin] {
@@ -365,9 +486,11 @@ final class DashboardViewModel: ObservableObject {
                 title: item.title,
                 subtitle: item.subtitle,
                 actionLabel: item.actionLabel ?? "Open",
-                destination: normalized.contains("training")
-                    ? .trainingAssigned
-                    : .messageCenter
+                destination: normalized.contains("document")
+                    ? .documents
+                    : normalized.contains("training")
+                        ? .trainingAssigned
+                        : .messageCenter
             )
         }
     }
@@ -394,7 +517,7 @@ final class DashboardViewModel: ObservableObject {
     private func mapRecentCalls(
         from dispatches: [APIClient.DispatchHistoryItem]
     ) -> [RecentDepartmentCall] {
-        dispatches.prefix(3).map { dispatch in
+        dispatches.map { dispatch in
             let location = [
                 dispatch.placeName,
                 dispatch.address,
@@ -420,7 +543,9 @@ final class DashboardViewModel: ObservableObject {
                 incidentNumber: dispatch.stableId,
                 title: dispatch.callType,
                 address: location,
-                timestamp: timestamp
+                timestamp: timestamp,
+                units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units),
+                rawUnits: dispatch.units
             )
         }
     }
@@ -437,6 +562,17 @@ final class DashboardViewModel: ObservableObject {
                 progressPercent: $0.progressPercent,
                 isOverdue: $0.isOverdue ?? false
             )
+        }
+    }
+
+    private func messagePriorityRank(_ priority: String) -> Int {
+        switch priority {
+        case "CRITICAL":
+            return 0
+        case "HIGH":
+            return 1
+        default:
+            return 2
         }
     }
 

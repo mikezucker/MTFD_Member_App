@@ -75,7 +75,7 @@ final class DispatchLiveActivityManager {
         let contentState = DispatchLiveActivityAttributes.ContentState(
             callType: dispatch.callType ?? dispatch.title,
             address: dispatch.address ?? dispatch.body ?? "Address unavailable",
-            units: dispatch.units,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units),
             statusText: dispatch.type == .dispatchCritical ? "Critical Dispatch" : "Active Dispatch",
             isCritical: dispatch.type == .dispatchCritical,
             isWorkingFire: dispatch.isWorkingFire,

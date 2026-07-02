@@ -10,12 +10,15 @@ struct MessageCenterView: View {
 
     let mode: Mode
 
+    @EnvironmentObject private var sessionManager: SessionManager
     @StateObject private var viewModel = MessageCenterViewModel()
 
     @State private var selectedMessage: MobileMessage?
     @State private var selectedDispatch: DispatchNotificationPayload?
     @State private var highlightedDispatchId: String?
     @State private var selectedTab: MessageCenterTab
+    @State private var selectedMessageFilter: DashboardMessageTypeFilter = .all
+    @State private var showComposer = false
 
     init(mode: Mode = .combined) {
         self.mode = mode
@@ -48,11 +51,25 @@ struct MessageCenterView: View {
     }
 
     private var departmentMessages: [MobileMessage] {
-        viewModel.messages.filter { message in
-            message.type != "DISPATCH" &&
-            message.type != "DISPATCH_UPDATE" &&
-            message.dispatchId == nil
-        }
+        viewModel.messages
+            .filter { message in
+                selectedMessageFilter.includes(message)
+            }
+            .sorted { lhs, rhs in
+                if (lhs.isPinned ?? false) != (rhs.isPinned ?? false) {
+                    return lhs.isPinned == true
+                }
+
+                if messagePriorityRank(lhs.priority) != messagePriorityRank(rhs.priority) {
+                    return messagePriorityRank(lhs.priority) < messagePriorityRank(rhs.priority)
+                }
+
+                return lhs.createdAt > rhs.createdAt
+            }
+    }
+
+    private func canDeleteMessage(_ message: MobileMessage) -> Bool {
+        message.canDelete == true || viewModel.manageableMessages.contains(where: { $0.id == message.id })
     }
 
     private var unreadDepartmentMessageCount: Int {
@@ -96,12 +113,26 @@ struct MessageCenterView: View {
         }
     }
 
+    private var canCreateMessages: Bool {
+        guard let user = sessionManager.currentUser else { return false }
+
+        return user.canPostStationMessages
+            || user.canManageUsers
+            || user.role == "ADMIN"
+            || user.role == "CHIEF"
+            || user.role == "BATTALION_CHIEF"
+            || user.role == "OFFICER_CAREER"
+            || user.isFireHeadquarters
+    }
+
     var body: some View {
-        AppScreen(title: screenTitle) {
+        AppScreen(
+            title: screenTitle,
+            subtitle: introText,
+            systemImage: mode == .dispatchesOnly ? "bell.and.waves.left.and.right.fill" : "envelope.fill"
+        ) {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    introHeader
-
                     if mode == .combined {
                         tabSelector
                     }
@@ -131,12 +162,42 @@ struct MessageCenterView: View {
         .task {
             await viewModel.loadMessagesIfNeeded()
         }
+        .task {
+            await activeDispatchRefreshLoop()
+        }
         .refreshable {
             await viewModel.refresh()
+        }
+        .toolbar {
+            if canCreateMessages {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showComposer = true
+                    } label: {
+                        Image(systemName: "square.and.pencil")
+                    }
+                    .accessibilityLabel("Create message")
+                }
+            }
         }
         .sheet(item: $selectedMessage) { message in
             MessageDetailSheet(message: message)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $showComposer) {
+            MessageComposeView { title, body, audience, priority, type, stationNumberTarget, isPinned in
+                try await viewModel.createMessage(
+                    title: title,
+                    body: body,
+                    audience: audience,
+                    priority: priority,
+                    type: type,
+                    stationNumberTarget: stationNumberTarget,
+                    isPinned: isPinned
+                )
+
+                selectedTab = .department
+            }
         }
         .navigationDestination(
             isPresented: Binding(
@@ -324,30 +385,89 @@ struct MessageCenterView: View {
 
     private var departmentMessagesSection: some View {
         MessageSectionContainer(
-            title: "Department Messages",
-            subtitle: "Training, uniforms, documents, and announcements.",
+            title: canCreateMessages ? "Current Message Queue" : "Department Messages",
+            subtitle: canCreateMessages
+                ? "Active messages visible in the app and station displays."
+                : "Training, uniforms, documents, and announcements.",
             systemImage: "tray.full.fill"
         ) {
+            messageTypeFilterBar
+
             if departmentMessages.isEmpty {
                 EmptySectionRow(
                     systemImage: "tray",
-                    title: "No department messages",
-                    subtitle: "Training, uniform, and department updates will appear here."
+                    title: selectedMessageFilter == .all
+                        ? (canCreateMessages ? "No active messages" : "No department messages")
+                        : "No \(selectedMessageFilter.rawValue.lowercased()) messages",
+                    subtitle: canCreateMessages
+                        ? "Create a message to add it to the current queue."
+                        : "Training, uniform, and department updates will appear here."
                 )
             } else {
                 VStack(spacing: 10) {
                     ForEach(departmentMessages) { message in
-                        Button {
-                            selectedMessage = message
+                        HStack(spacing: 10) {
+                            Button {
+                                selectedMessage = message
 
-                            Task {
-                                await viewModel.markRead(message)
+                                Task {
+                                    await viewModel.markRead(message)
+                                }
+                            } label: {
+                                DepartmentMessageRow(message: message)
                             }
-                        } label: {
-                            DepartmentMessageRow(message: message)
+                            .buttonStyle(.plain)
+
+                            if canDeleteMessage(message) {
+                                Button {
+                                    Task {
+                                        await viewModel.deleteMessage(message)
+                                    }
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .font(.subheadline.weight(.bold))
+                                        .foregroundStyle(.red)
+                                        .frame(width: 42, height: 42)
+                                        .background(Color.red.opacity(0.12))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel("Delete message")
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .contextMenu {
+                            if canDeleteMessage(message) {
+                                Button(role: .destructive) {
+                                    Task {
+                                        await viewModel.deleteMessage(message)
+                                    }
+                                } label: {
+                                    Label("Delete Message", systemImage: "trash")
+                                }
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+
+    private var messageTypeFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(DashboardMessageTypeFilter.allCases) { filter in
+                    Button {
+                        selectedMessageFilter = filter
+                    } label: {
+                        Text(filter.rawValue)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(selectedMessageFilter == filter ? Color.black : Color.white.opacity(0.78))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(selectedMessageFilter == filter ? AppTheme.gold : Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -389,6 +509,18 @@ struct MessageCenterView: View {
         .frame(maxWidth: .infinity, minHeight: 260)
     }
 
+    private func activeDispatchRefreshLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            await viewModel.refreshActiveDispatches()
+        }
+    }
+
     private func makeDispatchPayload(
         from activeDispatch: APIClient.ActiveDispatch,
         activeCallCount: Int = 1
@@ -400,7 +532,7 @@ struct MessageCenterView: View {
             body: activeDispatch.address,
             callType: activeDispatch.callType,
             address: activeDispatch.address,
-            units: activeDispatch.units,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: activeDispatch.units),
             isWorkingFire: activeDispatch.isWorkingFire ?? false,
             activeCallCount: activeCallCount,
             stationId: nil,
@@ -418,7 +550,7 @@ struct MessageCenterView: View {
             body: dispatch.message ?? dispatch.address,
             callType: dispatch.callType,
             address: dispatch.address,
-            units: dispatch.units,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: dispatch.units),
             isWorkingFire: dispatch.isWorkingFire ?? false,
             activeCallCount: 1,
             stationId: nil,
@@ -426,6 +558,187 @@ struct MessageCenterView: View {
             trainingId: nil,
             documentId: nil
         )
+    }
+
+    private func messagePriorityRank(_ priority: String) -> Int {
+        switch priority.uppercased() {
+        case "CRITICAL": return 0
+        case "HIGH": return 1
+        case "IMPORTANT", "NORMAL": return 2
+        case "INFO", "INFORMATION", "LOW": return 3
+        default: return 4
+        }
+    }
+}
+
+// MARK: - Compose
+
+private struct MessageComposeView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let onSend: (
+        _ title: String,
+        _ body: String,
+        _ audience: String,
+        _ priority: String,
+        _ type: String,
+        _ stationNumberTarget: Int?,
+        _ isPinned: Bool
+    ) async throws -> Void
+
+    @State private var title = ""
+    @State private var messageBody = ""
+    @State private var audience = "ALL_MEMBERS"
+    @State private var priority = "NORMAL"
+    @State private var type = "ANNOUNCEMENT"
+    @State private var selectedStationNumber = 1
+    @State private var isPinned = false
+    @State private var isSending = false
+    @State private var errorMessage: String?
+
+    private let audiences: [(label: String, value: String)] = [
+        ("Department", "ALL_MEMBERS"),
+        ("Officers", "ALL_OFFICERS"),
+        ("Chiefs", "CHIEFS"),
+        ("Career", "CAREER_MEMBERS"),
+        ("Volunteers", "VOLUNTEER_MEMBERS"),
+        ("Specific Station", "STATION")
+    ]
+
+    private let stationOptions: [(label: String, value: Int)] = [
+        ("Station 1 - Mt. Kemble", 1),
+        ("Station 2 - Collinsville", 2),
+        ("Station 3 - Hillside", 3),
+        ("Station 4 - Fairchild", 4),
+        ("Station 5 - Woodland", 5)
+    ]
+
+    private let priorities: [(label: String, value: String)] = [
+        ("Information", "LOW"),
+        ("Important", "NORMAL"),
+        ("High Priority", "HIGH"),
+        ("Critical", "CRITICAL")
+    ]
+
+    private let messageTypes: [(label: String, value: String)] = [
+        ("Announcement", "ANNOUNCEMENT"),
+        ("Staffing", "STAFFING"),
+        ("Event", "EVENT"),
+        ("Officer Note", "OFFICER_NOTE")
+    ]
+
+    private var trimmedTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedBody: String {
+        messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var stationNumberTarget: Int? {
+        audience == "STATION" ? selectedStationNumber : nil
+    }
+
+    private var canSend: Bool {
+        !trimmedTitle.isEmpty
+            && !trimmedBody.isEmpty
+            && !isSending
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Message") {
+                    TextField("Title", text: $title)
+                        .textInputAutocapitalization(.sentences)
+
+                    TextField("Body", text: $messageBody, axis: .vertical)
+                        .lineLimit(4...8)
+                        .textInputAutocapitalization(.sentences)
+                }
+
+                Section("Delivery") {
+                    Picker("Audience", selection: $audience) {
+                        ForEach(audiences, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+
+                    if audience == "STATION" {
+                        Picker("Station", selection: $selectedStationNumber) {
+                            ForEach(stationOptions, id: \.value) { option in
+                                Text(option.label).tag(option.value)
+                            }
+                        }
+                    }
+
+                    Picker("Priority", selection: $priority) {
+                        ForEach(priorities, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+
+                    Toggle("Pin Message", isOn: $isPinned)
+
+                    Picker("Type", selection: $type) {
+                        ForEach(messageTypes, id: \.value) { option in
+                            Text(option.label).tag(option.value)
+                        }
+                    }
+                }
+
+                if let errorMessage {
+                    Section {
+                        Text(errorMessage)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("New Message")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .disabled(isSending)
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(isSending ? "Sending" : "Send") {
+                        Task {
+                            await send()
+                        }
+                    }
+                    .disabled(!canSend)
+                }
+            }
+        }
+    }
+
+    private func send() async {
+        guard canSend else { return }
+
+        isSending = true
+        errorMessage = nil
+
+        do {
+            try await onSend(
+                trimmedTitle,
+                trimmedBody,
+                audience,
+                priority,
+                type,
+                stationNumberTarget,
+                isPinned
+            )
+
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        isSending = false
     }
 }
 
@@ -742,23 +1055,6 @@ private struct DispatchHistoryRow: View {
 private struct DepartmentMessageRow: View {
     let message: MobileMessage
 
-    private var iconName: String {
-        switch message.type {
-        case "TRAINING_REMINDER", "TRAINING", "TRAINING_ASSIGNMENT":
-            return "graduationcap.fill"
-        case "UNIFORM", "UNIFORM_REQUEST", "UNIFORM_REQUEST_UPDATE":
-            return "tshirt.fill"
-        case "DOCUMENT", "DOCUMENT_SIGNATURE":
-            return "doc.text.fill"
-        case "ANNOUNCEMENT":
-            return "megaphone.fill"
-        case "OFFICER_NOTE":
-            return "person.badge.shield.checkmark.fill"
-        default:
-            return "envelope.fill"
-        }
-    }
-
     private var priorityLabel: String? {
         switch message.priority {
         case "CRITICAL":
@@ -777,9 +1073,9 @@ private struct DepartmentMessageRow: View {
                     .fill(Color.white.opacity(0.12))
                     .frame(width: 46, height: 46)
 
-                Image(systemName: iconName)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(message.isRead ? .white.opacity(0.55) : AppTheme.gold)
+                Text(message.displayIcon)
+                    .font(.system(size: 22))
+                    .saturation(message.isRead ? 0.45 : 1.0)
 
                 if !message.isRead {
                     Circle()
@@ -809,6 +1105,19 @@ private struct DepartmentMessageRow: View {
                     }
                 }
 
+                HStack(spacing: 6) {
+                    Text(message.typeDisplayLabel)
+                    Text("•")
+                    Text(message.audienceDisplayLabel)
+
+                    if message.isPinned == true {
+                        Text("• Pinned")
+                    }
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.gold.opacity(0.9))
+                .lineLimit(1)
+
                 if let body = message.body, !body.isEmpty {
                     Text(body)
                         .font(.caption)
@@ -816,9 +1125,15 @@ private struct DepartmentMessageRow: View {
                         .lineLimit(2)
                 }
 
-                Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.45))
+                HStack(spacing: 6) {
+                    Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
+
+                    if let expiresAt = message.expiresAt {
+                        Text("Expires \(expiresAt.formatted(date: .abbreviated, time: .omitted))")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.45))
             }
         }
         .padding(14)
@@ -951,17 +1266,30 @@ private struct MessageDispatchMapPreview: View {
 private struct MessageDetailSheet: View {
     let message: MobileMessage
 
+    private var linkURL: URL? {
+        APIClient.shared.absoluteURL(from: message.linkUrl)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(message.title)
-                            .font(.title3.bold())
+                    HStack(alignment: .top, spacing: 12) {
+                        Text(message.displayIcon)
+                            .font(.system(size: 34))
 
-                        Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(message.title)
+                                .font(.title3.bold())
+
+                            Text("\(message.typeDisplayLabel) • \(message.audienceDisplayLabel)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            Text(message.createdAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     if let body = message.body, !body.isEmpty {
@@ -973,6 +1301,41 @@ private struct MessageDetailSheet: View {
                         Text("No additional message details were provided.")
                             .font(.body)
                             .foregroundStyle(.secondary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Priority: \(message.priority.capitalized)")
+                        Text("Read: \(message.isRead ? "Yes" : "No")")
+
+                        if let createdByName = message.createdByName, !createdByName.isEmpty {
+                            Text("From: \(createdByName)")
+                        } else if let createdByRole = message.createdByRole, !createdByRole.isEmpty {
+                            Text("From: \(createdByRole.replacingOccurrences(of: "_", with: " ").capitalized)")
+                        }
+
+                        if let expiresAt = message.expiresAt {
+                            Text("Expires: \(expiresAt.formatted(date: .abbreviated, time: .shortened))")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                    if let linkURL {
+                        Link(destination: linkURL) {
+                            HStack {
+                                Text(message.linkLabel ?? (message.type == "POLICY_LINK" ? "View Policy" : "Open Link"))
+                                    .font(.headline.weight(.semibold))
+
+                                Spacer()
+
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption.bold())
+                            }
+                            .padding()
+                            .foregroundStyle(.white)
+                            .background(AppTheme.navy)
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
                     }
                 }
                 .padding(20)

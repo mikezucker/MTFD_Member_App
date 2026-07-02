@@ -11,6 +11,7 @@ class NotificationPreferencesViewModel: ObservableObject {
 
     private let key = "notification_preferences"
     private var saveTask: Task<Void, Never>?
+    private var pendingRemotePreferences: NotificationPreferences?
     private var hasLoadedRemote = false
 
     init() {
@@ -23,13 +24,14 @@ class NotificationPreferencesViewModel: ObservableObject {
         else { return }
 
         preferences = decoded
-        UserDefaults.standard.set(preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+        persistAlertSettings()
     }
 
     func saveLocal() {
         if let data = try? JSONEncoder().encode(preferences) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        persistAlertSettings()
     }
 
     func loadRemote() async {
@@ -46,7 +48,7 @@ class NotificationPreferencesViewModel: ObservableObject {
 
             if let serverPreferences = response.preferences {
                 preferences = serverPreferences
-                UserDefaults.standard.set(preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+                persistAlertSettings()
                 saveLocal()
             } else if let error = response.error {
                 errorMessage = error
@@ -65,6 +67,7 @@ class NotificationPreferencesViewModel: ObservableObject {
         saveLocal()
         successMessage = nil
         errorMessage = nil
+        pendingRemotePreferences = preferences
 
         saveTask?.cancel()
 
@@ -80,6 +83,8 @@ class NotificationPreferencesViewModel: ObservableObject {
     }
 
     func saveRemote(_ preferencesToSave: NotificationPreferences? = nil) async {
+        let preferencesForRequest = preferencesToSave ?? preferences
+
         isSaving = true
         errorMessage = nil
         successMessage = nil
@@ -88,10 +93,14 @@ class NotificationPreferencesViewModel: ObservableObject {
 
         do {
             let response = try await APIClient.shared.updateNotificationPreferences(
-                preferencesToSave ?? preferences
+                preferencesForRequest
             )
 
             if response.success {
+                pendingRemotePreferences = nil
+                if let serverPreferences = response.preferences {
+                    preferences = serverPreferences
+                }
                 saveLocal()
             } else if let error = response.error {
                 errorMessage = error
@@ -101,8 +110,35 @@ class NotificationPreferencesViewModel: ObservableObject {
         }
     }
 
+    func flushPendingSave() async {
+        saveTask?.cancel()
+        saveTask = nil
+        saveLocal()
+
+        guard let pendingRemotePreferences else {
+            return
+        }
+
+        await saveRemote(pendingRemotePreferences)
+    }
+
+    func saveImmediately() async {
+        saveTask?.cancel()
+        saveTask = nil
+        pendingRemotePreferences = preferences
+        saveLocal()
+        await saveRemote(preferences)
+    }
+
     func cancelPendingSave() {
         saveTask?.cancel()
         saveTask = nil
+    }
+
+    private func persistAlertSettings() {
+        UserDefaults.standard.set(preferences.hapticAlertStyle.rawValue, forKey: "notification_haptic_alert_style")
+        UserDefaults.standard.set(preferences.hapticAlertStyle != .off, forKey: "notification_haptics_enabled")
+        UserDefaults.standard.set(preferences.dispatchAlertTone.rawValue, forKey: "notification_dispatch_alert_tone")
+        UserDefaults.standard.set(preferences.criticalDispatchAlertTone.rawValue, forKey: "notification_critical_dispatch_alert_tone")
     }
 }

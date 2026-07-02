@@ -10,12 +10,18 @@ final class NotificationManager: NSObject, ObservableObject {
         super.init()
     }
 
-    func requestPermission() async {
+    func requestPermission(includeCriticalAlert: Bool = false) async {
         let center = UNUserNotificationCenter.current()
 
         do {
+            var options: UNAuthorizationOptions = [.alert, .badge, .sound]
+
+            if includeCriticalAlert {
+                options.insert(.criticalAlert)
+            }
+
             let granted = try await center.requestAuthorization(
-                options: [.alert, .badge, .sound, .criticalAlert]
+                options: options
             )
 
             print("🔔 Notification permission granted:", granted)
@@ -33,6 +39,10 @@ final class NotificationManager: NSObject, ObservableObject {
         } catch {
             print("❌ Notification permission error:", error)
         }
+    }
+
+    func requestCriticalAlertPermission() async {
+        await requestPermission(includeCriticalAlert: true)
     }
 
     func didRegisterForRemoteNotifications(deviceToken: Data) {
