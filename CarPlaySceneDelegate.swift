@@ -399,7 +399,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
 
         return CPListTemplate(
-            title: "MTFD",
+            title: "",
             sections: [
                 CPListSection(items: items)
             ]
@@ -959,10 +959,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     func templateDidAppear(_ aTemplate: CPTemplate, animated: Bool) {
         if let listTemplate = aTemplate as? CPListTemplate {
             switch listTemplate.title {
-            case "MTFD":
-                currentScreen = .root
-                selectedActiveDispatchId = nil
-                detailParentScreen = nil
             case "Active Incidents":
                 currentScreen = .active
                 selectedActiveDispatchId = nil
@@ -974,6 +970,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             case "Incident Details", "Dispatch Details":
                 currentScreen = .detail
             default:
+                if interfaceController?.templates.count == 1 {
+                    currentScreen = .root
+                    selectedActiveDispatchId = nil
+                    detailParentScreen = nil
+                }
                 break
             }
         }
