@@ -562,8 +562,6 @@
 			children = (
 				402260882FA7D857003FB081 /* StationMapper.swift */,
 				40B22B472F9F9C9500808F42 /* Notification+Extensions.swift.swift */,
-				408911352F9016760035C355 /* Helpers */,
-				408911342F90166E0035C355 /* Extensions */,
 				40A5322C2F993DBF0031965E /* AppDelegate.swift */,
 			);
 			path = Utilities;
@@ -777,7 +775,6 @@
 		4089111C2F9014F80035C355 /* Auth */ = {
 			isa = PBXGroup;
 			children = (
-				408911262F90159A0035C355 /* ViewModels */,
 				408911252F9015910035C355 /* Views */,
 			);
 			path = Auth;
@@ -786,7 +783,6 @@
 		4089111D2F9014FA0035C355 /* Profile */ = {
 			isa = PBXGroup;
 			children = (
-				408911242F9015840035C355 /* ViewModels */,
 				408911232F90157B0035C355 /* Views */,
 			);
 			path = Profile;
@@ -795,7 +791,6 @@
 		4089111E2F9014FE0035C355 /* Documents */ = {
 			isa = PBXGroup;
 			children = (
-				408911222F9015680035C355 /* ViewModels */,
 				408911212F9015600035C355 /* Views */,
 			);
 			path = Documents;
@@ -825,13 +820,6 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		408911222F9015680035C355 /* ViewModels */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ViewModels;
-			sourceTree = "<group>";
-		};
 		408911232F90157B0035C355 /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -840,26 +828,12 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
-		408911242F9015840035C355 /* ViewModels */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ViewModels;
-			sourceTree = "<group>";
-		};
 		408911252F9015910035C355 /* Views */ = {
 			isa = PBXGroup;
 			children = (
 				408910C62F8FED410035C355 /* LoginView.swift */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		408911262F90159A0035C355 /* ViewModels */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ViewModels;
 			sourceTree = "<group>";
 		};
 		408911272F9015AB0035C355 /* Views */ = {
@@ -974,20 +948,6 @@
 				408911422F902A470035C355 /* DashboardQuickActionTile.swift */,
 			);
 			path = Components;
-			sourceTree = "<group>";
-		};
-		408911342F90166E0035C355 /* Extensions */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Extensions;
-			sourceTree = "<group>";
-		};
-		408911352F9016760035C355 /* Helpers */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Helpers;
 			sourceTree = "<group>";
 		};
 		40B22B662F9FDD5600808F42 /* Settings */ = {

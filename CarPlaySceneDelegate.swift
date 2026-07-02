@@ -9,7 +9,7 @@ import MapKit
 import CoreLocation
 import UIKit
 
-final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPInterfaceControllerDelegate {
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPInterfaceControllerDelegate, CPMapTemplateDelegate {
     private weak var interfaceController: CPInterfaceController?
 
     private var hasConfiguredRootTemplate = false
@@ -22,7 +22,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var activeDispatches: [APIClient.ActiveDispatch] = []
     private var recentDispatches: [APIClient.DispatchHistoryItem] = []
     private var knownActiveDispatchIds = Set<String>()
+    private var hasLoadedDispatchBaseline = false
     private var selectedActiveDispatchId: String?
+    private var activeNavigationSession: CPNavigationSession?
 
     private enum CarPlayScreen {
         case root
@@ -32,6 +34,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private var currentScreen: CarPlayScreen = .root
+    private var detailParentScreen: CarPlayScreen?
 
     func templateApplicationScene(
         _ templateApplicationScene: CPTemplateApplicationScene,
@@ -51,6 +54,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         self.interfaceController = interfaceController
         interfaceController.delegate = self
         currentScreen = .root
+        detailParentScreen = nil
 
         guard !hasConfiguredRootTemplate else {
             return
@@ -83,10 +87,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         activeDispatches = []
         recentDispatches = []
         knownActiveDispatchIds = []
+        hasLoadedDispatchBaseline = false
         isLoading = false
         lastRefreshAt = nil
         lastErrorMessage = nil
         selectedActiveDispatchId = nil
+        detailParentScreen = nil
+        activeNavigationSession = nil
     }
 
     // MARK: - Refresh
@@ -178,7 +185,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 completion: nil
             )
         case .active:
-            replaceTopTemplate(with: makeActiveDispatchesTemplate())
+            replaceVisibleTemplate(with: makeActiveDispatchesTemplate(), screen: .active)
         case .recent:
             break
         case .detail:
@@ -208,19 +215,19 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 let resolvedActiveDispatches = response.activeDispatches
 
                 await MainActor.run {
-                    let hadKnownDispatches = !self.knownActiveDispatchIds.isEmpty
-
                     let newDispatches = resolvedActiveDispatches.filter {
                         !self.knownActiveDispatchIds.contains($0.id)
                     }
+                    let shouldAlertForNewDispatches = self.hasLoadedDispatchBaseline
 
                     self.activeDispatches = resolvedActiveDispatches
                     self.recentDispatches = Array(response.historicalDispatches.prefix(12))
                     self.knownActiveDispatchIds = Set(resolvedActiveDispatches.map(\.id))
+                    self.hasLoadedDispatchBaseline = true
                     self.lastRefreshAt = response.fetchedAt ?? Date()
                     self.lastErrorMessage = nil
 
-                    if let newest = newDispatches.first, hadKnownDispatches {
+                    if let newest = newDispatches.first, shouldAlertForNewDispatches {
                         self.presentNewDispatchAlert(newest)
                     }
                     self.isLoading = false
@@ -237,9 +244,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                             completion: nil
                         )
                     case .active:
-                        self.replaceTopTemplate(with: self.makeActiveDispatchesTemplate())
+                        self.replaceVisibleTemplate(with: self.makeActiveDispatchesTemplate(), screen: .active)
                     case .recent:
-                        self.replaceTopTemplate(with: self.makeRecentDispatchesTemplate())
+                        self.replaceVisibleTemplate(with: self.makeRecentDispatchesTemplate(), screen: .recent)
                     case .detail:
                         self.updateVisibleDetailAfterRefresh()
                     }
@@ -260,9 +267,9 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                             completion: nil
                         )
                     case .active:
-                        self.replaceTopTemplate(with: self.makeActiveDispatchesTemplate())
+                        self.replaceVisibleTemplate(with: self.makeActiveDispatchesTemplate(), screen: .active)
                     case .recent:
-                        self.replaceTopTemplate(with: self.makeRecentDispatchesTemplate())
+                        self.replaceVisibleTemplate(with: self.makeRecentDispatchesTemplate(), screen: .recent)
                     case .detail:
                         break
                     }
@@ -271,14 +278,45 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
-    private func replaceTopTemplate(with template: CPTemplate) {
+    private func replaceVisibleTemplate(with template: CPTemplate, screen: CarPlayScreen) {
         guard let interfaceController else { return }
 
         if interfaceController.templates.count > 1 {
-            interfaceController.popTemplate(animated: false, completion: nil)
-            interfaceController.pushTemplate(template, animated: false, completion: nil)
+            interfaceController.popTemplate(animated: false) { [weak self] _, _ in
+                self?.interfaceController?.pushTemplate(template, animated: false, completion: nil)
+            }
         } else {
-            interfaceController.setRootTemplate(template, animated: false, completion: nil)
+            rebuildTemplateStack(endingWith: template, screen: screen)
+        }
+    }
+
+    private func rebuildTemplateStack(endingWith template: CPTemplate, screen: CarPlayScreen) {
+        guard let interfaceController else { return }
+
+        let rootTemplate = makeRootTemplate(isLoading: isLoading)
+        interfaceController.setRootTemplate(rootTemplate, animated: false) { [weak self] _, _ in
+            guard let self else { return }
+
+            switch screen {
+            case .root:
+                self.currentScreen = .root
+            case .active, .recent:
+                self.interfaceController?.pushTemplate(template, animated: false, completion: nil)
+            case .detail:
+                let parentScreen = self.detailParentScreen ?? .active
+                let parentTemplate: CPTemplate
+
+                switch parentScreen {
+                case .recent:
+                    parentTemplate = self.makeRecentDispatchesTemplate()
+                default:
+                    parentTemplate = self.makeActiveDispatchesTemplate()
+                }
+
+                self.interfaceController?.pushTemplate(parentTemplate, animated: false) { [weak self] _, _ in
+                    self?.interfaceController?.pushTemplate(template, animated: false, completion: nil)
+                }
+            }
         }
     }
 
@@ -292,7 +330,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             text: "Active Incidents",
             detailText: activeCount == 0 ? "No active dispatches" : "\(activeCount) active"
         )
-        activeItem.setImage(carPlayIcon("flame.fill"))
+        activeItem.setImage(carPlayIcon("flame.fill", tintColor: .systemRed))
 
         activeItem.handler = { [weak self] _, completion in
             guard let self else {
@@ -314,7 +352,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             text: "Recent Dispatches",
             detailText: recentCount == 0 ? "Last 24 hours" : "Last \(recentCount) calls"
         )
-        recentItem.setImage(carPlayIcon("clock.fill"))
+        recentItem.setImage(carPlayIcon("clock.fill", tintColor: .systemTeal))
 
         recentItem.handler = { [weak self] _, completion in
             guard let self else {
@@ -336,7 +374,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             text: isLoading ? "Refreshing…" : "Refresh Dispatch Feed",
             detailText: refreshDetailText(isLoading: isLoading)
         )
-        refreshItem.setImage(carPlayIcon("arrow.clockwise"))
+        refreshItem.setImage(carPlayIcon("arrow.clockwise", tintColor: .systemBlue))
 
         refreshItem.handler = { [weak self] _, completion in
             self?.refreshDispatches(updateVisibleScreen: true)
@@ -356,12 +394,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 text: dispatchErrorTitle(errorMessage),
                 detailText: errorMessage
             )
-            errorItem.setImage(carPlayIcon("exclamationmark.triangle.fill"))
+            errorItem.setImage(carPlayIcon("exclamationmark.triangle.fill", tintColor: .systemYellow))
             items.append(errorItem)
         }
 
         return CPListTemplate(
-            title: "",
+            title: "MTFD",
             sections: [
                 CPListSection(items: items)
             ]
@@ -378,7 +416,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 text: "No active dispatches",
                 detailText: "You are clear at this time"
             )
-            item.setImage(carPlayIcon("checkmark.shield.fill"))
+            item.setImage(carPlayIcon("checkmark.shield.fill", tintColor: .systemGreen))
             items = [item]
         } else {
             items = activeDispatches.map { dispatch in
@@ -386,7 +424,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     text: activeTitle(dispatch),
                     detailText: activeSubtitle(dispatch)
                 )
-                item.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
+                item.setImage(carPlayIcon(
+                    iconName(callType: dispatch.callType, message: dispatch.message),
+                    tintColor: iconColor(callType: dispatch.callType, message: dispatch.message)
+                ))
 
                 item.handler = { [weak self] _, completion in
                     guard let self else {
@@ -395,6 +436,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     }
 
                     self.currentScreen = .detail
+                    self.detailParentScreen = .active
                     self.selectedActiveDispatchId = dispatch.id
                     self.interfaceController?.pushTemplate(
                         self.makeActiveDispatchDetailTemplate(dispatch),
@@ -417,30 +459,22 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func makeActiveDispatchDetailTemplate(_ dispatch: APIClient.ActiveDispatch) -> CPListTemplate {
-        var items: [CPListItem] = []
+        var primaryItems: [CPListItem] = []
+        var detailItems: [CPListItem] = []
         var navigationItem: CPListItem?
 
-        if let lastRefreshAt {
-            let statusItem = CPListItem(
-                text: "Active Dispatch",
-                detailText: "Updated \(formatDate(lastRefreshAt))"
-            )
-            statusItem.setImage(carPlayIcon("checkmark.shield.fill"))
-            statusItem.handler = { _, completion in
-                completion()
-            }
-            items.append(statusItem)
-        }
-
         let typeItem = CPListItem(
-            text: activeTitle(dispatch),
-            detailText: dispatch.message
+            text: "Call Type",
+            detailText: activeTitle(dispatch)
         )
-        typeItem.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
+        typeItem.setImage(carPlayIcon(
+            iconName(callType: dispatch.callType, message: dispatch.message),
+            tintColor: iconColor(callType: dispatch.callType, message: dispatch.message)
+        ))
         typeItem.handler = { _, completion in
             completion()
         }
-        items.append(typeItem)
+        detailItems.append(typeItem)
 
         if let displayAddress = formattedAddress(placeName: dispatch.placeName, address: dispatch.address, city: dispatch.city, state: dispatch.state) {
             let navigationAddress = navigationAddress(
@@ -457,37 +491,51 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
             )
 
-            let locationItem = CPListItem(text: "Location", detailText: displayAddress)
+            let locationItem = CPListItem(text: "Location", detailText: carPlayReadableAddress(displayAddress))
+            locationItem.setImage(carPlayIcon("mappin.and.ellipse", tintColor: .systemRed))
             locationItem.handler = { _, completion in
                 completion()
             }
-            items.append(locationItem)
+            detailItems.append(locationItem)
         }
 
         if !dispatch.units.isEmpty {
             let unitsItem = CPListItem(text: "Units", detailText: dispatch.units.joined(separator: ", "))
+            unitsItem.setImage(carPlayIcon("person.3.fill", tintColor: .systemOrange))
             unitsItem.handler = { _, completion in
                 completion()
             }
-            items.append(unitsItem)
+            detailItems.append(unitsItem)
         }
 
         if let dispatchedAt = dispatch.dispatchedAt {
             let dispatchedItem = CPListItem(text: "Dispatched", detailText: formatDate(dispatchedAt))
+            dispatchedItem.setImage(carPlayIcon("clock.fill", tintColor: .systemTeal))
             dispatchedItem.handler = { _, completion in
                 completion()
             }
-            items.append(dispatchedItem)
+            detailItems.append(dispatchedItem)
         }
 
-        var sections = [CPListSection(items: items)]
+        if let lastRefreshAt {
+            let statusItem = CPListItem(
+                text: "Feed Updated",
+                detailText: formatDate(lastRefreshAt)
+            )
+            statusItem.setImage(carPlayIcon("checkmark.shield.fill", tintColor: .systemGreen))
+            statusItem.handler = { _, completion in
+                completion()
+            }
+            detailItems.append(statusItem)
+        }
+
         if let navigationItem {
-            sections.append(CPListSection(items: [navigationItem]))
+            primaryItems.append(navigationItem)
         }
 
         return CPListTemplate(
             title: "Incident Details",
-            sections: sections
+            sections: makeDispatchDetailSections(primaryItems: primaryItems, detailItems: detailItems)
         )
     }
 
@@ -501,7 +549,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 text: "No recent dispatches",
                 detailText: "No calls found in the last 24 hours"
             )
-            item.setImage(carPlayIcon("clock.badge.xmark"))
+            item.setImage(carPlayIcon("clock.badge.xmark", tintColor: .systemGray))
             items = [item]
         } else {
             items = recentDispatches.map { dispatch in
@@ -509,7 +557,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     text: recentTitle(dispatch),
                     detailText: recentSubtitle(dispatch)
                 )
-                item.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
+                item.setImage(carPlayIcon(
+                    iconName(callType: dispatch.callType, message: dispatch.message),
+                    tintColor: iconColor(callType: dispatch.callType, message: dispatch.message)
+                ))
 
                 item.handler = { [weak self] _, completion in
                     guard let self else {
@@ -518,6 +569,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                     }
 
                     self.currentScreen = .detail
+                    self.detailParentScreen = .recent
                     self.selectedActiveDispatchId = nil
                     self.interfaceController?.pushTemplate(
                         self.makeRecentDispatchDetailTemplate(dispatch),
@@ -540,18 +592,22 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func makeRecentDispatchDetailTemplate(_ dispatch: APIClient.DispatchHistoryItem) -> CPListTemplate {
-        var items: [CPListItem] = []
+        var primaryItems: [CPListItem] = []
+        var detailItems: [CPListItem] = []
         var navigationItem: CPListItem?
 
         let typeItem = CPListItem(
-            text: recentTitle(dispatch),
-            detailText: dispatch.message
+            text: "Call Type",
+            detailText: recentTitle(dispatch)
         )
-        typeItem.setImage(carPlayIcon(iconName(callType: dispatch.callType, message: dispatch.message)))
+        typeItem.setImage(carPlayIcon(
+            iconName(callType: dispatch.callType, message: dispatch.message),
+            tintColor: iconColor(callType: dispatch.callType, message: dispatch.message)
+        ))
         typeItem.handler = { _, completion in
             completion()
         }
-        items.append(typeItem)
+        detailItems.append(typeItem)
 
         if let displayAddress = formattedAddress(
             placeName: dispatch.placeName,
@@ -573,53 +629,57 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 coordinate: coordinate(latitude: dispatch.latitude, longitude: dispatch.longitude)
             )
 
-            let locationItem = CPListItem(text: "Location", detailText: displayAddress)
+            let locationItem = CPListItem(text: "Location", detailText: carPlayReadableAddress(displayAddress))
+            locationItem.setImage(carPlayIcon("mappin.and.ellipse", tintColor: .systemRed))
             locationItem.handler = { _, completion in
                 completion()
             }
-            items.append(locationItem)
+            detailItems.append(locationItem)
         }
 
         if !dispatch.units.isEmpty {
             let unitsItem = CPListItem(text: "Units", detailText: dispatch.units.joined(separator: ", "))
+            unitsItem.setImage(carPlayIcon("person.3.fill", tintColor: .systemOrange))
             unitsItem.handler = { _, completion in
                 completion()
             }
-            items.append(unitsItem)
+            detailItems.append(unitsItem)
         }
 
         if let tacChannel = dispatch.tacChannel, !tacChannel.isEmpty {
             let tacItem = CPListItem(text: "Tac Channel", detailText: tacChannel)
+            tacItem.setImage(carPlayIcon("dot.radiowaves.left.and.right", tintColor: .systemPurple))
             tacItem.handler = { _, completion in
                 completion()
             }
-            items.append(tacItem)
+            detailItems.append(tacItem)
         }
 
         if let status = dispatch.status, !status.isEmpty {
             let statusItem = CPListItem(text: "Status", detailText: status)
+            statusItem.setImage(carPlayIcon("checkmark.circle.fill", tintColor: .systemGreen))
             statusItem.handler = { _, completion in
                 completion()
             }
-            items.append(statusItem)
+            detailItems.append(statusItem)
         }
 
         if let dispatchedAt = dispatch.dispatchedAt {
             let dispatchedItem = CPListItem(text: "Dispatched", detailText: formatDate(dispatchedAt))
+            dispatchedItem.setImage(carPlayIcon("clock.fill", tintColor: .systemTeal))
             dispatchedItem.handler = { _, completion in
                 completion()
             }
-            items.append(dispatchedItem)
+            detailItems.append(dispatchedItem)
         }
 
-        var sections = [CPListSection(items: items)]
         if let navigationItem {
-            sections.append(CPListSection(items: [navigationItem]))
+            primaryItems.append(navigationItem)
         }
 
         return CPListTemplate(
             title: "Dispatch Details",
-            sections: sections
+            sections: makeDispatchDetailSections(primaryItems: primaryItems, detailItems: detailItems)
         )
     }
 
@@ -651,6 +711,36 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         ]
         .compactMap { $0 }
         .joined(separator: " • ")
+    }
+
+    private func makeDispatchDetailSections(
+        primaryItems: [CPListItem],
+        detailItems: [CPListItem]
+    ) -> [CPListSection] {
+        var sections: [CPListSection] = []
+
+        if !primaryItems.isEmpty {
+            sections.append(CPListSection(items: primaryItems))
+        }
+
+        if !detailItems.isEmpty {
+            sections.append(CPListSection(items: detailItems))
+        }
+
+        return sections
+    }
+
+    private func carPlayReadableAddress(_ address: String) -> String {
+        let parts = address
+            .components(separatedBy: " • ")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard parts.count > 1 else {
+            return address
+        }
+
+        return parts.joined(separator: ", ")
     }
 
     private func displayCallType(callType: String, message: String?, isWorkingFire: Bool?) -> String {
@@ -717,6 +807,38 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
 
         return "flame.fill"
+    }
+
+    private func iconColor(callType: String, message: String?) -> UIColor {
+        let combined = "\(callType) \(message ?? "")".lowercased()
+
+        if combined.contains("ems") ||
+            combined.contains("medical") ||
+            combined.contains("cardiac") ||
+            combined.contains("breathing") ||
+            combined.contains("unconscious") ||
+            combined.contains("sick") {
+            return .systemBlue
+        }
+
+        if combined.contains("mva") ||
+            combined.contains("motor vehicle") ||
+            combined.contains("accident") ||
+            combined.contains("crash") {
+            return .systemOrange
+        }
+
+        if combined.contains("alarm") {
+            return .systemYellow
+        }
+
+        if combined.contains("gas") ||
+            combined.contains("odor") ||
+            combined.contains("hazmat") {
+            return .systemPurple
+        }
+
+        return .systemRed
     }
 
     private func formattedAddress(placeName: String?, address: String?, city: String?, state: String?) -> String? {
@@ -822,13 +944,14 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         guard let selectedActiveDispatchId else { return }
 
         if let updatedDispatch = activeDispatches.first(where: { $0.id == selectedActiveDispatchId }) {
-            replaceTopTemplate(with: makeActiveDispatchDetailTemplate(updatedDispatch))
+            replaceVisibleTemplate(with: makeActiveDispatchDetailTemplate(updatedDispatch), screen: .detail)
             return
         }
 
         self.selectedActiveDispatchId = nil
         currentScreen = .active
-        replaceTopTemplate(with: makeActiveDispatchesTemplate())
+        detailParentScreen = nil
+        replaceVisibleTemplate(with: makeActiveDispatchesTemplate(), screen: .active)
     }
 
     // MARK: - CPInterfaceControllerDelegate
@@ -839,12 +962,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             case "MTFD":
                 currentScreen = .root
                 selectedActiveDispatchId = nil
+                detailParentScreen = nil
             case "Active Incidents":
                 currentScreen = .active
                 selectedActiveDispatchId = nil
+                detailParentScreen = nil
             case "Recent Dispatches":
                 currentScreen = .recent
                 selectedActiveDispatchId = nil
+                detailParentScreen = nil
             case "Incident Details", "Dispatch Details":
                 currentScreen = .detail
             default:
@@ -863,7 +989,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     ) -> CPListItem {
         let item = CPListItem(
             text: "Navigate to Call",
-            detailText: displayAddress
+            detailText: "Start route in Maps"
         )
         item.setImage(carPlayPrimaryActionIcon("arrow.triangle.turn.up.right.circle.fill"))
         item.accessoryType = .disclosureIndicator
@@ -883,18 +1009,39 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func carPlayPrimaryActionIcon(_ systemName: String) -> UIImage? {
-        let configuration = UIImage.SymbolConfiguration(pointSize: 40, weight: .bold)
-
-        return UIImage(systemName: systemName)?
-            .applyingSymbolConfiguration(configuration)?
-            .withTintColor(.systemBlue, renderingMode: .alwaysOriginal)
+        carPlayIcon(systemName, tintColor: .systemBlue, weight: .bold)
     }
 
-    private func carPlayIcon(_ systemName: String) -> UIImage? {
-        let configuration = UIImage.SymbolConfiguration.preferringMulticolor()
+    private func carPlayIcon(
+        _ systemName: String,
+        tintColor: UIColor? = nil,
+        weight: UIImage.SymbolWeight = .semibold
+    ) -> UIImage? {
+        let configuration = UIImage.SymbolConfiguration(weight: weight)
 
-        return UIImage(systemName: systemName, withConfiguration: configuration)?
-            .withRenderingMode(.alwaysOriginal)
+        guard let image = UIImage(systemName: systemName)?
+            .applyingSymbolConfiguration(configuration) else {
+            return nil
+        }
+
+        if let tintColor {
+            return renderedCarPlayIcon(image, tintColor: tintColor)
+        }
+
+        return image.withRenderingMode(.alwaysOriginal)
+    }
+
+    private func renderedCarPlayIcon(_ image: UIImage, tintColor: UIColor) -> UIImage {
+        let tintedImage = image.withTintColor(tintColor, renderingMode: .alwaysOriginal)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = tintedImage.scale
+
+        let renderer = UIGraphicsImageRenderer(size: tintedImage.size, format: format)
+        let renderedImage = renderer.image { _ in
+            tintedImage.draw(in: CGRect(origin: .zero, size: tintedImage.size))
+        }
+
+        return renderedImage.withRenderingMode(.alwaysOriginal)
     }
 
     private func navigateToAddress(
@@ -913,7 +1060,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             let placemark = MKPlacemark(coordinate: coordinate)
             let mapItem = MKMapItem(placemark: placemark)
             mapItem.name = displayName.isEmpty ? searchAddress : displayName
-            openMapItemInMaps(mapItem)
+            showCarPlayNavigation(to: mapItem, displayName: displayName, searchAddress: searchAddress)
             completion()
             return
         }
@@ -927,27 +1074,51 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
                     print("🚗 CarPlay resolved navigation: \(searchAddress) @ \(coordinate.latitude), \(coordinate.longitude)")
 
-                    self.openMapItemInMaps(mapItem)
+                    self.showCarPlayNavigation(to: mapItem, displayName: displayName, searchAddress: searchAddress)
 
                     completion()
                     return
                 }
 
                 print("🚗 CarPlay navigation geocode failed: \(error?.localizedDescription ?? "Unknown error")")
-                self.openAddressInMaps(searchAddress) { opened in
-                    if !opened {
-                        self.presentCarPlayNavigationError(address: searchAddress)
-                    }
-                    completion()
-                }
+                self.presentCarPlayNavigationError(address: searchAddress)
+                completion()
             }
         }
     }
 
-    private func openMapItemInMaps(_ mapItem: MKMapItem) {
-        mapItem.openInMaps(launchOptions: [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving
-        ])
+    private func showCarPlayNavigation(to destination: MKMapItem, displayName: String, searchAddress: String) {
+        guard let interfaceController else {
+            return
+        }
+
+        let origin = MKMapItem.forCurrentLocation()
+        origin.name = "Current Location"
+
+        let routeChoice = CPRouteChoice(
+            summaryVariants: ["Route to Call", "Dispatch Route"],
+            additionalInformationVariants: [carPlayReadableAddress(searchAddress), "CarPlay only"],
+            selectionSummaryVariants: ["Start Route"]
+        )
+
+        let trip = CPTrip(origin: origin, destination: destination, routeChoices: [routeChoice])
+        let destinationName = displayName.isEmpty ? destination.name ?? "Dispatch Location" : displayName
+        trip.destinationNameVariants = [destinationName, "Dispatch Location"]
+
+        let mapTemplate = CPMapTemplate()
+        mapTemplate.mapDelegate = self
+        mapTemplate.guidanceBackgroundColor = .systemBlue
+
+        let textConfiguration = CPTripPreviewTextConfiguration(
+            startButtonTitle: "Navigate",
+            additionalRoutesButtonTitle: nil,
+            overviewButtonTitle: "Overview"
+        )
+
+        interfaceController.pushTemplate(mapTemplate, animated: true) { _, _ in
+            mapTemplate.showTripPreviews([trip], selectedTrip: trip, textConfiguration: textConfiguration)
+            self.activeNavigationSession = mapTemplate.startNavigationSession(for: trip)
+        }
     }
 
     private func coordinate(latitude: Double?, longitude: Double?) -> CLLocationCoordinate2D? {
@@ -963,17 +1134,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
 
         return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-    }
-
-    private func openAddressInMaps(_ address: String, completion: @escaping (Bool) -> Void) {
-        let encodedAddress = address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? address
-
-        guard let url = URL(string: "http://maps.apple.com/?daddr=\(encodedAddress)&dirflg=d") else {
-            completion(false)
-            return
-        }
-
-        UIApplication.shared.open(url, options: [:], completionHandler: completion)
     }
 
     private func presentCarPlayNavigationError(address: String) {
@@ -992,6 +1152,19 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         interfaceController?.presentTemplate(alert, animated: true, completion: nil)
     }
 
+    func mapTemplate(
+        _ mapTemplate: CPMapTemplate,
+        startedTrip trip: CPTrip,
+        using routeChoice: CPRouteChoice
+    ) {
+        activeNavigationSession = mapTemplate.startNavigationSession(for: trip)
+    }
+
+    func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
+        activeNavigationSession?.cancelTrip()
+        activeNavigationSession = nil
+    }
+
     private func presentNewDispatchAlert(_ dispatch: APIClient.ActiveDispatch) {
         guard let interfaceController else { return }
 
@@ -1000,6 +1173,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 
             self.interfaceController?.dismissTemplate(animated: true) { _, _ in
                 self.currentScreen = .detail
+                self.detailParentScreen = .active
+                self.selectedActiveDispatchId = dispatch.id
                 self.interfaceController?.pushTemplate(
                     self.makeActiveDispatchDetailTemplate(dispatch),
                     animated: true,

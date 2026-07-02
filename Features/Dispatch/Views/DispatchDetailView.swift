@@ -36,19 +36,52 @@ private func requestedAddressNumber(from address: String) -> String? {
     return match.map { String(trimmed[$0]).lowercased() }
 }
 
-private func requestedStreetToken(from address: String) -> String? {
-    let trimmed = address
+private let streetSuffixAliases: [String: String] = [
+    "street": "st", "st": "st",
+    "road": "rd", "rd": "rd",
+    "avenue": "ave", "ave": "ave",
+    "lane": "ln", "ln": "ln",
+    "drive": "dr", "dr": "dr",
+    "court": "ct", "ct": "ct",
+    "place": "pl", "pl": "pl",
+    "circle": "cir", "cir": "cir",
+    "boulevard": "blvd", "blvd": "blvd",
+    "terrace": "ter", "ter": "ter",
+    "parkway": "pkwy", "pkwy": "pkwy",
+    "highway": "hwy", "hwy": "hwy",
+    "route": "rt", "rt": "rt",
+    "way": "way"
+]
+
+private func streetSignature(from address: String) -> String? {
+    let street = address
         .replacingOccurrences(of: #",.*$"#, with: "", options: .regularExpression)
         .replacingOccurrences(of: #"^\d+[A-Za-z]?\s+"#, with: "", options: .regularExpression)
         .lowercased()
-    let ignored = Set(["street", "st", "road", "rd", "avenue", "ave", "lane", "ln", "drive", "dr", "court", "ct", "place", "pl", "circle", "cir", "way", "route", "rt"])
+        .replacingOccurrences(of: #"[^a-z0-9\s]"#, with: " ", options: .regularExpression)
 
-    return trimmed
+    let tokens = street
         .split(separator: " ")
         .map(String.init)
-        .first { token in
-            token.count > 2 && !ignored.contains(token)
-        }
+        .map { streetSuffixAliases[$0] ?? $0 }
+        .filter { !$0.isEmpty }
+
+    guard !tokens.isEmpty else {
+        return nil
+    }
+
+    return tokens.joined(separator: " ")
+}
+
+private func streetSignaturesMatch(requested: String, resolved: String) -> Bool {
+    guard let requestedSignature = streetSignature(from: requested),
+          let resolvedSignature = streetSignature(from: resolved) else {
+        return true
+    }
+
+    return resolvedSignature == requestedSignature ||
+        resolvedSignature.contains(" \(requestedSignature)") ||
+        resolvedSignature.contains("\(requestedSignature) ")
 }
 
 private func isConfidentMorrisPlacemark(_ placemark: CLPlacemark, query: String) -> Bool {
@@ -83,11 +116,10 @@ private func isConfidentMorrisPlacemark(_ placemark: CLPlacemark, query: String)
         return false
     }
 
-    if let requestedStreet = requestedStreetToken(from: query),
-       let resolvedStreet = [placemark.thoroughfare, placemark.name]
-        .compactMap({ $0?.lowercased() })
+    if let resolvedStreet = [placemark.thoroughfare, placemark.name]
+        .compactMap({ $0 })
         .first(where: { !$0.isEmpty }),
-       !resolvedStreet.contains(requestedStreet) {
+       !streetSignaturesMatch(requested: query, resolved: resolvedStreet) {
         return false
     }
 
@@ -127,11 +159,10 @@ private func isConfidentMorrisMapItem(_ item: MKMapItem, query: String) -> Bool 
         return false
     }
 
-    if let requestedStreet = requestedStreetToken(from: query),
-       let resolvedStreet = [placemark.thoroughfare, placemark.name]
-        .compactMap({ $0?.lowercased() })
+    if let resolvedStreet = [placemark.thoroughfare, placemark.name]
+        .compactMap({ $0 })
         .first(where: { !$0.isEmpty }),
-       !resolvedStreet.contains(requestedStreet) {
+       !streetSignaturesMatch(requested: query, resolved: resolvedStreet) {
         return false
     }
 
