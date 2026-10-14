@@ -34,6 +34,7 @@ final class SessionManager: ObservableObject {
     }
 
     func restoreSession() async {
+        Task { await flushPendingSessionRevocations() }
         isRestoringSession = true
         defer { isRestoringSession = false }
 
@@ -44,7 +45,6 @@ final class SessionManager: ObservableObject {
         }
 
         APIClient.shared.authToken = token
-        KeychainService.shared.saveToken(token)
 
         do {
             let memberResponse = try await APIClient.shared.fetchCurrentUser()
@@ -54,10 +54,14 @@ final class SessionManager: ObservableObject {
             await registerPushTokenIfAvailable()
         } catch {
             print("❌ Failed to restore session: \(error)")
+            // Temporary network/server/Keychain failures must not destroy a renewable session.
+            // Definitive rejection is cleared by APIClient after refresh has been attempted.
             APIClient.shared.authToken = nil
-            KeychainService.shared.deleteToken()
             currentUser = nil
             isLoggedIn = false
+            errorMessage = KeychainService.shared.loadToken() == nil
+                ? "Your session ended. Please sign in again."
+                : "Unable to reconnect. Your saved sign-in has been kept; please try again."
         }
     }
 
@@ -102,12 +106,38 @@ final class SessionManager: ObservableObject {
     }
 
     func logout() {
+        if let credentials = KeychainService.shared.loadSession() {
+            var pending = pendingSessionRevocations()
+            if !pending.contains(credentials.refreshToken) { pending.append(credentials.refreshToken) }
+            if let data = try? JSONEncoder().encode(pending), let text = String(data: data, encoding: .utf8) {
+                KeychainService.shared.save(text, for: "mtfd.pendingSessionRevocations")
+            }
+        }
         NavigationRouter.shared.resetToHome()
         APIClient.shared.authToken = nil
         KeychainService.shared.deleteToken()
         currentUser = nil
         isLoggedIn = false
         errorMessage = nil
+        Task { await flushPendingSessionRevocations() }
+    }
+
+    private func pendingSessionRevocations() -> [String] {
+        guard let text = KeychainService.shared.read(for: "mtfd.pendingSessionRevocations"),
+              let data = text.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    private func flushPendingSessionRevocations() async {
+        for token in pendingSessionRevocations() {
+            do {
+                try await APIClient.shared.revokeSession(refreshToken: token)
+                let remaining = pendingSessionRevocations().filter { $0 != token }
+                if let data = try? JSONEncoder().encode(remaining), let text = String(data: data, encoding: .utf8) {
+                    KeychainService.shared.save(text, for: "mtfd.pendingSessionRevocations")
+                }
+            } catch { /* Retain the revocation for the next network opportunity. */ }
+        }
     }
 
     private func handleInvalidatedSession() {
@@ -141,17 +171,6 @@ final class SessionManager: ObservableObject {
             return
         }
 
-        guard let url = URL(string: "https://new-mtfd-site.vercel.app/api/mobile/push/register") else {
-            print("❌ Invalid push registration URL")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
 
@@ -164,17 +183,7 @@ final class SessionManager: ObservableObject {
         ]
 
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            if let http = response as? HTTPURLResponse {
-                print("✅ Push register status: \(http.statusCode)")
-            }
-
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📥 Push response: \(responseString)")
-            }
+            try await APIClient.shared.registerPushDevice(body: body)
         } catch {
             print("❌ Push registration failed: \(error)")
         }

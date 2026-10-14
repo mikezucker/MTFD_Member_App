@@ -300,132 +300,143 @@ struct LoginView: View {
     }
 }
 
-private struct ForgotPasswordView: View {
+struct ForgotPasswordView: View {
     @Environment(\.dismiss) private var dismiss
-
-    @State private var email: String
-    @State private var isSending = false
-    @State private var sent = false
+    @EnvironmentObject private var session: SessionManager
+    @State private var identifier: String
+    @State private var pending: PendingPasswordRecovery?
+    @State private var status = "PENDING"
+    @State private var password = ""
+    @State private var confirmation = ""
+    @State private var isWorking = false
     @State private var errorMessage: String?
-
-    private let navy = Color(red: 0.03, green: 0.08, blue: 0.18)
-    private let gold = Color(red: 1.0, green: 0.78, blue: 0.05)
+    @State private var completed = false
+    @State private var operation: Task<Void, Never>?
+    @Environment(\.scenePhase) private var scenePhase
 
     init(initialEmail: String) {
-        _email = State(initialValue: initialEmail.trimmingCharacters(in: .whitespacesAndNewlines))
+        let saved = PendingPasswordRecovery.load()
+        _pending = State(initialValue:saved)
+        _identifier = State(initialValue:saved?.identifier ?? initialEmail.trimmingCharacters(in:.whitespacesAndNewlines))
     }
-
-    private var normalizedEmail: String {
-        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    }
-
-    private var canSend: Bool {
-        normalizedEmail.contains("@") && !isSending
-    }
-
     var body: some View {
         NavigationStack {
-            ZStack {
-                navy.ignoresSafeArea()
-
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Reset Password")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-
-                        Text("Enter your account email. If it matches a member account, we’ll send a one-time reset link.")
-                            .font(.footnote)
-                            .foregroundColor(.white.opacity(0.7))
-                            .fixedSize(horizontal: false, vertical: true)
+            Form {
+                if completed {
+                    Section {
+                        Label("Password updated",systemImage:"checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("Your previous sign-ins have ended. Sign in with your new password to return to MTFD.")
+                        Button("Sign in to MTFD") { operation = Task { await signIn() } }
                     }
-
-                    TextField("Email", text: $email)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.emailAddress)
-                        .textContentType(.username)
-                        .padding()
-                        .background(Color.white)
-                        .foregroundColor(.black)
-                        .cornerRadius(12)
-
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundColor(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    if sent {
-                        Text("If your email is recognized, you’ll receive a reset link shortly. Open the email to choose a new password.")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundColor(.green)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Button {
-                        Task {
-                            await sendResetLink()
+                } else if let pending {
+                    Section("Recovery request") {
+                        LabeledContent("Account sign-in",value:pending.identifier)
+                        Text("Request code")
+                        Text(pending.matchCode).font(.largeTitle.monospaced()).textSelection(.enabled)
+                        Text("If your account is recognized, your Chief or Admin can review this request. They will verify your identity and match this code before approving. This code alone cannot reset your password.")
+                        Label(statusLabel,systemImage:status == "APPROVED" ? "checkmark.shield.fill" : "clock")
+                        if status == "PENDING" {
+                            Text("Keep this request on this iPhone. It expires after 15 minutes. You can close this screen and return while the request remains valid.")
+                            Button("Check approval") { Task { await checkStatus() } }
                         }
-                    } label: {
-                        HStack {
-                            if isSending {
-                                ProgressView()
-                                    .tint(.black)
-                            }
-
-                            Text(isSending ? "Sending..." : "Send Reset Link")
-                                .font(.headline)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canSend ? gold : Color.white.opacity(0.18))
-                        .foregroundColor(canSend ? .black : .white.opacity(0.6))
-                        .cornerRadius(12)
                     }
-                    .disabled(!canSend)
-
-                    Spacer()
+                    if status == "APPROVED" {
+                        Section("Create a new password") {
+                            SecureField("New password",text:$password).textContentType(.newPassword)
+                            SecureField("Confirm new password",text:$confirmation).textContentType(.newPassword)
+                            Text("Use at least 12 characters. Your device will verify you before the password is changed.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                            Button("Verify device & update password") { operation = Task { await complete(pending) } }
+                                .disabled(password.count < 12 || password != confirmation)
+                        }
+                    }
+                    if status == "CONSUMED" {
+                        Section {
+                            Text("This reset has already completed. Try signing in with your new password.")
+                            if !password.isEmpty { Button("Sign in with new password") { operation = Task { await signIn() } } }
+                            else { Button("Return to sign in") { dismiss() } }
+                        }
+                    } else if status == "DENIED" || status == "EXPIRED" {
+                        Section { Text("This request can no longer be used. Start again if you still need help.") }
+                    }
+                    Section {
+                        Button("Start a new request",role:.destructive) {
+                            PasswordRecoveryDeviceKey.remove(); self.pending = nil; status = "PENDING"; errorMessage = nil
+                        }
+                    }
+                } else {
+                    Section("Request Chief or Admin approval") {
+                        Text("Enter the account sign-in you normally use for MTFD. Your Chief or Admin can approve your request in their app. No email is sent.")
+                        TextField("Account sign-in",text:$identifier)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .textContentType(.username).keyboardType(.emailAddress)
+                        Button("Request password reset") { operation = Task { await requestReset() } }
+                            .disabled(identifier.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+                    }
                 }
-                .padding(24)
+                if isWorking { Section { ProgressView("Please wait…") } }
+                if let errorMessage { Section { Text(errorMessage).foregroundStyle(.red).accessibilityAddTraits(.updatesFrequently) } }
             }
-            .navigationTitle("Forgot Password")
+            .disabled(isWorking)
+            .navigationTitle("Password Recovery")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                    .foregroundColor(gold)
+            .toolbar { ToolbarItem(placement:.cancellationAction) { Button("Close") { dismiss() } } }
+            .task(id:pending?.requestId) {
+                guard pending != nil else { return }
+                await checkStatus()
+                while !Task.isCancelled && status == "PENDING" && !completed {
+                    try? await Task.sleep(for:.seconds(10))
+                    guard !Task.isCancelled else { break }
+                    if scenePhase == .active { await checkStatus() }
                 }
             }
-            .toolbarColorScheme(.dark, for: .navigationBar)
-            .toolbarBackground(navy, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .onDisappear { operation?.cancel(); password = ""; confirmation = "" }
+            .onChange(of:scenePhase) { _,phase in if phase == .active { Task { await checkStatus() } } }
         }
     }
-
-    @MainActor
-    private func sendResetLink() async {
-        guard canSend else { return }
-
-        isSending = true
-        errorMessage = nil
-        sent = false
-
+    private var statusLabel: String {
+        switch status { case "APPROVED": return "Approved — create your new password"
+        case "DENIED": return "Request declined"
+        case "EXPIRED": return "Request expired"
+        case "CONSUMED": return "Request already completed"
+        default: return "Waiting for Chief or Admin approval" }
+    }
+    @MainActor private func requestReset() async {
+        guard !isWorking else { return }
+        isWorking = true; errorMessage = nil
+        defer { isWorking = false }
         do {
-            let response = try await APIClient.shared.requestPasswordReset(email: normalizedEmail)
-
-            if response.ok {
-                sent = true
-            } else {
-                errorMessage = response.error ?? "Unable to send reset link."
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        isSending = false
+            let publicKey = try PasswordRecoveryDeviceKey.createPublicKey()
+            let result = try await APIClient.shared.startPasswordRecovery(identifier:identifier,publicKey:publicKey)
+            try Task.checkCancellation()
+            let saved = PendingPasswordRecovery(identifier:identifier.trimmingCharacters(in:.whitespacesAndNewlines),
+                requestId:result.requestId,statusToken:result.statusToken,matchCode:result.matchCode,expiresAt:result.expiresAt)
+            try saved.save(); pending = saved; status = "PENDING"
+        } catch { errorMessage = error.localizedDescription }
+    }
+    @MainActor private func checkStatus() async {
+        guard let pending, !isWorking, !completed else { return }
+        do { status = try await APIClient.shared.passwordRecoveryStatus(pending).status; errorMessage = nil }
+        catch { errorMessage = "Unable to check approval. Your request has been kept; please try again." }
+    }
+    @MainActor private func complete(_ pending: PendingPasswordRecovery) async {
+        guard !isWorking else { return }
+        isWorking = true; errorMessage = nil
+        defer { isWorking = false }
+        do {
+            let challenge = try await APIClient.shared.passwordRecoveryChallenge(pending)
+            let candidate = password
+            let signature = try await Task.detached { try PasswordRecoveryDeviceKey.sign(challenge,password:candidate) }.value
+            try Task.checkCancellation()
+            try await APIClient.shared.completePasswordRecovery(pending,signature:signature,password:password,confirmation:confirmation)
+            PasswordRecoveryDeviceKey.remove(); completed = true; confirmation = ""
+        } catch { errorMessage = error.localizedDescription }
+    }
+    @MainActor private func signIn() async {
+        isWorking = true
+        await session.login(email:identifier,password:password)
+        isWorking = false
+        if session.isLoggedIn { password = ""; dismiss() } else { errorMessage = session.errorMessage }
     }
 }

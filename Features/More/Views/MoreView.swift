@@ -4,6 +4,7 @@ import SwiftUI
 struct MoreView: View {
     @EnvironmentObject var sessionManager: SessionManager
     @State private var showLogoutConfirm = false
+    @ObservedObject private var recoveryRouter = NavigationRouter.shared
 
     var body: some View {
         NavigationStack {
@@ -55,6 +56,15 @@ struct MoreView: View {
                                         subtitle: "Uniform requests and gear information",
                                         emoji: "👕"
                                     )
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            if ["ADMIN", "CHIEF"].contains(sessionManager.currentUser?.role ?? "") {
+                                Button {
+                                    recoveryRouter.showPasswordRecoveryRequests = true
+                                } label: {
+                                    menuRow(title:"Password Recovery Requests",subtitle:"Review and authorize member account recovery",emoji:"🔐")
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -136,7 +146,11 @@ struct MoreView: View {
             }
             
         }
+        .sheet(isPresented:$recoveryRouter.showPasswordRecoveryRequests) {
+            AdminPasswordRecoveryView()
+        }
     }
+
 
     private func profileCard(member: APIClient.Member) -> some View {
         HStack(spacing: 14) {
@@ -212,41 +226,10 @@ struct MoreView: View {
     }
 
     private func sendTestPush() async {
-        guard let authToken = APIClient.shared.authToken, !authToken.isEmpty else {
-            print("❌ No auth token available")
-            return
-        }
-
-        guard let url = URL(string: "https://new-mtfd-site.vercel.app/api/admin/push/test") else {
-            print("❌ Invalid test push URL")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-
-        let body: [String: Any] = [
-            "title": "MTFD Test Push",
-            "body": "If this buzzes, the pipeline is alive."
-        ]
-
         do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            if let http = response as? HTTPURLResponse {
-                print("✅ Test push status: \(http.statusCode)")
-            }
-
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📥 Test push response: \(responseString)")
-            }
+            try await APIClient.shared.sendTestPush()
         } catch {
-            print("❌ Test push failed: \(error)")
+            print("Test push failed:", error.localizedDescription)
         }
     }
     
@@ -456,6 +439,7 @@ private struct UserAdminEditView: View {
     @State private var badgeNumber: String
     @State private var stationMessageDelegate: Bool
     @State private var selectedAttributeIds: Set<String>
+    @State private var actorPassword = ""
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -498,6 +482,9 @@ private struct UserAdminEditView: View {
                         }
                     }
                     .disabled(!canEditDepartmentRoles)
+                    if role != user.role && (["ADMIN", "CHIEF"].contains(role) || ["ADMIN", "CHIEF"].contains(user.role)) {
+                        SecureField("Your current password",text:$actorPassword).textContentType(.password)
+                    }
 
                     Picker("Status", selection: $status) {
                         Text("Active").tag("ACTIVE")
@@ -652,7 +639,7 @@ private struct UserAdminEditView: View {
     private func save() async {
         isSaving = true
         errorMessage = nil
-        defer { isSaving = false }
+        defer { isSaving = false; actorPassword = "" }
 
         let payload = APIClient.MobileAdminUserUpdateRequest(
             id: user.id,
@@ -664,7 +651,8 @@ private struct UserAdminEditView: View {
                 ? nil
                 : badgeNumber.trimmingCharacters(in: .whitespacesAndNewlines),
             stationMessageDelegate: stationMessageDelegate,
-            attributeIds: Array(selectedAttributeIds)
+            attributeIds: Array(selectedAttributeIds),
+            actorPassword: actorPassword.isEmpty ? nil : actorPassword
         )
 
         do {
@@ -673,5 +661,129 @@ private struct UserAdminEditView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct AdminPasswordRecoveryView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var requests: [APIClient.AdminRecoveryRequest] = []
+    @State private var selected: APIClient.AdminRecoveryRequest?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    var body: some View {
+        NavigationStack {
+            List {
+                if isLoading { ProgressView("Loading requests…") }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                if requests.isEmpty && !isLoading {
+                    ContentUnavailableView("No pending requests",systemImage:"checkmark.shield",description:Text("Member password recovery requests will appear here."))
+                }
+                ForEach(requests) { request in
+                    Button { selected = request } label: {
+                        VStack(alignment:.leading,spacing:6) {
+                            Text(request.user?.name ?? "Member").font(.headline)
+                            Text(request.user?.email ?? "").font(.subheadline).foregroundStyle(.secondary)
+                            Text("Request code: \(request.matchCode)").font(.body.monospaced())
+                            Text("Expires \(request.expiresAt, style:.relative)").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Password Recovery")
+            .toolbar {
+                ToolbarItem(placement:.cancellationAction) { Button("Close") { dismiss() } }
+                ToolbarItem(placement:.primaryAction) { Button("Refresh") { Task { await load() } } }
+            }
+            .refreshable { await load() }
+            .task {
+                await load()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for:.seconds(15))
+                    guard !Task.isCancelled else { break }
+                    await load()
+                }
+            }
+            .sheet(item:$selected,onDismiss:{Task{await load()}}) { request in
+                AdminPasswordRecoveryDecisionView(request:request)
+            }
+        }
+    }
+    @MainActor private func load() async {
+        guard !isLoading else { return }
+        isLoading = true; defer { isLoading = false }
+        do { requests = try await APIClient.shared.fetchPasswordRecoveryRequests(); errorMessage = nil }
+        catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct AdminPasswordRecoveryDecisionView: View {
+    @Environment(\.dismiss) private var dismiss
+    let request: APIClient.AdminRecoveryRequest
+    @State private var method = "IN_PERSON"
+    @State private var verificationReference = ""
+    @State private var matchCode = ""
+    @State private var password = ""
+    @State private var isWorking = false
+    @State private var errorMessage: String?
+    @State private var didFinish = false
+    @State private var wasApproved = false
+    var body: some View {
+        NavigationStack {
+            Form {
+                if didFinish {
+                    Section {
+                        Label("Request reviewed",systemImage:"checkmark.shield")
+                        Text(wasApproved ? "Only the requesting iPhone can finish this reset. Existing sessions end when the member successfully creates a new password." : "This request was declined and cannot be used to reset the member’s password.")
+                        Button("Done") { dismiss() }
+                    }
+                } else {
+                    Section("Member") {
+                        Text(request.user?.name ?? "Member").font(.headline)
+                        Text(request.user?.email ?? "").foregroundStyle(.secondary)
+                        LabeledContent("Requested",value:request.createdAt.formatted(date:.abbreviated,time:.shortened))
+                    }
+                    Section("Verify the member first") {
+                        Text("Do not approve based only on an account name or a push notification. Verify the member using the established department procedure, then ask them to show or read the code on their requesting iPhone.")
+                        Picker("Identity verified",selection:$method) {
+                            Text("In person").tag("IN_PERSON")
+                            Text("Established phone callback").tag("ESTABLISHED_PHONE")
+                        }
+                        if method == "ESTABLISHED_PHONE" {
+                            Text("Use the member’s independently established department directory number. Do not use a new number supplied in a request or a recently changed profile number.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        TextField("Verification record / directory reference",text:$verificationReference,axis:.vertical)
+                        Text("Record the procedure reference only; do not enter identity-document numbers, passwords, or other sensitive details.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                        TextField("Code from the member’s iPhone",text:$matchCode)
+                            .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                    }
+                    Section("Confirm your authorization") {
+                        SecureField("Your current MTFD password",text:$password).textContentType(.password)
+                        Button("Approve reset") { Task { await decide("APPROVE") } }
+                            .disabled(verificationReference.trimmingCharacters(in:.whitespacesAndNewlines).count < 8 || matchCode.count != 6 || password.isEmpty)
+                        Button("Deny request",role:.destructive) { Task { await decide("DENY") } }
+                            .disabled(matchCode.count != 6 || password.isEmpty)
+                    }
+                }
+                if isWorking { ProgressView("Saving decision…") }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+            }
+            .disabled(isWorking)
+            .navigationTitle("Review Reset Request")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement:.cancellationAction) { Button("Close") { password = ""; dismiss() } } }
+        }
+    }
+    @MainActor private func decide(_ decision: String) async {
+        guard !isWorking else { return }
+        isWorking = true; errorMessage = nil
+        defer { isWorking = false; password = "" }
+        do {
+            try await APIClient.shared.decidePasswordRecovery(requestId:request.id,password:password,decision:decision,
+                matchCode:matchCode.trimmingCharacters(in:.whitespacesAndNewlines).uppercased(),method:method,verificationReference:verificationReference)
+            wasApproved = decision == "APPROVE"
+            didFinish = true
+        } catch { errorMessage = error.localizedDescription }
     }
 }

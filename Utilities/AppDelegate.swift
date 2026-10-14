@@ -149,6 +149,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
+        if userInfo["type"] as? String == "password_recovery_admin" {
+            // Security alerts never enter dispatch filtering, receipts, badges, haptics or Live Activities.
+            completionHandler([.banner, .sound])
+            return
+        }
 
         print("🔍 FULL PAYLOAD:", userInfo)
         print("🔔 Notification received foreground:", userInfo)
@@ -213,6 +218,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        if userInfo["type"] as? String == "password_recovery_admin" {
+            DispatchQueue.main.async {
+                NavigationRouter.shared.selectedTab = .more
+                NavigationRouter.shared.showPasswordRecoveryRequests = true
+            }
+            completionHandler()
+            return
+        }
 
         print("📲 Notification tapped:", userInfo)
 

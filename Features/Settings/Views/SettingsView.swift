@@ -3,9 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var session: SessionManager
 
-    @State private var isSendingResetLink = false
-    @State private var resetMessage: String?
-    @State private var resetError: String?
+    @State private var showPasswordRecovery = false
 
     private var accountEmail: String {
         (session.currentUser?.email ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -18,36 +16,11 @@ struct SettingsView: View {
                     LabeledContent("Email", value: accountEmail)
                 }
 
-                Button {
-                    Task {
-                        await sendPasswordResetLink()
-                    }
-                } label: {
-                    HStack {
-                        Label("Send Password Reset Link", systemImage: "key.fill")
-                            .foregroundStyle(.blue)
-
-                        Spacer()
-
-                        if isSendingResetLink {
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(isSendingResetLink || accountEmail.isEmpty)
-
-                if let resetMessage {
-                    Text(resetMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.green)
-                }
-
-                if let resetError {
-                    Text(resetError)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                Button { showPasswordRecovery = true } label: {
+                    Label("Request Password Recovery",systemImage:"key.fill").foregroundStyle(.blue)
                 }
             }
+
 
             Section("Alerts") {
                 NavigationLink {
@@ -75,36 +48,10 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .sheet(isPresented:$showPasswordRecovery) { ForgotPasswordView(initialEmail:accountEmail) }
     }
 
-    @MainActor
-    private func sendPasswordResetLink() async {
-        let email = accountEmail.lowercased()
 
-        guard !email.isEmpty else {
-            resetError = "No account email is available."
-            resetMessage = nil
-            return
-        }
-
-        isSendingResetLink = true
-        resetMessage = nil
-        resetError = nil
-
-        do {
-            let response = try await APIClient.shared.requestPasswordReset(email: email)
-
-            if response.ok {
-                resetMessage = "If this email is recognized, a reset link will be sent shortly."
-            } else {
-                resetError = response.error ?? "Unable to send reset link."
-            }
-        } catch {
-            resetError = error.localizedDescription
-        }
-
-        isSendingResetLink = false
-    }
 }
 
 #Preview {

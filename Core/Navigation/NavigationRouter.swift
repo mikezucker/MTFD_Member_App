@@ -7,6 +7,7 @@ final class NavigationRouter: ObservableObject {
     static let shared = NavigationRouter()
 
     @Published var selectedTab: AppTab = .home
+    @Published var showPasswordRecoveryRequests = false
 
     @Published var dispatchToOpen: AppNotificationPayload?
     @Published var trainingToOpen: AppNotificationPayload?
@@ -65,7 +66,7 @@ final class NavigationRouter: ObservableObject {
     }
 
     func resetToHome() {
-        selectedTab = .home
+        selectedTab = showPasswordRecoveryRequests ? .more : .home
         clearDispatchRoute()
         clearTrainingRoute()
         clearDocumentRoute()
