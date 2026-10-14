@@ -9,7 +9,7 @@ final class DashboardStatsStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var lastUpdated: Date?
 
-    private let cacheTTL: TimeInterval = 60 * 60
+    private let cacheTTL: TimeInterval = 60
     private let minimumAttemptInterval: TimeInterval = 10
     private let cacheKey = "dashboard_stats_store_cache_v2"
     private var refreshTask: Task<Void, Never>?

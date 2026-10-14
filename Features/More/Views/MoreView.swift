@@ -91,21 +91,6 @@ struct MoreView: View {
                             .padding(.top, 4)
 
                         Button {
-                            Task {
-                                await sendTestPush()
-                            }
-                        } label: {
-                            Text("Send Test Push")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(12)
-                        }
-                        .padding(.horizontal, 24)
-
-                        Button {
                             showLogoutConfirm = true
                         } label: {
                             Text("Log Out")
@@ -211,44 +196,7 @@ struct MoreView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
-    private func sendTestPush() async {
-        guard let authToken = APIClient.shared.authToken, !authToken.isEmpty else {
-            print("❌ No auth token available")
-            return
-        }
 
-        guard let url = URL(string: "https://new-mtfd-site.vercel.app/api/admin/push/test") else {
-            print("❌ Invalid test push URL")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-
-        let body: [String: Any] = [
-            "title": "MTFD Test Push",
-            "body": "If this buzzes, the pipeline is alive."
-        ]
-
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            if let http = response as? HTTPURLResponse {
-                print("✅ Test push status: \(http.statusCode)")
-            }
-
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📥 Test push response: \(responseString)")
-            }
-        } catch {
-            print("❌ Test push failed: \(error)")
-        }
-    }
     
 }
 

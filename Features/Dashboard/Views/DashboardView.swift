@@ -345,6 +345,7 @@ struct DashboardView: View {
                 latestDispatch = dispatch
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
                 Task {
+                    statsStore.markStale()
                     await statsStore.refreshIfNeeded(reason: "pushDispatch")
                 }
 
@@ -376,6 +377,7 @@ struct DashboardView: View {
                 latestDispatch = dispatch
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
                 Task {
+                    statsStore.markStale()
                     await statsStore.refreshIfNeeded(reason: "pushDispatch")
                 }
 
@@ -757,7 +759,10 @@ struct DashboardView: View {
                 return
             }
 
-            await viewModel.refreshDispatchFeed()
+            guard scenePhase == .active, hasAuthToken else { continue }
+            async let dispatchRefresh: Void = viewModel.refreshDispatchFeed()
+            async let totalsRefresh: Void = statsStore.refreshIfNeeded(reason: "dashboardTimer")
+            _ = await (dispatchRefresh, totalsRefresh)
         }
     }
 
