@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 struct NotificationPreferencesView: View {
@@ -5,6 +6,9 @@ struct NotificationPreferencesView: View {
 
     @StateObject private var vm = NotificationPreferencesViewModel()
     @StateObject private var unitCatalog = UnitCatalog()
+    @State private var tonePreviewPlayer: AVAudioPlayer?
+    @State private var tonePreviewStopTask: Task<Void, Never>?
+    @State private var scheduleLinkStatus = ScheduleLinkStatus.idle
 
     private var canUseScheduleBasedNotifications: Bool {
         let role = session.currentUser?.role
@@ -24,6 +28,12 @@ struct NotificationPreferencesView: View {
         }
 
         return [.always, .never]
+    }
+
+    private var criticalAlertTones: [DispatchAlertTone] {
+        DispatchAlertTone.allCases.filter { tone in
+            tone != .systemDefault && tone != .silent
+        }
     }
 
     private var normalAlertScheduleBinding: Binding<NotificationScheduleMode> {
@@ -60,7 +70,7 @@ struct NotificationPreferencesView: View {
 
     private var scheduleDescriptionSuffix: String {
         if canUseScheduleBasedNotifications {
-            return "Always means whether you are working or not. Only while working means only when you are listed on the department schedule."
+            return "Only while scheduled checks your FirstDue schedule before dispatch alerts are sent."
         }
 
         return "Always means dispatch alerts are sent when your other filters match. Off disables this alert type."
@@ -112,6 +122,10 @@ struct NotificationPreferencesView: View {
                     Toggle("Dispatch Alerts", isOn: $vm.preferences.dispatchAlertsEnabled)
 
                     if vm.preferences.dispatchAlertsEnabled {
+                        if canUseScheduleBasedNotifications {
+                            scheduleLinkCard
+                        }
+
                         settingPicker(
                             title: "Normal Dispatch Alerts",
                             description: "Choose when routine dispatch notifications are sent. \(scheduleDescriptionSuffix)",
@@ -132,30 +146,39 @@ struct NotificationPreferencesView: View {
                             isOn: $vm.preferences.criticalDispatchAlerts
                         )
 
+                        if vm.preferences.criticalDispatchAlerts {
+                            Picker("Critical Dispatch Alert Mode", selection: $vm.preferences.criticalDispatchAlertMode) {
+                                ForEach(CriticalDispatchAlertMode.allCases) { mode in
+                                    Text(mode.title).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
 
-                    if vm.preferences.criticalDispatchAlerts {
-                        Picker("Critical Dispatch Alert Mode", selection: $vm.preferences.criticalDispatchAlertMode) {
-                            ForEach(CriticalDispatchAlertMode.allCases) { mode in
-                                Text(mode.title).tag(mode)
+                            Text(vm.preferences.criticalDispatchAlertMode.subtitle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Picker("Critical Alert Tone", selection: $vm.preferences.criticalDispatchAlertTone) {
+                                ForEach(criticalAlertTones) { tone in
+                                    Text(tone.title).tag(tone)
+                                }
+                            }
+
+                            Text("Critical Alerts use this tone when iOS allows emergency alert sounds.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Picker("Dispatch Alert Tone", selection: $vm.preferences.dispatchAlertTone) {
+                            ForEach(DispatchAlertTone.allCases) { tone in
+                                Text(tone.title).tag(tone)
                             }
                         }
-                        .pickerStyle(.segmented)
 
-                        Text(vm.preferences.criticalDispatchAlertMode.subtitle)
+                        Text(vm.preferences.dispatchAlertTone.subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
 
-                    Picker("Dispatch Alert Tone", selection: $vm.preferences.dispatchAlertTone) {
-                        ForEach(DispatchAlertTone.allCases) { tone in
-                            Text(tone.title).tag(tone)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Text(vm.preferences.dispatchAlertTone.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                         settingToggle(
                             title: "Working Fires Only",
                             description: "Only receive fire dispatch alerts for working, structure, building, or confirmed fires.",
@@ -201,7 +224,7 @@ struct NotificationPreferencesView: View {
                     Text("Messages")
                 }
 
-                // MARK: - Training & Documents
+                // MARK: - Training & Policy Center
                 Section {
                     settingToggle(
                         title: "Training Assignments",
@@ -210,12 +233,12 @@ struct NotificationPreferencesView: View {
                     )
 
                     settingToggle(
-                        title: "Document / SOP Assignments",
-                        description: "Receive alerts when documents, SOPs, or acknowledgements are assigned to you.",
+                        title: "Policy Center Assignments",
+                        description: "Receive alerts when policies, SOPs, or acknowledgements are assigned to you.",
                         isOn: $vm.preferences.documentAssignmentsEnabled
                     )
                 } header: {
-                    Text("Training & Documents")
+                    Text("Training & Policy Center")
                 }
 
 
@@ -267,18 +290,52 @@ struct NotificationPreferencesView: View {
             await unitCatalog.loadUnits()
             await vm.loadRemote()
             sanitizeScheduleModesIfNeeded()
+            await refreshScheduleLinkStatus()
         }
         .onChange(of: vm.preferences) { _, _ in
-            UserDefaults.standard.set(vm.preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+            UserDefaults.standard.set(vm.preferences.hapticAlertStyle.rawValue, forKey: "notification_haptic_alert_style")
+            UserDefaults.standard.set(vm.preferences.hapticAlertStyle != .off, forKey: "notification_haptics_enabled")
             vm.scheduleSave()
+        }
+        .onChange(of: vm.preferences.hapticAlertStyle) { _, _ in
+            vm.saveLocal()
+
+            Task {
+                await vm.saveImmediately()
+            }
+        }
+        .onChange(of: vm.preferences.criticalDispatchAlerts) { _, isEnabled in
+            guard isEnabled else { return }
+
+            Task {
+                await NotificationManager.shared.requestCriticalAlertPermission()
+            }
+        }
+        .onChange(of: vm.preferences.dispatchAlertTone) { _, tone in
+            previewDispatchAlertTone(tone)
+            Task {
+                await vm.saveImmediately()
+            }
+        }
+        .onChange(of: vm.preferences.criticalDispatchAlertTone) { _, tone in
+            previewDispatchAlertTone(tone)
+            Task {
+                await vm.saveImmediately()
+            }
         }
         .onChange(of: session.currentUser?.role) { _, _ in
             sanitizeScheduleModesIfNeeded()
+            Task {
+                await refreshScheduleLinkStatus()
+            }
         }
         .onDisappear {
+            stopTonePreview()
             sanitizeScheduleModesIfNeeded()
-            vm.cancelPendingSave()
             vm.saveLocal()
+            Task {
+                await vm.flushPendingSave()
+            }
         }
     }
 
@@ -304,16 +361,154 @@ struct NotificationPreferencesView: View {
         }
     }
 
+    private func refreshScheduleLinkStatus() async {
+        guard canUseScheduleBasedNotifications else {
+            scheduleLinkStatus = .unavailable("Schedule-based dispatch alerts are not enabled for this role.")
+            return
+        }
+
+        scheduleLinkStatus = .loading
+
+        do {
+            let response = try await APIClient.shared.fetchMobileUpcomingSchedule()
+
+            if response.isWorkingNow {
+                scheduleLinkStatus = .workingNow
+            } else if let nextShift = response.nextShift {
+                scheduleLinkStatus = .nextShift(nextShift)
+            } else if response.isScheduleTrackedUser {
+                scheduleLinkStatus = .notScheduled
+            } else {
+                scheduleLinkStatus = .unavailable("FirstDue did not return a schedule match for this member.")
+            }
+        } catch {
+            scheduleLinkStatus = .unavailable(error.localizedDescription)
+        }
+    }
+
+    private func previewDispatchAlertTone(_ tone: DispatchAlertTone) {
+        stopTonePreview()
+
+        guard let soundName = tone.previewSoundName else {
+            return
+        }
+
+        let resource = (soundName as NSString).deletingPathExtension
+        let extensionName = (soundName as NSString).pathExtension
+
+        guard let url = Bundle.main.url(
+            forResource: resource,
+            withExtension: extensionName.isEmpty ? nil : extensionName
+        ) else {
+            return
+        }
+
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.duckOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+
+            let player = try AVAudioPlayer(contentsOf: url)
+            player.prepareToPlay()
+            player.play()
+            tonePreviewPlayer = player
+            tonePreviewStopTask = Task {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+
+                guard !Task.isCancelled else { return }
+
+                await MainActor.run {
+                    stopTonePreview()
+                }
+            }
+        } catch {
+            tonePreviewPlayer = nil
+            tonePreviewStopTask?.cancel()
+            tonePreviewStopTask = nil
+            try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        }
+    }
+
+    private func stopTonePreview() {
+        tonePreviewStopTask?.cancel()
+        tonePreviewStopTask = nil
+        tonePreviewPlayer?.stop()
+        tonePreviewPlayer = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+    }
+
     private var hapticsSection: some View {
         Section {
-            settingToggle(
-                title: "Notification Haptics",
-                description: "Use vibration feedback for in-app dispatch and notification alerts when supported by iOS.",
-                isOn: $vm.preferences.hapticsEnabled
-            )
+            Picker("Haptic Alerts", selection: $vm.preferences.hapticAlertStyle) {
+                ForEach(HapticAlertStyle.allCases) { style in
+                    Text(style.displayName).tag(style)
+                }
+            }
+
+            Text(vm.preferences.hapticAlertStyle.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Button("Test Normal") {
+                    HapticAlertManager.shared.play(style: .normal)
+                }
+                .buttonStyle(.borderless)
+
+                Button("Test Strong") {
+                    HapticAlertManager.shared.play(style: .strong)
+                }
+                .buttonStyle(.borderless)
+
+                Button("Test Pager") {
+                    HapticAlertManager.shared.play(style: .pagerStyle, isCritical: true)
+                }
+                .buttonStyle(.borderless)
+            }
         } header: {
-            Text("Haptics")
+            Text("Notification Preferences")
         }
+    }
+
+    private var scheduleLinkCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: scheduleLinkStatus.systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(scheduleLinkStatus.tint)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("FirstDue Schedule Link")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text(scheduleLinkStatus.title)
+                        .font(.caption.weight(.semibold))
+
+                    Text(scheduleLinkStatus.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                if scheduleLinkStatus.isLoading {
+                    ProgressView()
+                } else {
+                    Button {
+                        Task {
+                            await refreshScheduleLinkStatus()
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.caption.weight(.bold))
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Refresh FirstDue schedule link")
+                }
+            }
+        }
+        .padding(.vertical, 4)
     }
 
     private func settingToggle(
@@ -393,5 +588,103 @@ struct NotificationPreferencesView: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         )
+    }
+}
+
+private enum ScheduleLinkStatus {
+    case idle
+    case loading
+    case workingNow
+    case nextShift(APIClient.MobileUpcomingShift)
+    case notScheduled
+    case unavailable(String)
+
+    var isLoading: Bool {
+        if case .loading = self {
+            return true
+        }
+
+        return false
+    }
+
+    var title: String {
+        switch self {
+        case .idle:
+            return "Schedule status not checked yet"
+        case .loading:
+            return "Checking FirstDue schedule..."
+        case .workingNow:
+            return "You are listed as scheduled now"
+        case .nextShift:
+            return "You are not scheduled right now"
+        case .notScheduled:
+            return "No upcoming scheduled shift found"
+        case .unavailable:
+            return "Schedule link unavailable"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .idle:
+            return "Only while scheduled uses FirstDue to decide whether dispatch alerts should be sent."
+        case .loading:
+            return "The app is checking your current and upcoming schedule."
+        case .workingNow:
+            return "Only while scheduled will allow matching dispatch alerts while FirstDue shows you working."
+        case .nextShift(let shift):
+            return nextShiftDetail(shift)
+        case .notScheduled:
+            return "Only while scheduled will suppress dispatch alerts until FirstDue lists you on the schedule."
+        case .unavailable(let message):
+            return message
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .idle:
+            return "calendar.badge.clock"
+        case .loading:
+            return "arrow.clockwise"
+        case .workingNow:
+            return "checkmark.circle.fill"
+        case .nextShift:
+            return "calendar"
+        case .notScheduled:
+            return "moon.zzz.fill"
+        case .unavailable:
+            return "exclamationmark.triangle.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .idle, .loading, .nextShift:
+            return .blue
+        case .workingNow:
+            return .green
+        case .notScheduled:
+            return .secondary
+        case .unavailable:
+            return .orange
+        }
+    }
+
+    private func nextShiftDetail(_ shift: APIClient.MobileUpcomingShift) -> String {
+        let parts = [
+            shift.date,
+            shift.timeRange,
+            shift.station,
+            shift.assignment
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        if parts.isEmpty {
+            return "Only while scheduled will allow matching dispatch alerts during your next FirstDue shift."
+        }
+
+        return "Next FirstDue shift: \(parts.joined(separator: " • "))."
     }
 }

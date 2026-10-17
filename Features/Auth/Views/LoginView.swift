@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var sessionManager: SessionManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var email = ""
     @State private var password = ""
@@ -9,6 +10,9 @@ struct LoginView: View {
     @State private var errorMessage: String?
     @State private var keyboardHeight: CGFloat = 0
     @State private var showForgotPassword = false
+    @State private var logoVisible = false
+    @State private var shimmerPhase: CGFloat = 0
+    @State private var mottoWordCount = 0
 
     @FocusState private var focusedField: Field?
 
@@ -19,6 +23,8 @@ struct LoginView: View {
 
     private let navy = Color(red: 0.03, green: 0.08, blue: 0.18)
     private let gold = Color(red: 1.0, green: 0.78, blue: 0.05)
+    private let fireRed = Color(red: 0.86, green: 0.08, blue: 0.12)
+    private let mottoWords = ["INTEGRITY", "SERVICE", "EXCELLENCE"]
 
     var body: some View {
         ZStack {
@@ -26,22 +32,24 @@ struct LoginView: View {
 
             ScrollView {
                 VStack(spacing: 22) {
-                    Image("MTFDLogo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: keyboardHeight > 0 ? 135 : 185)
-                        .padding(.top, keyboardHeight > 0 ? 12 : 34)
-                        .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
-                        .animation(.easeOut(duration: 0.25), value: keyboardHeight)
+                    VStack(spacing: keyboardHeight > 0 ? 12 : 18) {
+                        logoView
 
-                    VStack(spacing: 2) {
-                        Text("Morris Township")
-                        Text("Fire Department")
-                        Text("Member App")
+                        mottoView
                     }
-                    .font(.system(size: keyboardHeight > 0 ? 24 : 30, weight: .semibold, design: .rounded))
+                    .padding(.top, keyboardHeight > 0 ? 12 : 34)
+                    .animation(.easeOut(duration: 0.25), value: keyboardHeight)
+
+                    VStack(spacing: 5) {
+                        Text("Morris Township Fire Dept.")
+                            .font(.system(size: keyboardHeight > 0 ? 25 : 31, weight: .semibold, design: .default))
+                            .tracking(0.2)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
                     .multilineTextAlignment(.center)
                     .foregroundColor(.white)
+                    .padding(.horizontal, 18)
                     .animation(.easeOut(duration: 0.25), value: keyboardHeight)
 
                     Rectangle()
@@ -50,8 +58,9 @@ struct LoginView: View {
                         .padding(.horizontal, 46)
 
                     Text("Member Access Portal")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(.system(size: keyboardHeight > 0 ? 13 : 14, weight: .medium, design: .default))
+                        .tracking(0.4)
+                        .foregroundColor(.white.opacity(0.82))
 
                     VStack(spacing: 16) {
                         TextField("Email", text: $email)
@@ -151,6 +160,128 @@ struct LoginView: View {
         }
         .sheet(isPresented: $showForgotPassword) {
             ForgotPasswordView(initialEmail: email)
+        }
+        .task {
+            await runIntroAnimation()
+        }
+    }
+
+    private var mottoView: some View {
+        HStack(spacing: 8) {
+            ForEach(Array(mottoWords.enumerated()), id: \.offset) { index, word in
+                if index > 0 {
+                    Rectangle()
+                        .fill(fireRed.opacity(0.9))
+                        .frame(width: 1, height: keyboardHeight > 0 ? 12 : 14)
+                        .padding(.horizontal, 2)
+                        .opacity(mottoWordCount > index ? 1 : 0)
+                }
+
+                Text(word)
+                    .font(.system(size: keyboardHeight > 0 ? 11 : 12, weight: .semibold, design: .default))
+                    .tracking(1.2)
+                    .foregroundColor(.white.opacity(0.84))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .opacity(mottoWordCount > index ? 1 : 0)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 22)
+        .animation(.easeOut(duration: 0.55), value: mottoWordCount)
+    }
+
+    private var logoView: some View {
+        let logoSize: CGFloat = keyboardHeight > 0 ? 118 : 154
+        let shimmerTravel = logoSize * 0.9
+
+        return ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            gold.opacity(0.13),
+                            Color.white.opacity(0.045),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 8,
+                        endRadius: logoSize * 0.62
+                    )
+                )
+                .frame(width: logoSize + 16, height: logoSize + 16)
+                .blur(radius: 2)
+
+            if !reduceMotion {
+                ZStack {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.clear,
+                                    Color.white.opacity(0.16),
+                                    gold.opacity(0.09),
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: logoSize * 0.36, height: logoSize * 1.55)
+                        .rotationEffect(.degrees(22))
+                        .offset(x: -shimmerTravel + (shimmerTravel * 2 * shimmerPhase))
+                        .blendMode(.screen)
+                }
+                .frame(width: logoSize, height: logoSize)
+                .clipShape(Circle())
+                .opacity(logoVisible ? 1 : 0)
+                .animation(
+                    .linear(duration: 3.2)
+                        .repeatForever(autoreverses: false),
+                    value: shimmerPhase
+                )
+            }
+
+            Image("MTFDHeaderIcon")
+                .resizable()
+                .scaledToFill()
+                .frame(width: logoSize, height: logoSize)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(.white.opacity(0.12), lineWidth: 1)
+                )
+        }
+        .frame(width: logoSize + 20, height: logoSize + 20)
+        .shadow(color: gold.opacity(0.16), radius: 12, y: 0)
+        .shadow(color: .black.opacity(0.24), radius: 10, y: 5)
+        .opacity(logoVisible ? 1 : 0)
+        .scaleEffect(logoVisible || reduceMotion ? 1 : 0.97)
+        .animation(.easeOut(duration: 0.85), value: logoVisible)
+    }
+
+    @MainActor
+    private func runIntroAnimation() async {
+        logoVisible = false
+        shimmerPhase = 0
+        mottoWordCount = 0
+
+        if reduceMotion {
+            logoVisible = true
+            mottoWordCount = mottoWords.count
+            return
+        }
+
+        try? await Task.sleep(nanoseconds: 180_000_000)
+        logoVisible = true
+
+        try? await Task.sleep(nanoseconds: 280_000_000)
+        shimmerPhase = 1
+
+        try? await Task.sleep(nanoseconds: 650_000_000)
+        for count in 1...mottoWords.count {
+            mottoWordCount = count
+            try? await Task.sleep(nanoseconds: 190_000_000)
         }
     }
 
@@ -298,4 +429,3 @@ private struct ForgotPasswordView: View {
         isSending = false
     }
 }
-

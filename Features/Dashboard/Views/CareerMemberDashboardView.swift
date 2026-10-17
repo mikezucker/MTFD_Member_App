@@ -12,7 +12,11 @@ struct CareerMemberDashboardView: View {
     let pendingDocuments: Int
     let departmentUpdates: [DashboardBulletin]
     let stationUpdates: [DashboardBulletin]
+    let messagePreviews: [DashboardMessagePreview]
+    let unreadMessageCount: Int
+    let dashboardCards: [DashboardCardID]
     let isLoading: Bool
+    let onRefresh: () async -> Void
 
     let onOpenDispatch: (DispatchNotificationPayload) -> Void
     let onOpenMessages: () -> Void
@@ -29,6 +33,10 @@ struct CareerMemberDashboardView: View {
         DashboardTotalsWindow(rawValue: selectedWindowRawValue) ?? .ytd
     }
 
+    private var selectedTotalsBucket: APIClient.DispatchBucket? {
+        selectedTotalsScope == .station ? stationStats : departmentStats
+    }
+
     private var primaryActiveDispatch: APIClient.ActiveDispatch? {
         activeDispatches.first
     }
@@ -38,26 +46,30 @@ struct CareerMemberDashboardView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            activeDispatchSection
-            callTotalsSection
-            scheduleSection
-            messagesSection
-            updatesSection
-            workOrdersSection
-            trainingSection
-            pastDispatchesSection
-            documentsSection
+        NonBouncingVerticalScrollView(
+            showsIndicators: false,
+            onRefresh: onRefresh
+        ) {
+            VStack(alignment: .leading, spacing: 22) {
+                activeDispatchSection
+                callTotalsSection
+
+                ForEach(dashboardCards) { card in
+                    dashboardCard(card)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 120)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 22)
-        .padding(.bottom, 120)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     @ViewBuilder
     private var activeDispatchSection: some View {
         if let primaryActiveDispatch {
-            sectionTitle("Current Dispatch")
+            sectionTitle("Current Dispatch", systemImage: "firetruck.fill")
 
             DashboardDispatchPreviewCard(
                 dispatch: makeDispatchPayload(from: primaryActiveDispatch),
@@ -67,7 +79,7 @@ struct CareerMemberDashboardView: View {
             }
 
             if !secondaryActiveDispatches.isEmpty {
-                sectionTitle("Additional Active Dispatches")
+                sectionTitle("Additional Active Dispatches", systemImage: "firetruck.fill")
 
                 ActiveDispatchStackView(dispatches: secondaryActiveDispatches) { activeDispatch in
                     onOpenDispatch(makeDispatchPayload(from: activeDispatch))
@@ -79,7 +91,7 @@ struct CareerMemberDashboardView: View {
     private var callTotalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                sectionTitle("Call Totals")
+                sectionTitle("Call Totals", systemImage: "chart.bar.fill")
                 Spacer()
 
                 HStack(spacing: 6) {
@@ -102,7 +114,7 @@ struct CareerMemberDashboardView: View {
                 }
             }
 
-            if isLoading && departmentStats == nil && stationStats == nil {
+            if selectedTotalsBucket == nil {
                 loadingCard("Loading call totals...")
             } else {
                 HStack(spacing: 6) {
@@ -112,7 +124,7 @@ struct CareerMemberDashboardView: View {
 
                 totalsRow(
                     title: selectedTotalsScope == .station ? "Station" : "Department",
-                    stats: selectedTotalsScope == .station ? stationStats : departmentStats
+                    stats: selectedTotalsBucket
                 )
             }
         }
@@ -155,6 +167,8 @@ struct CareerMemberDashboardView: View {
                 inlineTotal(value: callTotal(stats, .fire), label: "🔥 Fire")
                 Divider().frame(height: 44).background(Color.white.opacity(0.18))
                 inlineTotal(value: callTotal(stats, .ems), label: "🚑 EMS")
+                Divider().frame(height: 44).background(Color.white.opacity(0.18))
+                inlineTotal(value: callTotal(stats, .other), label: "Other")
             }
         }
         .padding(.horizontal, 16)
@@ -166,12 +180,11 @@ struct CareerMemberDashboardView: View {
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         }
         .contentShape(Rectangle())
-        .gesture(totalsSwipeGesture)
     }
 
     private var scheduleSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle(upcomingSchedule?.isWorkingNow == true ? "Working Now" : "Next Shift")
+            sectionTitle(upcomingSchedule?.isWorkingNow == true ? "Working Now" : "Next Shift", systemImage: upcomingSchedule?.isWorkingNow == true ? "person.fill.checkmark" : "calendar.badge.clock")
 
             if isLoading && upcomingSchedule == nil {
                 loadingCard("Loading schedule...")
@@ -201,10 +214,67 @@ struct CareerMemberDashboardView: View {
 
     private var messagesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Messages")
-            DashboardMessageCenterCard {
+            sectionTitle("Messages", systemImage: "envelope.fill")
+            DashboardMessageCenterCard(
+                messages: messagePreviews,
+                unreadCount: unreadMessageCount
+            ) {
                 onOpenMessages()
             }
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardCard(_ card: DashboardCardID) -> some View {
+        switch card {
+        case .messages:
+            messagesSection
+
+        case .scheduleEvents:
+            if isLoading || upcomingSchedule?.isWorkingNow == true || upcomingSchedule?.nextShift != nil {
+                scheduleSection
+            }
+
+        case .apparatusWorkOrders:
+            if isLoading || !workOrders.isEmpty {
+                workOrdersSection
+            }
+
+        case .assignedTraining:
+            if isLoading || !assignedTraining.isEmpty {
+                trainingSection
+            }
+
+        case .documents:
+            if isLoading || pendingDocuments > 0 {
+                documentsSection
+            }
+
+        case .departmentUpdates:
+            if isLoading || !departmentUpdates.isEmpty {
+                updatesGroup(
+                    title: "Department Updates",
+                    emptyMessage: "No department updates posted.",
+                    updates: departmentUpdates
+                )
+            }
+
+        case .stationUpdates:
+            if isLoading || !stationUpdates.isEmpty {
+                updatesGroup(
+                    title: "Station Updates",
+                    emptyMessage: "No station updates posted.",
+                    updates: stationUpdates
+                )
+            }
+
+        case .recentCalls:
+            if isLoading || !recentCalls.isEmpty {
+                pastDispatchesSection
+            }
+
+        case .commandOverview, .needsAttention:
+            EmptyView()
         }
     }
 
@@ -231,16 +301,18 @@ struct CareerMemberDashboardView: View {
         updates: [DashboardBulletin]
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle(title)
+            sectionTitle(title, systemImage: title == "Station Updates" ? "building.2.fill" : "megaphone.fill")
 
             if isLoading && updates.isEmpty {
                 loadingCard("Loading \(title.lowercased())...")
             } else if updates.isEmpty {
                 emptyCard(emptyMessage)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(updates) { update in
-                        bulletinRow(update)
+                DashboardScrollableList(itemCount: updates.count, maxHeight: 500) {
+                    VStack(spacing: 10) {
+                        ForEach(updates) { update in
+                            bulletinRow(update)
+                        }
                     }
                 }
             }
@@ -274,30 +346,66 @@ struct CareerMemberDashboardView: View {
         }
     }
 
+    private var resolvedApparatusStation: String? {
+        let station = upcomingSchedule?.nextShift?.station?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return station?.isEmpty == false ? station : nil
+    }
+
+    private var stationScopedWorkOrders: [DashboardApparatusWorkOrder] {
+        guard let station = resolvedApparatusStation?.lowercased() else {
+            return workOrders
+        }
+
+        let stationNumber = station
+            .replacingOccurrences(of: "station", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return workOrders.filter { order in
+            let apparatus = order.apparatusName.lowercased()
+
+            return apparatus.contains(station) ||
+                (!stationNumber.isEmpty && apparatus.contains(" \(stationNumber)")) ||
+                (!stationNumber.isEmpty && apparatus.contains(stationNumber))
+        }
+    }
+
+    private var apparatusStatusSubtitle: String {
+        if let station = resolvedApparatusStation {
+            return "Current or next shift apparatus for \(station)."
+        }
+
+        return "Current or next shift apparatus."
+    }
+
     private var workOrdersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Apparatus Work Orders")
+            sectionTitle("Apparatus Status", systemImage: "wrench.and.screwdriver.fill")
 
-            if isLoading && workOrders.isEmpty {
+            if isLoading && stationScopedWorkOrders.isEmpty {
                 loadingCard("Loading apparatus work orders...")
-            } else if workOrders.isEmpty {
+            } else if stationScopedWorkOrders.isEmpty {
                 emptyCard("No open apparatus work orders.")
             } else {
-                DashboardApparatusWorkOrdersCard(workOrders: workOrders) {
+                DashboardApparatusWorkOrdersCard(
+                    workOrders: stationScopedWorkOrders,
+                    title: "Apparatus Status",
+                    subtitle: apparatusStatusSubtitle,
+                    emptyMessage: resolvedApparatusStation == nil
+                        ? "No open apparatus issues."
+                        : "No open apparatus issues for \(resolvedApparatusStation!)."
+                ) {
                     onOpenWorkOrders()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    onOpenWorkOrders()
-                }
             }
         }
     }
 
     private var trainingSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Assigned Training")
+            sectionTitle("Assigned Training", systemImage: "graduationcap.fill")
 
             if isLoading && assignedTraining.isEmpty {
                 loadingCard("Loading training...")
@@ -319,29 +427,35 @@ struct CareerMemberDashboardView: View {
 
     private var pastDispatchesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Past Dispatches")
+            sectionTitle("Past Dispatches", systemImage: "clock.arrow.circlepath")
 
             if isLoading && recentCalls.isEmpty {
                 loadingCard("Loading past dispatches...")
             } else if recentCalls.isEmpty {
                 emptyCard("No recent dispatches available.")
             } else {
-                DashboardRecentCallsCard(calls: recentCalls) {
-                    onOpenPastDispatches()
-                }
+                DashboardRecentCallsCard(
+                    calls: recentCalls,
+                    onOpenCall: { call in
+                        onOpenDispatch(DispatchNotificationPayload(recentDepartmentCall: call))
+                    },
+                    onViewAll: {
+                        onOpenPastDispatches()
+                    }
+                )
             }
         }
     }
 
     private var documentsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Documents / SOPs")
+            sectionTitle("Policy Center", systemImage: "doc.text.fill")
 
             DashboardSmallStatusCard(
-                title: "Documents / SOPs",
+                title: "Policy Center",
                 subtitle: pendingDocuments > 0
                     ? "\(pendingDocuments) item\(pendingDocuments == 1 ? "" : "s") need acknowledgement."
-                    : "No documents need acknowledgement.",
+                    : "No policies need acknowledgement.",
                 systemImage: "doc.text.fill"
             ) {
                 onOpenDocuments()
@@ -370,6 +484,7 @@ struct CareerMemberDashboardView: View {
         case total
         case fire
         case ems
+        case other
     }
 
     private func callTotal(_ stats: APIClient.DispatchBucket?, _ kind: TotalKind) -> Int {
@@ -377,40 +492,26 @@ struct CareerMemberDashboardView: View {
         case (.last24h, .total): return stats?.total24h ?? 0
         case (.last24h, .fire): return stats?.fire24h ?? 0
         case (.last24h, .ems): return stats?.ems24h ?? 0
+        case (.last24h, .other): return stats?.other24h ?? 0
 
         case (.last7d, .total): return stats?.total7d ?? 0
         case (.last7d, .fire): return stats?.fire7d ?? 0
         case (.last7d, .ems): return stats?.ems7d ?? 0
+        case (.last7d, .other): return stats?.other7d ?? 0
 
         case (.last30d, .total): return stats?.total30d ?? 0
         case (.last30d, .fire): return stats?.fire30d ?? 0
         case (.last30d, .ems): return stats?.ems30d ?? 0
+        case (.last30d, .other): return stats?.other30d ?? 0
 
         case (.ytd, .total): return stats?.totalYtd ?? 0
         case (.ytd, .fire): return stats?.fireYtd ?? 0
         case (.ytd, .ems): return stats?.emsYtd ?? 0
+        case (.ytd, .other): return stats?.otherYtd ?? 0
         }
     }
 
-    private var totalsSwipeGesture: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onEnded { value in
-                let horizontal = value.translation.width
-                let vertical = value.translation.height
-
-                guard abs(horizontal) > abs(vertical), abs(horizontal) > 40 else {
-                    return
-                }
-
-                if horizontal < 0 {
-                    selectNextTotalsWindow()
-                } else {
-                    selectPreviousTotalsWindow()
-                }
-            }
-    }
-
-    private func selectNextTotalsWindow() {
+private func selectNextTotalsWindow() {
         let windows = DashboardTotalsWindow.allCases
         guard let currentIndex = windows.firstIndex(of: selectedTotalsWindow) else { return }
         selectedWindowRawValue = windows[min(currentIndex + 1, windows.count - 1)].rawValue
@@ -450,10 +551,16 @@ struct CareerMemberDashboardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
-    private func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(.headline)
-            .foregroundStyle(.white)
+    private func sectionTitle(_ text: String, systemImage: String? = nil) -> some View {
+        HStack(spacing: 8) {
+            if let systemImage {
+                DashboardColorIcon(systemImage: systemImage, size: 22, frameSize: 30)
+            }
+
+            Text(text)
+                .font(.headline)
+                .foregroundStyle(.white)
+        }
     }
 
     private func makeDispatchPayload(from activeDispatch: APIClient.ActiveDispatch) -> DispatchNotificationPayload {
@@ -464,7 +571,7 @@ struct CareerMemberDashboardView: View {
             body: activeDispatch.address ?? activeDispatch.message ?? "Dispatch details available",
             callType: activeDispatch.callType,
             address: activeDispatch.address,
-            units: activeDispatch.units,
+            units: DispatchUnitFilter.visibleRespondingUnits(from: activeDispatch.units),
             isWorkingFire: activeDispatch.isWorkingFire ?? false,
             activeCallCount: activeDispatches.count,
             stationId: nil,

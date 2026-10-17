@@ -13,7 +13,25 @@ final class SessionManager: ObservableObject {
     @Published var isRestoringSession = false
     @Published var errorMessage: String?
 
-    private init() {}
+    private var sessionInvalidatedObserver: NSObjectProtocol?
+
+    private init() {
+        sessionInvalidatedObserver = NotificationCenter.default.addObserver(
+            forName: .didInvalidateSession,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                SessionManager.shared.handleInvalidatedSession()
+            }
+        }
+    }
+
+    deinit {
+        if let sessionInvalidatedObserver {
+            NotificationCenter.default.removeObserver(sessionInvalidatedObserver)
+        }
+    }
 
     func restoreSession() async {
         isRestoringSession = true
@@ -26,10 +44,12 @@ final class SessionManager: ObservableObject {
         }
 
         APIClient.shared.authToken = token
+        KeychainService.shared.saveToken(token)
 
         do {
             let memberResponse = try await APIClient.shared.fetchCurrentUser()
             currentUser = memberResponse.member
+            NavigationRouter.shared.resetToHome()
             isLoggedIn = true
             await registerPushTokenIfAvailable()
         } catch {
@@ -68,6 +88,7 @@ final class SessionManager: ObservableObject {
             KeychainService.shared.saveToken(token)
 
             currentUser = member
+            NavigationRouter.shared.resetToHome()
             isLoggedIn = true
 
             print("✅ Login success")
@@ -81,11 +102,20 @@ final class SessionManager: ObservableObject {
     }
 
     func logout() {
+        NavigationRouter.shared.resetToHome()
         APIClient.shared.authToken = nil
         KeychainService.shared.deleteToken()
         currentUser = nil
         isLoggedIn = false
         errorMessage = nil
+    }
+
+    private func handleInvalidatedSession() {
+        NavigationRouter.shared.resetToHome()
+        APIClient.shared.authToken = nil
+        currentUser = nil
+        isLoggedIn = false
+        errorMessage = "Your session expired. Please sign in again."
     }
 
     func updateProfile(name: String, email: String, phone: String?) async throws {

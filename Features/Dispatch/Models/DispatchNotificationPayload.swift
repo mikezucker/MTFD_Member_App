@@ -14,6 +14,10 @@ enum AppNotificationType: String {
 
     init(rawValueSafe value: String?) {
         let normalized = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "document" {
+            self = .documentAssignment
+            return
+        }
         self = AppNotificationType(rawValue: normalized) ?? .unknown
     }
 }
@@ -124,7 +128,7 @@ struct AppNotificationPayload: Identifiable {
         case .trainingAssignment:
             return "Training Assignment"
         case .documentAssignment:
-            return "Document Assignment"
+            return "Policy Center Assignment"
         case .messageCenter:
             return "Message Center"
         case .unknown:

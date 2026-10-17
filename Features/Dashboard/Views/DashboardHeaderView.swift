@@ -4,52 +4,8 @@ struct AppDashboardIcon: View {
     let systemImage: String
     var size: CGFloat = 32
 
-    private var emoji: String {
-        switch systemImage {
-        case "envelope.fill", "text.bubble.fill":
-            return "📨"
-        case "graduationcap.fill":
-            return "🎓"
-        case "checkmark.seal.fill", "exclamationmark.triangle.fill":
-            return "✅"
-        case "doc.text.fill":
-            return "📄"
-        case "wrench.and.screwdriver.fill":
-            return "🛠️"
-        case "calendar.badge.clock":
-            return "🗓️"
-        case "person.fill.checkmark":
-            return "👤"
-        case "clock.arrow.circlepath", "bell.and.waves.left.and.right.fill":
-            return "🚨"
-        case "megaphone.fill":
-            return "📣"
-        case "building.2.fill":
-            return "🏢"
-        case "flame.fill":
-            return "🔥"
-        case "bell.fill":
-            return "🔔"
-        case "person.3.fill":
-            return "👥"
-        case "tshirt.fill":
-            return "👕"
-        case "person.crop.circle.fill":
-            return "👤"
-        case "gearshape.fill":
-            return "⚙️"
-        case "shield.lefthalf.filled":
-            return "🛡️"
-        default:
-            return "📌"
-        }
-    }
-
     var body: some View {
-        Text(emoji)
-            .font(.system(size: size))
-            .minimumScaleFactor(0.75)
-            .accessibilityLabel(Text(systemImage))
+        AppIcon(systemImage: systemImage, size: size, frameSize: size + 8)
     }
 }
 
@@ -220,10 +176,15 @@ struct DashboardHeaderView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image("MTFDLogo")
+            Image("MTFDHeaderIcon")
                 .resizable()
-                .scaledToFit()
+                .scaledToFill()
                 .frame(width: 76, height: 76)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(.white.opacity(0.12), lineWidth: 1)
+                )
                 .shadow(color: .black.opacity(0.22), radius: 8, y: 4)
 
             VStack(alignment: .leading, spacing: 4) {

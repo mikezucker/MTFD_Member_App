@@ -9,3 +9,4 @@ DerivedData/
 *.p8
 *.pem
 *.key
+_backups/

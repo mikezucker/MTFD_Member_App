@@ -20,7 +20,7 @@ enum DashboardRole {
 
         case "ADMIN": return .admin
 
-        case "CHIEF": return .chief
+        case "CHIEF", "BATTALION_CHIEF": return .chief
 
         case "OFFICER_CAREER": return .officerCareer
 
@@ -37,4 +37,3 @@ enum DashboardRole {
     }
 
 }
-
