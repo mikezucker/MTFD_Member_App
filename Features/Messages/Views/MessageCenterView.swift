@@ -1188,76 +1188,16 @@ private struct EmptySectionRow: View {
 
 private struct MessageDispatchMapPreview: View {
     let address: String
-
-    @State private var position = MapCameraPosition.region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
-            span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-        )
-    )
-
-    @State private var coordinate = CLLocationCoordinate2D(
-        latitude: 40.7968,
-        longitude: -74.4815
-    )
-
+    @State private var coordinate: CLLocationCoordinate2D?
+    @State private var isLoading = true
     var body: some View {
-        Map(position: $position) {
-            Marker("Incident", coordinate: coordinate)
-                .tint(.red)
-        }
-        .allowsHitTesting(false)
-        .task(id: address) {
-            await updateRegion()
-        }
-        .overlay(alignment: .bottomLeading) {
-            Label("Map Preview", systemImage: "map.fill")
-                .font(.caption.bold())
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .padding(10)
-        }
-    }
-
-    private func updateRegion() async {
-        guard !address.isEmpty else {
-            return
-        }
-
-        do {
-            let request = MKLocalSearch.Request()
-            let searchAddress = address.localizedCaseInsensitiveContains("NJ")
-                ? address
-                : "\(address), Morristown, NJ"
-            request.naturalLanguageQuery = searchAddress
-            request.region = MKCoordinateRegion(
-                center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
-                span: MKCoordinateSpan(latitudeDelta: 0.15, longitudeDelta: 0.15)
-            )
-
-            let search = MKLocalSearch(request: request)
-            let response = try await search.start()
-
-            guard let item = response.mapItems.first else {
-                return
+        DispatchMapPreview(address: address, coordinate: coordinate, isLoading: isLoading)
+            .task(id: address) {
+                isLoading = true; coordinate = nil
+                let resolved = await DispatchIncidentLocationResolver.resolve(address: address)
+                guard !Task.isCancelled else { return }
+                coordinate = resolved; isLoading = false
             }
-
-            let newCoordinate = item.placemark.coordinate
-
-            await MainActor.run {
-                coordinate = newCoordinate
-                position = .region(
-                    MKCoordinateRegion(
-                        center: newCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
-                    )
-                )
-            }
-        } catch {
-            print("❌ Dispatch map preview failed:", error.localizedDescription)
-        }
     }
 }
 
