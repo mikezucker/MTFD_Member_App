@@ -111,10 +111,9 @@ private func isConfidentMorrisPlacemark(_ placemark: CLPlacemark, query: String)
         return false
     }
 
-    if let requestedNumber = requestedAddressNumber(from: query),
-       let resolvedNumber = placemark.subThoroughfare?.lowercased(),
-       resolvedNumber != requestedNumber {
-        return false
+    if let requestedNumber = requestedAddressNumber(from: query) {
+        let resolvedNumber = placemark.subThoroughfare?.lowercased() ?? requestedAddressNumber(from: placemark.name ?? "")
+        guard resolvedNumber == requestedNumber else { return false }
     }
 
     if let resolvedStreet = [placemark.thoroughfare, placemark.name]
@@ -155,10 +154,9 @@ private func isConfidentMorrisMapItem(_ item: MKMapItem, query: String) -> Bool 
         return false
     }
 
-    if let requestedNumber = requestedAddressNumber(from: query),
-       let resolvedNumber = placemark.subThoroughfare?.lowercased(),
-       resolvedNumber != requestedNumber {
-        return false
+    if let requestedNumber = requestedAddressNumber(from: query) {
+        let resolvedNumber = placemark.subThoroughfare?.lowercased() ?? requestedAddressNumber(from: placemark.name ?? "")
+        guard resolvedNumber == requestedNumber else { return false }
     }
 
     if let resolvedStreet = [placemark.thoroughfare, placemark.name]
@@ -170,6 +168,36 @@ private func isConfidentMorrisMapItem(_ item: MKMapItem, query: String) -> Bool 
 
     return true
 }
+// One incident coordinate feeds both Look Around and its map fallback.
+@MainActor enum DispatchIncidentLocationResolver {
+    typealias Lookup = @MainActor (String) async throws -> [CLPlacemark]
+    static func resolve(address: String, latitude: Double? = nil, longitude: Double? = nil, geocode: Lookup? = nil, search: Lookup? = nil) async -> CLLocationCoordinate2D? {
+        if let latitude, let longitude {
+            let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            if CLLocationCoordinate2DIsValid(coordinate), isLikelyMorrisArea(coordinate) { return coordinate }
+        }
+        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.localizedCaseInsensitiveContains("unknown location"), !Task.isCancelled else { return nil }
+        let query = constrainedIncidentAddress(trimmed)
+        for lookup in [geocode ?? geocodeAddress, search ?? searchAddress] {
+            do {
+                let candidates = try await lookup(query)
+                guard !Task.isCancelled else { return nil }
+                if let match = candidates.first(where: { isConfidentMorrisPlacemark($0, query: query) }) { return match.location?.coordinate }
+            } catch { if Task.isCancelled { return nil } }
+        }
+        return nil
+    }
+    private static func geocodeAddress(_ query: String) async throws -> [CLPlacemark] {
+        try await CLGeocoder().geocodeAddressString(query)
+    }
+    private static func searchAddress(_ query: String) async throws -> [CLPlacemark] {
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query; request.region = morrisSearchRegion()
+        return try await MKLocalSearch(request: request).start().mapItems.map { $0.placemark }
+    }
+}
+
 struct DashboardDispatchPreviewCard: View {
     let dispatch: DispatchNotificationPayload
     let isHighlighted: Bool
@@ -299,75 +327,29 @@ struct DashboardDispatchPreviewCard: View {
 
 struct DispatchMapPreview: View {
     let address: String
-
-    @State private var position = MapCameraPosition.region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 40.7968, longitude: -74.4815),
-            span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-        )
-    )
-
-    @State private var coordinate = CLLocationCoordinate2D(
-        latitude: 40.7968,
-        longitude: -74.4815
-    )
-
+    let coordinate: CLLocationCoordinate2D?
+    var isLoading = false
+    @State private var position = MapCameraPosition.automatic
+    private var coordinateID: String { coordinate.map { "\($0.latitude),\($0.longitude)" } ?? "unresolved" }
     var body: some View {
-        Map(position: $position) {
-            Marker("Incident", coordinate: coordinate)
-                .tint(.red)
-        }
-        .allowsHitTesting(false)
-        .task(id: address) {
-            await updateRegion()
-        }
-        .overlay(alignment: .bottomLeading) {
-            Label("Map Preview", systemImage: "map.fill")
-                .font(.caption.bold())
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial)
-                .clipShape(Capsule())
-                .padding(10)
-        }
-    }
-
-    private func updateRegion() async {
-        guard !address.isEmpty else {
-            return
-        }
-
-        do {
-            let request = MKLocalSearch.Request()
-            let searchAddress = constrainedIncidentAddress(address)
-            request.naturalLanguageQuery = searchAddress
-            request.region = morrisSearchRegion()
-
-            let search = MKLocalSearch(request: request)
-            let response = try await search.start()
-
-            guard let item = response.mapItems.first(where: { isConfidentMorrisMapItem($0, query: searchAddress) }) else {
-                return
+        Group {
+            if let coordinate {
+                Map(position: $position) { Marker("Incident", coordinate: coordinate).tint(.red) }
+                    .allowsHitTesting(false)
+                    .onChange(of: coordinateID, initial: true) {
+                        position = .region(MKCoordinateRegion(center: coordinate, span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)))
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        Label("Incident Map", systemImage: "map.fill").font(.caption.bold())
+                            .padding(.horizontal, 10).padding(.vertical, 6).background(.ultraThinMaterial).clipShape(Capsule()).padding(10)
+                    }
+            } else {
+                VStack(spacing: 8) {
+                    if isLoading { ProgressView().tint(.white) } else { Image(systemName: "mappin.slash.circle").font(.title2) }
+                    Text(isLoading ? "Locating incident…" : "Address location unavailable").font(.caption.bold())
+                    Text(address).font(.caption).multilineTextAlignment(.center).lineLimit(2)
+                }.foregroundStyle(.white.opacity(0.85)).padding().frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.white.opacity(0.06))
             }
-
-            let newCoordinate = item.placemark.coordinate
-
-            guard isLikelyMorrisArea(newCoordinate) else {
-                print("❌ Rejecting out-of-area dispatch map coordinate:", newCoordinate.latitude, newCoordinate.longitude)
-                return
-            }
-
-            await MainActor.run {
-                coordinate = newCoordinate
-                position = .region(
-                    MKCoordinateRegion(
-                        center: newCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)
-                    )
-                )
-            }
-        } catch {
-            print("❌ Dispatch map preview failed:", error.localizedDescription)
         }
     }
 }
@@ -376,6 +358,7 @@ private struct DispatchLookAroundCardPreview: View {
     let address: String
 
     @State private var scene: MKLookAroundScene?
+    @State private var coordinate: CLLocationCoordinate2D?
     @State private var isLoading = false
 
     private var normalizedAddress: String {
@@ -387,7 +370,7 @@ private struct DispatchLookAroundCardPreview: View {
             if let scene {
                 LookAroundCardControllerPreview(scene: scene)
             } else {
-                DispatchMapPreview(address: normalizedAddress)
+                DispatchMapPreview(address: normalizedAddress, coordinate: coordinate, isLoading: isLoading)
             }
 
             if isLoading {
@@ -418,56 +401,18 @@ private struct DispatchLookAroundCardPreview: View {
         }
     }
 
-    private func loadLookAroundScene() async {
-        let trimmedAddress = normalizedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedAddress.isEmpty else {
-            await MainActor.run {
-                scene = nil
-                isLoading = false
-            }
-            return
-        }
-
-        guard #available(iOS 16.0, *) else {
-            await MainActor.run {
-                scene = nil
-                isLoading = false
-            }
-            return
-        }
-
-        await MainActor.run {
-            isLoading = true
-            scene = nil
-        }
-
+    @MainActor private func loadLookAroundScene() async {
+        isLoading = true; scene = nil; coordinate = nil
+        defer { if !Task.isCancelled { isLoading = false } }
+        let resolved = await DispatchIncidentLocationResolver.resolve(address: normalizedAddress)
+        guard !Task.isCancelled else { return }
+        coordinate = resolved
+        guard let resolved else { return }
         do {
-            let lookupAddress = constrainedIncidentAddress(trimmedAddress)
-            let placemarks = try await CLGeocoder().geocodeAddressString(lookupAddress)
-
-            guard let placemark = placemarks.first(where: { isConfidentMorrisPlacemark($0, query: lookupAddress) }),
-                  let coordinate = placemark.location?.coordinate else {
-                await MainActor.run {
-                    scene = nil
-                    isLoading = false
-                }
-                return
-            }
-
-            let request = MKLookAroundSceneRequest(coordinate: coordinate)
-            let resolvedScene = try await request.scene
-
-            await MainActor.run {
-                scene = resolvedScene
-                isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                scene = nil
-                isLoading = false
-            }
-        }
+            let resolvedScene = try await MKLookAroundSceneRequest(coordinate: resolved).scene
+            guard !Task.isCancelled else { return }
+            scene = resolvedScene
+        } catch { /* Keep the incident coordinate when Look Around is unavailable. */ }
     }
 
     private func normalizeDispatchAddress(_ address: String) -> String {

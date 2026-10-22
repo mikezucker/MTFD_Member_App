@@ -594,6 +594,7 @@ private struct DispatchDetailLookAroundPreview: View {
     let longitude: Double?
 
     @State private var scene: MKLookAroundScene?
+    @State private var coordinate: CLLocationCoordinate2D?
     @State private var isLoading = false
 
     private var normalizedAddress: String {
@@ -605,7 +606,7 @@ private struct DispatchDetailLookAroundPreview: View {
             if let scene {
                 LookAroundDetailControllerPreview(scene: scene)
             } else {
-                DispatchMapPreview(address: normalizedAddress)
+                DispatchMapPreview(address: normalizedAddress, coordinate: coordinate, isLoading: isLoading)
             }
 
             if isLoading {
@@ -625,53 +626,23 @@ private struct DispatchDetailLookAroundPreview: View {
                 )
             }
         }
-        .task(id: normalizedAddress) {
+        .task(id: normalizedAddress + "|" + String(describing: latitude) + "|" + String(describing: longitude)) {
             await loadLookAroundScene()
         }
     }
 
-    private func loadLookAroundScene() async {
-        await MainActor.run {
-            isLoading = true
-            scene = nil
-        }
-
+    @MainActor private func loadLookAroundScene() async {
+        isLoading = true; scene = nil; coordinate = nil
+        defer { if !Task.isCancelled { isLoading = false } }
+        let resolved = await DispatchIncidentLocationResolver.resolve(address: normalizedAddress, latitude: latitude, longitude: longitude)
+        guard !Task.isCancelled else { return }
+        coordinate = resolved
+        guard let resolved else { return }
         do {
-            let trimmedAddress = normalizedAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            guard !trimmedAddress.isEmpty, trimmedAddress != "Unknown Location" else {
-                await MainActor.run {
-                    scene = nil
-                    isLoading = false
-                }
-                return
-            }
-
-            let lookupAddress = constrainedIncidentAddress(trimmedAddress)
-            let placemarks = try await CLGeocoder().geocodeAddressString(lookupAddress)
-
-            guard let placemark = placemarks.first(where: { isConfidentMorrisPlacemark($0, query: lookupAddress) }),
-                  let coordinate = placemark.location?.coordinate else {
-                await MainActor.run {
-                    scene = nil
-                    isLoading = false
-                }
-                return
-            }
-
-            let request = MKLookAroundSceneRequest(coordinate: coordinate)
-            let resolvedScene = try await request.scene
-
-            await MainActor.run {
-                scene = resolvedScene
-                isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                scene = nil
-                isLoading = false
-            }
-        }
+            let resolvedScene = try await MKLookAroundSceneRequest(coordinate: resolved).scene
+            guard !Task.isCancelled else { return }
+            scene = resolvedScene
+        } catch { /* Keep the incident coordinate when Look Around is unavailable. */ }
     }
 
     private func normalizeDispatchAddress(address: String, city: String?, state: String?) -> String {
