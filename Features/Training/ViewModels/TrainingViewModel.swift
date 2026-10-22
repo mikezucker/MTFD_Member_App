@@ -9,6 +9,8 @@ final class TrainingViewModel: ObservableObject {
     @Published private(set) var isRefreshing = false
     @Published var errorMessage: String?
 
+    private var refreshTask: Task<Void, Never>?
+
     private let cacheKey = "cached_mobile_training_response_v1"
 
     var summary: TrainingSummary? {
@@ -36,44 +38,43 @@ final class TrainingViewModel: ObservableObject {
     }
 
     func load() async {
-        loadCachedResponse()
-
-        if response == nil {
-            isLoading = true
-        } else {
-            isRefreshing = true
-        }
-
-        defer {
-            isLoading = false
-            isRefreshing = false
-        }
-
-        do {
-            let fresh = try await APIClient.shared.fetchTraining()
-            response = fresh
-            errorMessage = nil
-            cacheResponse(fresh)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        if response == nil { loadCachedResponse() }
+        await refresh()
     }
 
     func refresh() async {
-        isRefreshing = true
-
-        defer {
-            isRefreshing = false
+        // Own the request independently of SwiftUI's short-lived refresh gesture.
+        // Initial loading, pull-to-refresh, and retries share one request.
+        if let refreshTask {
+            await refreshTask.value
+            return
         }
+        isLoading = response == nil
+        isRefreshing = response != nil
+        errorMessage = nil
 
-        do {
-            let fresh = try await APIClient.shared.fetchTraining()
-            response = fresh
-            errorMessage = nil
-            cacheResponse(fresh)
-        } catch {
-            errorMessage = error.localizedDescription
+        let task = Task { @MainActor [self] in
+            defer {
+                isLoading = false
+                isRefreshing = false
+                refreshTask = nil
+            }
+            do {
+                let fresh = try await APIClient.shared.fetchTraining()
+                response = fresh
+                cacheResponse(fresh)
+            } catch {
+                // Cancellation is a lifecycle event, not a failed server refresh.
+                if error is CancellationError { return }
+                if let urlError = error as? URLError, urlError.code == .cancelled { return }
+                if let apiError = error as? APIClient.APIError,
+                   case .networkError(let urlError) = apiError,
+                   urlError.code == .cancelled { return }
+                errorMessage = error.localizedDescription
+            }
         }
+        refreshTask = task
+        await task.value
     }
 
     private func loadCachedResponse() {

@@ -39,15 +39,13 @@ struct ApparatusWorkOrdersView: View {
     }
 
     var body: some View {
-        AppScreen(title: "Work Orders") {
+        AppScreen(
+            title: "Apparatus Work Orders",
+            subtitle: "\(totalCount) open item\(totalCount == 1 ? "" : "s") across \(groupedWorkOrders.count) apparatus.",
+            systemImage: "wrench.and.screwdriver.fill"
+        ) {
             ScrollView(showsIndicators: false) {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    AppDetailHeader(
-                        title: "Apparatus Work Orders",
-                        subtitle: "\(totalCount) open item\(totalCount == 1 ? "" : "s") across \(groupedWorkOrders.count) apparatus.",
-                        systemImage: "wrench.and.screwdriver.fill"
-                    )
-
                     if groupedWorkOrders.count > 1 {
                         apparatusFilter
                     }
@@ -240,6 +238,7 @@ struct ApparatusWorkOrdersView: View {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     ApparatusWorkOrdersView(
         workOrders: [
@@ -267,3 +266,4 @@ struct ApparatusWorkOrdersView: View {
         ]
     )
 }
+#endif

@@ -13,49 +13,51 @@ struct DashboardLayoutView: View {
                 pinnedRow(title: "Call Totals", systemImage: "chart.bar.fill")
             }
 
-            Section {
-                ForEach(cards) { card in
-                    HStack(spacing: 12) {
-                        Image(systemName: card.systemImage)
-                            .foregroundStyle(.blue)
-                            .frame(width: 24)
+            Group {
+                Section {
+                    ForEach(cards) { card in
+                        HStack(spacing: 12) {
+                            Image(systemName: card.systemImage)
+                                .foregroundStyle(.blue)
+                                .frame(width: 24)
 
-                        Text(card.title)
+                            Text(card.title)
 
-                        Spacer()
+                            Spacer()
 
-                        Toggle(
-                            "",
-                            isOn: Binding(
-                                get: { !hiddenCards.contains(card) },
-                                set: { isVisible in
-                                    if isVisible {
-                                        hiddenCards.remove(card)
-                                    } else {
-                                        hiddenCards.insert(card)
+                            Toggle(
+                                "",
+                                isOn: Binding(
+                                    get: { !hiddenCards.contains(card) },
+                                    set: { isVisible in
+                                        if isVisible {
+                                            hiddenCards.remove(card)
+                                        } else {
+                                            hiddenCards.insert(card)
+                                        }
+
+                                        DashboardCardLayoutDefaults.saveHiddenCards(hiddenCards, for: session.currentUser?.role)
                                     }
-
-                                    DashboardCardLayoutDefaults.saveHiddenCards(hiddenCards)
-                                }
+                                )
                             )
-                        )
-                        .labelsHidden()
-                        .tint(.blue)
+                            .labelsHidden()
+                            .tint(.blue)
+                        }
                     }
+                    .onMove(perform: moveCards)
+                } header: {
+                    Text("Customize")
+                } footer: {
+                    Text("Enabled cards appear in this order, including when there are no current items. Active dispatches appear when available; call totals stay pinned above your cards.")
                 }
-                .onMove(perform: moveCards)
-            } header: {
-                Text("Customize")
-            } footer: {
-                Text("Cards can be reordered and hidden. Cards with no current data may not appear on the dashboard even when enabled.")
-            }
 
-            Section {
-                Button(role: .destructive) {
-                    DashboardCardLayoutDefaults.reset()
-                    loadLayout()
-                } label: {
-                    Label("Reset to Default", systemImage: "arrow.counterclockwise")
+                Section {
+                    Button(role: .destructive) {
+                        DashboardCardLayoutDefaults.reset(for: session.currentUser?.role)
+                        loadLayout()
+                    } label: {
+                        Label("Reset to Default", systemImage: "arrow.counterclockwise")
+                    }
                 }
             }
         }
@@ -64,6 +66,9 @@ struct DashboardLayoutView: View {
             EditButton()
         }
         .onAppear {
+            loadLayout()
+        }
+        .onChange(of: session.currentUser?.role) { _, _ in
             loadLayout()
         }
     }
@@ -86,11 +91,11 @@ struct DashboardLayoutView: View {
 
     private func moveCards(from source: IndexSet, to destination: Int) {
         cards.move(fromOffsets: source, toOffset: destination)
-        DashboardCardLayoutDefaults.saveOrder(cards)
+        DashboardCardLayoutDefaults.saveOrder(cards, for: session.currentUser?.role)
     }
 
     private func loadLayout() {
         cards = DashboardCardLayoutDefaults.savedOrder(for: session.currentUser?.role)
-        hiddenCards = DashboardCardLayoutDefaults.hiddenCards()
+        hiddenCards = DashboardCardLayoutDefaults.hiddenCards(for: session.currentUser?.role)
     }
 }

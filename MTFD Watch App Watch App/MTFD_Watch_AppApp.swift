@@ -9,6 +9,10 @@ import SwiftUI
 
 @main
 struct MTFD_Watch_App_Watch_AppApp: App {
+    init() {
+        _ = WatchDispatchNotificationDelegate.shared
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var session: SessionManager
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -15,9 +16,21 @@ struct ContentView: View {
                 }
             } else if session.isLoggedIn {
                 MainTabView()
+                    .onAppear {
+                        NavigationRouter.shared.resetToHome()
+                    }
             } else {
                 LoginView()
             }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                DispatchAttentionPresenter.shared.resume()
+                Task { await session.registerPushTokenIfAvailable() }
+            }
+        }
+        .onChange(of: session.isLoggedIn) { _, loggedIn in
+            if !loggedIn { DispatchAttentionPresenter.shared.clear() }
         }
         .task {
             // Prevent duplicate restore calls

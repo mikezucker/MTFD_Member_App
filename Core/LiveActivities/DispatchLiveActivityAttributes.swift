@@ -3,7 +3,7 @@ import Foundation
 
 import ActivityKit
 
-struct DispatchLiveActivityAttributes: ActivityAttributes {
+nonisolated struct DispatchLiveActivityAttributes: ActivityAttributes {
 
     public struct ContentState: Codable, Hashable {
 
@@ -30,4 +30,3 @@ struct DispatchLiveActivityAttributes: ActivityAttributes {
     var startedAt: Date
 
 }
-

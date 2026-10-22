@@ -1,5 +1,63 @@
 import Foundation
 
+enum DispatchUnitFilter {
+    static func visibleRespondingUnits(from units: [String]) -> [String] {
+        units.filter { unit in
+            let normalized = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+            guard !normalized.isEmpty else { return false }
+
+            let blockedUnits = [
+                "hq",
+                "oem",
+                "station",
+                "station 1",
+                "station 2",
+                "station 3",
+                "station 4",
+                "station 5"
+            ]
+
+            if blockedUnits.contains(normalized) { return false }
+            if normalized.hasPrefix("station ") { return false }
+
+            return true
+        }
+    }
+}
+
+extension APIClient.ActiveDispatch {
+    var isVisibleActiveDispatch: Bool {
+        if isClosed == true {
+            return false
+        }
+
+        if let status,
+           status.range(of: "closed", options: .caseInsensitive) != nil ||
+            status.range(of: "clear", options: .caseInsensitive) != nil ||
+            status.range(of: "complete", options: .caseInsensitive) != nil ||
+            status.range(of: "cancel", options: .caseInsensitive) != nil {
+            return false
+        }
+
+        guard let latestTimestamp = [lastActivityAt, dispatchedAt]
+            .compactMap({ $0 })
+            .max() else {
+            return false
+        }
+
+        return Date().timeIntervalSince(latestTimestamp) <= 90 * 60
+    }
+}
+
+private extension Data {
+    mutating func append(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
+        }
+    }
+}
+
 final class APIClient {
     static let shared = APIClient()
 
@@ -27,6 +85,20 @@ final class APIClient {
         environment.baseURL
     }
 
+    func absoluteURL(from pathOrURL: String?) -> URL? {
+        guard let rawValue = pathOrURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawValue.isEmpty else {
+            return nil
+        }
+
+        if let url = URL(string: rawValue), url.scheme != nil {
+            return url
+        }
+
+        let normalizedPath = rawValue.hasPrefix("/") ? rawValue : "/\(rawValue)"
+        return URL(string: baseURL + normalizedPath)
+    }
+
     // MARK: - Auth
 
     var authToken: String?
@@ -38,6 +110,15 @@ final class APIClient {
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         config.waitsForConnectivity = true
+        return URLSession(configuration: config)
+    }()
+
+    // Startup must fail promptly when offline so the member can retry their saved sign-in.
+    private let sessionValidationSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 12
+        config.timeoutIntervalForResource = 15
+        config.waitsForConnectivity = false
         return URLSession(configuration: config)
     }()
 
@@ -77,6 +158,12 @@ final class APIClient {
         }
 
         if requiresAuth {
+            if authToken?.isEmpty != false,
+               let savedToken = KeychainService.shared.loadToken(),
+               !savedToken.isEmpty {
+                authToken = savedToken
+            }
+
             guard let token = authToken, !token.isEmpty else {
                 throw APIError.missingAuthToken
             }
@@ -89,13 +176,19 @@ final class APIClient {
 
     // MARK: - Generic Network Layer
 
-    private func performRequest(_ request: URLRequest) async throws -> Data {
+    private func performRequest(_ originalRequest: URLRequest, allowRefresh: Bool = true, using requestSession: URLSession? = nil) async throws -> Data {
+        var request = originalRequest
+        let authenticated = request.value(forHTTPHeaderField: "Authorization") != nil
+        if authenticated {
+            guard let current = KeychainService.shared.loadToken() else { throw APIError.sessionExpired }
+            request.setValue("Bearer \(current)", forHTTPHeaderField: "Authorization")
+        }
         #if DEBUG
         debugPrint("🌐 REQUEST: \(request.httpMethod ?? "UNKNOWN") \(request.url?.absoluteString ?? "nil")")
         #endif
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await (requestSession ?? session).data(for: request)
 
             guard let http = response as? HTTPURLResponse else {
                 throw APIError.invalidResponse
@@ -103,15 +196,28 @@ final class APIClient {
 
             #if DEBUG
             debugPrint("📡 RESPONSE STATUS: \(http.statusCode)")
-            if let responseString = String(data: data, encoding: .utf8), !responseString.isEmpty {
-                debugPrint("📥 RESPONSE BODY: \(responseString)")
-            }
             #endif
 
             guard 200...299 ~= http.statusCode else {
                 let serverMessage = extractServerMessage(from: data)
 
                 if http.statusCode == 401 {
+                    if authenticated {
+                        let rejectedToken = request.value(forHTTPHeaderField: "Authorization")?.replacingOccurrences(of: "Bearer ", with: "") ?? ""
+                        if allowRefresh, KeychainService.shared.loadSession() != nil {
+                            do {
+                                let renewed = try await MobileSessionRenewal.shared.renew(rejectedToken: rejectedToken, baseURL: baseURL)
+                                guard KeychainService.shared.loadSession()?.accessToken == renewed else { throw CancellationError() }
+                                request.setValue("Bearer \(renewed)", forHTTPHeaderField: "Authorization")
+                                return try await performRequest(request, allowRefresh: false, using: requestSession)
+                            } catch APIError.sessionExpired {
+                                invalidateSession(matching: rejectedToken)
+                                throw APIError.sessionExpired
+                            }
+                        }
+                        invalidateSession(matching: rejectedToken)
+                        throw APIError.sessionExpired
+                    }
                     throw APIError.unauthorized(message: serverMessage)
                 } else {
                     throw APIError.serverError(statusCode: http.statusCode, message: serverMessage)
@@ -192,13 +298,58 @@ final class APIClient {
             }
         }
 
-        if let rawString = String(data: data, encoding: .utf8),
-           !rawString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return rawString
+        if let rawString = String(data: data, encoding: .utf8) {
+            let trimmed = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                return nil
+            }
+
+            let lowercased = trimmed.lowercased()
+            if lowercased.hasPrefix("<!doctype html") || lowercased.hasPrefix("<html") {
+                return nil
+            }
+
+            return String(trimmed.prefix(300))
         }
 
         return nil
     }
+    func trainingWorkspace<T: Decodable>(_ path: String = "", body: Data? = nil) async throws -> T {
+        let request = try makeRequest(path: "/api/training/workspace" + path, method: body == nil ? "GET" : "POST", body: body, requiresAuth: true)
+        return try decode(T.self, from: await performRequest(request))
+    }
+
+    func uploadWorkspaceTraining(data: Data, fileName: String, mimeType: String) async throws -> WorkspaceUploadResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        let name = fileName.replacingOccurrences(of: "\"", with: "_").replacingOccurrences(of: "\r", with: "_").replacingOccurrences(of: "\n", with: "_")
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\nContent-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+        var request = try makeRequest(path: "/api/training/workspace/uploads", method: "POST", body: body, requiresAuth: true)
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        return try decode(WorkspaceUploadResponse.self, from: await performRequest(request))
+    }
+
+    func uploadGuidedJPR(data: Data, fileName: String, courseId: String) async throws -> GuidedImport {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let name = fileName.replacingOccurrences(of: "\"", with: "_").replacingOccurrences(of: "\r", with: "_").replacingOccurrences(of: "\n", with: "_")
+        var body = Data()
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"courseId\"\r\n\r\n\(courseId)\r\n")
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n")
+        body.append(data); body.append("\r\n--\(boundary)--\r\n")
+        var request = try makeRequest(path: "/api/training/workspace/jprs", method: "POST", body: body, requiresAuth: true)
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        return try decode(GuidedImport.self, from: await performRequest(request))
+    }
+
+    func guidedJPRPrint(_ versionId: String) async throws -> String {
+        let request = try makeRequest(path: "/api/training/workspace/jprs/\(versionId)/print", method: "GET", requiresAuth: true)
+        let data = try await performRequest(request)
+        guard let html = String(data: data, encoding: .utf8) else { throw APIError.invalidResponse }
+        return html
+    }
+
     // MARK: - Training
 
     func fetchTraining() async throws -> MobileTrainingResponse {
@@ -236,6 +387,192 @@ final class APIClient {
             throw error
         }
     }
+
+    func updateTrainingProgress(
+        courseId: String,
+        request payload: TrainingProgressUpdateRequest
+    ) async throws -> TrainingProgressUpdateResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)/progress",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingProgressUpdateResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func fetchTrainingLesson(courseId: String, lessonId: String) async throws -> TrainingLessonSnapshotResponse {
+        let request = try makeRequest(path: "/api/training/courses/\(courseId)/lessons/\(lessonId)", method: "GET", requiresAuth: true)
+        return try decode(TrainingLessonSnapshotResponse.self, from: await performRequest(request))
+    }
+
+    func trainingLessonAction(courseId: String, lessonId: String, action: TrainingLessonAction) async throws -> TrainingLessonActionResponse {
+        let request = try makeRequest(path: "/api/training/courses/\(courseId)/lessons/\(lessonId)", method: "POST", body: try encode(action), requiresAuth: true)
+        return try decode(TrainingLessonActionResponse.self, from: await performRequest(request))
+    }
+
+    func trainingMediaURL(_ url: URL) async throws -> URL {
+        guard url.host == absoluteURL(from: "/")?.host, url.path.hasPrefix("/api/") else { return url }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.queryItems = (components.queryItems ?? []).filter { $0.name != "format" } + [URLQueryItem(name: "format", value: "json")]
+        let request = try makeRequest(path: components.percentEncodedPath + "?" + (components.percentEncodedQuery ?? ""), method: "GET", requiresAuth: true)
+        let response = try decode(TrainingMediaResponse.self, from: await performRequest(request))
+        guard response.success, let mediaURL = response.url else { throw APIError.serverError(statusCode: 503, message: response.error ?? "Training media unavailable.") }
+        return mediaURL
+    }
+
+    func fetchTrainingManageCourses() async throws -> MobileTrainingManageCoursesResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training/manage/courses",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileTrainingManageCoursesResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+
+    func createTrainingCourse(
+        request payload: CreateTrainingCourseRequest
+    ) async throws -> CreateTrainingCourseResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/manage/courses",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(CreateTrainingCourseResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateTrainingCourse(
+        courseId: String,
+        request payload: UpdateTrainingCourseRequest
+    ) async throws -> TrainingMutationResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)",
+            method: "PATCH",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingMutationResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func deleteTrainingCourse(courseId: String) async throws -> TrainingMutationResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingMutationResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func uploadTrainingContent(
+        data: Data,
+        fileName: String,
+        mimeType: String
+    ) async throws -> TrainingUploadResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n")
+        body.append("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+
+        var request = try makeRequest(
+            path: "/api/mobile/training/uploads",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(TrainingUploadResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func assignTrainingCourse(
+        courseId: String,
+        request payload: AssignTrainingCourseRequest
+    ) async throws -> AssignTrainingCourseResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/training/courses/\(courseId)/assignments",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(AssignTrainingCourseResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     
     // MARK: - Session Helpers
 
@@ -247,15 +584,31 @@ final class APIClient {
         return true
     }
 
+    private func invalidateSession(matching rejectedToken: String) {
+        // A late response from an old request must not sign out a newly signed-in user.
+        guard KeychainService.shared.loadToken() == rejectedToken else { return }
+        clearSession()
+    }
+
     func clearSession() {
         authToken = nil
+        KeychainService.shared.deleteToken()
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .didInvalidateSession, object: nil)
+        }
     }
     
 
     // MARK: - Auth
 
     func login(email: String, password: String) async throws -> LoginResponse {
-        let payload = LoginRequest(email: email, password: password)
+        struct RenewableLogin: Encodable {
+            let email: String
+            let password: String
+            let sessionVersion = 2
+            let deviceName = "iPhone"
+        }
+        let payload = RenewableLogin(email: email, password: password)
         let body = try encode(payload)
 
         let request = try makeRequest(
@@ -279,6 +632,16 @@ final class APIClient {
             throw APIError.missingTokenInResponse
         }
 
+        guard response.member != nil else { throw APIError.invalidResponse }
+        if let refreshToken = response.refreshToken, let sessionId = response.sessionId {
+            try KeychainService.shared.saveSession(MobileSessionCredentials(accessToken: token, refreshToken: refreshToken, sessionId: sessionId))
+        } else if response.refreshToken == nil && response.sessionId == nil {
+            // Backend-first rollout: a pre-renewal backend still returns a legacy session.
+            KeychainService.shared.deleteSession()
+        } else {
+            throw APIError.invalidResponse
+        }
+        KeychainService.shared.saveToken(token)
         authToken = token
         return response
     }
@@ -291,7 +654,7 @@ final class APIClient {
         )
 
         do {
-            let data = try await performRequest(request)
+            let data = try await performRequest(request, using: sessionValidationSession)
             return try decode(MemberResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
@@ -328,6 +691,43 @@ final class APIClient {
         }
     }
 
+    func fetchMobileAdminUsers() async throws -> MobileAdminUsersResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/admin/users",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileAdminUsersResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func updateMobileAdminUser(_ payload: MobileAdminUserUpdateRequest) async throws -> MobileAdminUserUpdateResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/admin/users",
+            method: "PATCH",
+            body: try encode(payload),
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileAdminUserUpdateResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
     func fetchNotificationPreferences() async throws -> NotificationPreferencesResponse {
         let request = try makeRequest(
             path: "/api/mobile/notification-preferences",
@@ -338,9 +738,6 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(NotificationPreferencesResponse.self, from: data)
-        } catch APIError.unauthorized {
-            clearSession()
-            throw APIError.sessionExpired
         } catch {
             throw error
         }
@@ -359,6 +756,42 @@ final class APIClient {
         do {
             let data = try await performRequest(request)
             return try decode(NotificationPreferencesResponse.self, from: data)
+        } catch {
+            throw error
+        }
+    }
+
+    func fetchUniforms() async throws -> MobileUniformsResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/uniforms",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileUniformsResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func submitUniformRequest(_ payload: UniformRequestSubmissionRequest) async throws -> MobileUniformsResponse {
+        let body = try encode(payload)
+
+        let request = try makeRequest(
+            path: "/api/mobile/uniforms",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileUniformsResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -386,6 +819,63 @@ final class APIClient {
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    // MARK: - Documents
+
+    func fetchDocuments() async throws -> MobileDocumentsResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/documents",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileDocumentsResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func downloadDocumentVersion(versionId: String) async throws -> Data {
+        let request = try makeRequest(
+            path: "/api/mobile/documents/version/\(versionId)/file",
+            method: "GET",
+            requiresAuth: true
+        )
+
+        do {
+            return try await performRequest(request)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
+    func acknowledgeDocumentVersion(versionId: String, password: String) async throws -> MobileDocumentAcknowledgementResponse {
+        let payload = MobileDocumentAcknowledgementRequest(password: password)
+        let body = try encode(payload)
+        let request = try makeRequest(
+            path: "/api/mobile/documents/version/\(versionId)/acknowledge",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(MobileDocumentAcknowledgementResponse.self, from: data)
+        } catch APIError.unauthorized {
+            throw APIError.serverError(statusCode: 401, message: "Incorrect password.")
         } catch {
             throw error
         }
@@ -449,14 +939,36 @@ final class APIClient {
         }
     }
 
+    func deleteMessage(id: String) async throws -> DeleteMessageResponse {
+        let request = try makeRequest(
+            path: "/api/mobile/messages/\(id)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+
+        do {
+            let data = try await performRequest(request)
+            return try decode(DeleteMessageResponse.self, from: data)
+        } catch APIError.unauthorized {
+            clearSession()
+            throw APIError.sessionExpired
+        } catch {
+            throw error
+        }
+    }
+
 
     func createCommandMessage(
         title: String,
-        body: String?,
+        body: String,
         audience: String,
         priority: String = "NORMAL",
         type: String,
-        actionType: String = "NONE"
+        stationNumberTarget: Int? = nil,
+        expiresAt: String? = nil,
+        isPinned: Bool = false,
+        linkUrl: String? = nil,
+        linkLabel: String? = nil
     ) async throws -> CreateCommandMessageResponse {
         let payload = CreateCommandMessageRequest(
             title: title,
@@ -464,11 +976,15 @@ final class APIClient {
             audience: audience,
             priority: priority,
             type: type,
-            actionType: actionType
+            stationNumberTarget: stationNumberTarget,
+            expiresAt: expiresAt,
+            isPinned: isPinned,
+            linkUrl: linkUrl,
+            linkLabel: linkLabel
         )
 
         let request = try makeRequest(
-            path: "/api/mobile/command/messages",
+            path: "/api/mobile/messages",
             method: "POST",
             body: try encode(payload),
             requiresAuth: true
@@ -485,21 +1001,116 @@ final class APIClient {
         }
     }
 
-    func requestPasswordReset(email: String) async throws -> MemberAccessRequestResponse {
-        let payload = MemberAccessRequest(
-            email: email,
-            type: "RESET"
-        )
+    func startPasswordRecovery(identifier: String, publicKey: String) async throws -> RecoveryStartResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["identifier":identifier,"publicKey":publicKey])
+        let request = try makeRequest(path:"/api/mobile/security/recovery/request",method:"POST",body:body)
+        return try decode(RecoveryStartResponse.self,from:await performRequest(request))
+    }
+    func findRecoveryAccount(firstName: String, lastName: String, station: String) async throws -> RecoveryAccountLookupResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["firstName": firstName, "lastName": lastName, "station": station])
+        let request = try makeRequest(path: "/api/mobile/security/recovery/lookup", method: "POST", body: body)
+        return try decode(RecoveryAccountLookupResponse.self, from: await performRequest(request))
+    }
+    func startPasswordRecovery(lookupToken: String, publicKey: String) async throws -> RecoveryStartResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["lookupToken": lookupToken, "publicKey": publicKey])
+        let request = try makeRequest(path: "/api/mobile/security/recovery/request", method: "POST", body: body)
+        return try decode(RecoveryStartResponse.self, from: await performRequest(request))
+    }
+    func passwordRecoveryStatus(_ pending: PendingPasswordRecovery) async throws -> RecoveryStatusResponse {
+        let request = try makeRequest(path:"/api/mobile/security/recovery/status",method:"POST",body:recoveryOwnerBody(pending))
+        return try decode(RecoveryStatusResponse.self,from:await performRequest(request))
+    }
+    func passwordRecoveryChallenge(_ pending: PendingPasswordRecovery) async throws -> String {
+        struct Response: Decodable { let challenge: String }
+        let request = try makeRequest(path:"/api/mobile/security/recovery/challenge",method:"POST",body:recoveryOwnerBody(pending))
+        return try decode(Response.self,from:await performRequest(request)).challenge
+    }
+    private func recoveryOwnerBody(_ pending: PendingPasswordRecovery) throws -> Data {
+        try JSONSerialization.data(withJSONObject:["requestId":pending.requestId,"statusToken":pending.statusToken])
+    }
+    func completePasswordRecovery(_ pending: PendingPasswordRecovery, signature: String, password: String, confirmation: String) async throws -> String? {
+        let body = try JSONSerialization.data(withJSONObject:["requestId":pending.requestId,"statusToken":pending.statusToken,
+                                                             "signature":signature,"password":password,"confirmation":confirmation])
+        let request = try makeRequest(path:"/api/mobile/security/recovery/complete",method:"POST",body:body)
+        struct Response: Decodable { let identifier: String? }
+        return try decode(Response.self, from: await performRequest(request)).identifier
+    }
+    struct RecoveryApproverMember: Decodable, Identifiable {
+        let id: String
+        let name: String?
+        let email: String
+        let role: String
+        let canApprove: Bool
+        let inheritedRoleAccess: Bool
+        let isCurrentUser: Bool
+    }
 
-        let request = try makeRequest(
-            path: "/api/members/access/request",
-            method: "POST",
-            body: try encode(payload),
-            requiresAuth: false
-        )
+    func fetchRecoveryApprovers() async throws -> [RecoveryApproverMember] {
+        struct Response: Decodable { let members: [RecoveryApproverMember] }
+        let request = try makeRequest(path: "/api/mobile/admin/recovery/approvers", requiresAuth: true)
+        return try decode(Response.self, from: await performRequest(request)).members
+    }
 
+    func setRecoveryApprover(userId: String, enabled: Bool, password: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["userId": userId, "enabled": enabled, "password": password])
+        let request = try makeRequest(path: "/api/mobile/admin/recovery/approvers", method: "PATCH", body: body, requiresAuth: true)
+        _ = try await performRequest(request)
+    }
+
+    func fetchPasswordRecoveryRequests() async throws -> [AdminRecoveryRequest] {
+        struct Response: Decodable { let requests: [AdminRecoveryRequest] }
+        let request = try makeRequest(path:"/api/mobile/admin/recovery",requiresAuth:true)
+        return try decode(Response.self,from:await performRequest(request)).requests
+    }
+    func decidePasswordRecovery(requestId: String, password: String, decision: String, matchCode: String,
+                                method: String, verificationReference: String) async throws {
+        var body = ["requestId":requestId,"password":password,"decision":decision,"matchCode":matchCode]
+        if decision == "APPROVE" { body["method"]=method; body["verificationReference"]=verificationReference }
+        let request = try makeRequest(path:"/api/mobile/admin/recovery",method:"POST",body:JSONSerialization.data(withJSONObject:body),requiresAuth:true)
+        _ = try await performRequest(request)
+    }
+
+    func fetchDispatchUnits() async throws -> [DispatchUnitOption] {
+        let request = try makeRequest(path: "/api/mobile/dispatch-units", requiresAuth: true)
         let data = try await performRequest(request)
-        return try decode(MemberAccessRequestResponse.self, from: data)
+        let response = try decode(DispatchUnitsResponse.self, from: data)
+        guard response.success else { throw APIError.invalidResponse }
+        return response.units ?? []
+    }
+
+
+
+    struct NotificationTestResponse: Decodable {
+        struct Delivery: Decodable {
+            let ok: Bool
+            let status: Int
+        }
+        let success: Bool
+        let results: [Delivery]?
+        let error: String?
+    }
+
+    func sendNotificationTest(isCritical: Bool = false) async throws -> NotificationTestResponse {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "title": isCritical ? "MTFD Critical Notification Test" : "MTFD Notification Test",
+            "body": "Push test. No dispatch or response is required.",
+            "alertKind": isCritical ? "critical" : "normal"
+        ])
+        var request = try makeRequest(path: "/api/admin/push/test", method: "POST", body: body, requiresAuth: true)
+        request.timeoutInterval = 15
+        return try decode(NotificationTestResponse.self, from: await performRequest(request))
+    }
+
+    func registerPushDevice(body: [String: Any]) async throws {
+        let request = try makeRequest(path: "/api/mobile/push/register", method: "POST",
+                                      body: JSONSerialization.data(withJSONObject: body), requiresAuth: true)
+        _ = try await performRequest(request)
+    }
+
+    func revokeSession(refreshToken: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["refreshToken": refreshToken])
+        let request = try makeRequest(path: "/api/mobile/session/logout", method: "POST", body: body)
+        _ = try await performRequest(request)
     }
 
     // MARK: - Dispatch
@@ -534,7 +1145,15 @@ final class APIClient {
 
         do {
             let data = try await performRequest(request)
-            return try decode(DispatchHistoryResponse.self, from: data)
+            let response = try decode(DispatchHistoryResponse.self, from: data)
+            return DispatchHistoryResponse(
+                success: response.success,
+                window: response.window,
+                fetchedAt: response.fetchedAt,
+                sourceLabel: response.sourceLabel,
+                activeDispatches: response.activeDispatches.filter(\.isVisibleActiveDispatch),
+                historicalDispatches: response.historicalDispatches
+            )
         } catch APIError.unauthorized {
             clearSession()
             throw APIError.sessionExpired
@@ -559,6 +1178,38 @@ final class APIClient {
 
         let request = try makeRequest(
             path: "/api/mobile/live-activities/push-to-start/register",
+            method: "POST",
+            body: data,
+            requiresAuth: true
+        )
+
+        _ = try await performRequest(request)
+    }
+
+    func recordDispatchPushReceipt(
+        dispatchId: String,
+        event: String,
+        notificationType: String,
+        deviceToken: String?
+    ) async throws {
+        struct Body: Encodable {
+            let dispatchId: String
+            let event: String
+            let notificationType: String
+            let deviceToken: String?
+        }
+
+        let data = try JSONEncoder().encode(
+            Body(
+                dispatchId: dispatchId,
+                event: event,
+                notificationType: notificationType,
+                deviceToken: deviceToken
+            )
+        )
+
+        let request = try makeRequest(
+            path: "/api/mobile/push/receipt",
             method: "POST",
             body: data,
             requiresAuth: true
@@ -673,16 +1324,45 @@ extension APIClient {
 
     struct CreateCommandMessageRequest: Encodable {
         let title: String
-        let body: String?
+        let body: String
         let audience: String
         let priority: String
         let type: String
-        let actionType: String
+        let stationNumberTarget: Int?
+        let expiresAt: String?
+        let isPinned: Bool
+        let linkUrl: String?
+        let linkLabel: String?
+    }
+
+    struct MobileAdminUserUpdateRequest: Encodable {
+        let id: String
+        let role: String
+        let status: String
+        let company: String?
+        let reportsToUserId: String?
+        let badgeNumber: String?
+        let stationMessageDelegate: Bool?
+        let attributeIds: [String]?
+        let actorPassword: String?
     }
 
     struct MemberAccessRequest: Encodable {
         let email: String
         let type: String
+    }
+
+    struct UniformRequestSubmissionRequest: Encodable {
+        let comments: String?
+        let replacementAcknowledged: Bool
+        let items: [UniformRequestSubmissionItem]
+    }
+
+    struct UniformRequestSubmissionItem: Encodable {
+        let sectionId: String
+        let style: String
+        let quantity: Int
+        let size: String
     }
 }
 
@@ -698,6 +1378,8 @@ extension APIClient {
     struct LoginResponse: Decodable {
         let success: Bool
         let token: String?
+        let refreshToken: String?
+        let sessionId: String?
         let member: Member?
         let error: String?
     }
@@ -716,6 +1398,21 @@ extension APIClient {
         let email: String?
         let phone: String?
         let attributes: [String]?
+        let permissions: MobileMemberPermissions?
+
+        var canApprovePasswordRecovery: Bool {
+            permissions?.canApprovePasswordRecovery == true || role == "ADMIN" || role == "CHIEF"
+        }
+
+        var canPostStationMessages: Bool {
+            permissions?.canPostStationMessages == true
+        }
+
+        var canManageUsers: Bool {
+            permissions?.canManageReporting == true
+                || role == "OFFICER_CAREER"
+                || isFireHeadquarters
+        }
 
         var isReliefDriver: Bool {
             attributes?.contains { attribute in
@@ -728,6 +1425,131 @@ extension APIClient {
                 return normalized == "RELIEF_DRIVER"
                     || normalized == "RELIEFDRIVER"
             } == true
+        }
+
+        var isFireHeadquarters: Bool {
+            let normalized = (company ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased()
+                .replacingOccurrences(of: " ", with: "_")
+                .replacingOccurrences(of: "-", with: "_")
+
+            return normalized == "FIRE_HQ"
+                || normalized == "HQ"
+                || normalized == "FIRE_HEADQUARTERS"
+        }
+
+        var canAccessUniforms: Bool {
+            role == "MEMBER_CAREER"
+                || role == "OFFICER_CAREER"
+                || isFireHeadquarters
+                || isReliefDriver
+        }
+    }
+
+    struct MobileMemberPermissions: Decodable {
+        let canApprovePasswordRecovery: Bool?
+        let canPostStationMessages: Bool?
+        let canManageReporting: Bool?
+    }
+
+    struct MobileAdminUsersResponse: Decodable {
+        let success: Bool
+        let canEditDepartmentRoles: Bool
+        let attributes: [MobileAdminAttribute]?
+        let users: [MobileAdminUser]
+    }
+
+    struct MobileAdminUserUpdateResponse: Decodable {
+        let success: Bool
+        let user: MobileAdminUser
+    }
+
+    struct MobileAdminAttribute: Decodable, Identifiable, Equatable {
+        let id: String
+        let name: String
+        let slug: String
+        let description: String?
+        let isActive: Bool
+    }
+
+    struct MobileAdminUser: Decodable, Identifiable, Equatable {
+        let id: String
+        let email: String
+        let name: String?
+        let phone: String?
+        let role: String
+        let status: String
+        let company: String?
+        let badgeNumber: String?
+        let reportsToUserId: String?
+        let attributes: [MobileAdminAttribute]?
+        let canPostStationMessages: Bool?
+        let stationMessageDelegate: Bool?
+        let updatedAt: String?
+
+        var displayName: String {
+            let trimmedName = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedName.isEmpty ? email : trimmedName
+        }
+
+        var searchableText: String {
+            [
+                name,
+                email,
+                phone,
+                roleLabel,
+                companyLabel,
+                badgeNumber,
+                attributes?.map(\.name).joined(separator: " ")
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
+            .lowercased()
+        }
+
+        var roleLabel: String {
+            APIClient.MobileAdminUser.roleLabel(for: role)
+        }
+
+        var roleEmoji: String {
+            switch role {
+            case "ADMIN": return "🛠️"
+            case "CHIEF", "BATTALION_CHIEF": return "🛡️"
+            case "OFFICER_CAREER", "OFFICER_VOLUNTEER": return "🚒"
+            case "MEMBER_CAREER", "MEMBER_VOLUNTEER": return "👤"
+            default: return "👥"
+            }
+        }
+
+        var companyLabel: String {
+            APIClient.MobileAdminUser.companyLabel(for: company)
+        }
+
+        static func roleLabel(for role: String) -> String {
+            switch role {
+            case "ADMIN": return "Admin"
+            case "CHIEF": return "Chief"
+            case "BATTALION_CHIEF": return "Battalion Chief"
+            case "OFFICER_CAREER": return "Officer (Career)"
+            case "OFFICER_VOLUNTEER": return "Officer (Volunteer)"
+            case "MEMBER_CAREER": return "Member (Career)"
+            case "MEMBER_VOLUNTEER": return "Member (Volunteer)"
+            default: return role
+            }
+        }
+
+        static func companyLabel(for company: String?) -> String {
+            switch company {
+            case "MT_KEMBLE": return "Mt. Kemble Fire Company (Station 1)"
+            case "COLLINSVILLE": return "Collinsville Fire Company (Station 2)"
+            case "HILLSIDE": return "Hillside Fire Company (Station 3)"
+            case "FAIRCHILD": return "Fairchild Fire Company (Station 4)"
+            case "WOODLAND": return "Woodland Fire Company (Station 5)"
+            case "FIRE_HQ": return "Fire Headquarters"
+            case .some(let value): return value
+            case .none: return "No company assigned"
+            }
         }
     }
 
@@ -743,6 +1565,65 @@ extension APIClient {
         let publishedAt: String?
     }
 
+    struct MobileUniformsResponse: Decodable {
+        let success: Bool
+        let canSubmit: Bool
+        let memberType: String?
+        let badgeNumber: String?
+        let catalog: [UniformCatalogSection]
+        let requests: [UniformRequest]
+        let request: UniformRequest?
+        let error: String?
+    }
+
+    struct UniformCatalogSection: Decodable, Identifiable {
+        let id: String
+        let title: String
+        let note: String
+        let items: [UniformCatalogItem]
+    }
+
+    struct UniformCatalogItem: Decodable, Identifiable {
+        let style: String
+        let description: String
+
+        var id: String { style }
+    }
+
+    struct UniformRequest: Decodable, Identifiable {
+        let id: String
+        let referenceCode: String
+        let memberType: String
+        let badgeNumber: String?
+        let comments: String?
+        let totalItems: Int
+        let status: String
+        let statusLabel: String
+        let reviewNote: String?
+        let requestedAt: Date?
+        let reviewedAt: Date?
+        let updatedAt: Date?
+        let assignedTo: UniformRequestPerson?
+        let reviewedBy: UniformRequestPerson?
+        let items: [UniformRequestItem]
+    }
+
+    struct UniformRequestPerson: Decodable {
+        let id: String
+        let name: String?
+        let email: String?
+    }
+
+    struct UniformRequestItem: Decodable, Identifiable {
+        let id: String
+        let sectionId: String
+        let sectionTitle: String
+        let style: String
+        let description: String
+        let quantity: Int
+        let size: String
+    }
+
     struct DashboardResponse: Decodable {
         let success: Bool?
         let member: Member?
@@ -750,6 +1631,7 @@ extension APIClient {
         let latestUpdates: [LatestUpdate]?
         let trainingSummary: TrainingSummary?
         let assignedTrainingPreview: [DashboardTrainingPreviewItem]?
+        let volunteerContext: VolunteerContext?
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
@@ -762,9 +1644,34 @@ extension APIClient {
         let departmentUpdates: [DashboardUpdate]?
         let apparatusWorkOrders: [ApparatusWorkOrder]?
         let apparatusWorkOrdersMessage: String?
+        let historicalDispatches: [DispatchHistoryItem]?
         let notesConfigured: Bool?
         let notesMessage: String?
         let error: String?
+    }
+
+    struct VolunteerContext: Decodable {
+        let company: String?
+        let station: String?
+        let officer: VolunteerOfficer?
+        let apparatus: VolunteerApparatus?
+        let stationApparatus: [VolunteerApparatus]?
+    }
+
+    struct VolunteerOfficer: Decodable {
+        let id: String?
+        let name: String?
+        let email: String?
+        let phone: String?
+        let role: String?
+    }
+
+    struct VolunteerApparatus: Decodable {
+        let displayName: String?
+        let station: String?
+        let dispatchUnitIds: String?
+        let apparatusApiId: String?
+        let unitId: String?
     }
 
     struct ApparatusWorkOrder: Decodable, Identifiable {
@@ -788,8 +1695,11 @@ extension APIClient {
         let message: String?
         let units: [String]
         let dispatchedAt: Date?
+        let lastActivityAt: Date?
         let priority: String?
         let isWorkingFire: Bool?
+        let status: String?
+        let isClosed: Bool?
     }
 
     struct MessageSummary: Decodable {
@@ -851,17 +1761,72 @@ extension APIClient {
         let updatedAt: String?
     }
 
-    struct DispatchStatsResponse: Decodable {
+    struct MobileDocumentsResponse: Decodable {
+        let success: Bool
+        let folders: [MobileDocumentFolder]
+        let documents: [MobileDocument]
+        let error: String?
+    }
+
+    struct MobileDocumentFolder: Decodable, Identifiable {
+        let id: String
+        let name: String
+        let parentId: String?
+    }
+
+    struct MobileDocument: Decodable, Identifiable {
+        let id: String
+        let title: String
+        let description: String?
+        let category: String
+        let folderId: String?
+        let updatedAt: Date?
+        let latestVersion: MobileDocumentVersion?
+    }
+
+    struct MobileDocumentVersion: Decodable, Identifiable {
+        let id: String
+        let version: Int
+        let fileName: String
+        let mimeType: String
+        let sizeBytes: Int
+        let publishedAt: Date?
+        let assigned: Bool
+        let acknowledgedAt: Date?
+        let requiresAcknowledgement: Bool
+    }
+
+    private struct MobileDocumentAcknowledgementRequest: Encodable {
+        let password: String
+    }
+
+    struct MobileDocumentAcknowledgementResponse: Decodable {
+        let success: Bool
+        let acknowledgedAt: Date?
+        let error: String?
+    }
+
+    struct DispatchStatsResponse: Codable {
         let success: Bool?
         let stats: DispatchStats?
         let department: DispatchBucket?
         let station: DispatchBucket?
+        let stations: ChiefStationStats?
         let lastUpdated: String?
         let sourceLabel: String?
         let message: String?
     }
 
-    struct DispatchStats: Decodable {
+    struct ChiefStationStats: Codable {
+        let all: DispatchBucket?
+        let station1: DispatchBucket?
+        let station2: DispatchBucket?
+        let station3: DispatchBucket?
+        let station4: DispatchBucket?
+        let station5: DispatchBucket?
+    }
+
+    struct DispatchStats: Codable {
         let department24h: Int?
         let department7d: Int?
         let department30d: Int?
@@ -872,7 +1837,7 @@ extension APIClient {
         let stationYtd: Int?
     }
 
-    struct DispatchBucket: Decodable {
+    struct DispatchBucket: Codable {
         let total24h: Int?
         let total7d: Int?
         let total30d: Int?
@@ -885,6 +1850,10 @@ extension APIClient {
         let ems7d: Int?
         let ems30d: Int?
         let emsYtd: Int?
+        let other24h: Int?
+        let other7d: Int?
+        let other30d: Int?
+        let otherYtd: Int?
     }
 
     struct DispatchHistoryResponse: Decodable {
@@ -959,4 +1928,69 @@ extension APIClient {
         let qualifier: String?
         let isVacant: Bool
     }
+}
+
+// One renewal per process; dashboard, push registration and CarPlay share the result.
+actor MobileSessionRenewal {
+    static let shared = MobileSessionRenewal()
+    private var inFlight: Task<String, Error>?
+
+    func renew(rejectedToken: String, baseURL: String) async throws -> String {
+        if let current = KeychainService.shared.loadSession(), current.accessToken != rejectedToken {
+            return current.accessToken
+        }
+        if let inFlight { return try await inFlight.value }
+        let task = Task<String, Error> {
+            let original = try KeychainService.shared.prepareSessionRefresh()
+            guard let url = URL(string: baseURL + "/api/mobile/session/refresh") else { throw APIClient.APIError.invalidURL }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 30
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "refreshToken": original.refreshToken, "requestId": original.refreshRequestId!
+            ])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIClient.APIError.invalidResponse }
+            if http.statusCode == 401 { throw APIClient.APIError.sessionExpired }
+            guard http.statusCode == 200 else {
+                throw APIClient.APIError.serverError(statusCode: http.statusCode, message: "Unable to renew your session. Please try again.")
+            }
+            struct RenewalResponse: Decodable { let token: String; let refreshToken: String; let sessionId: String }
+            let result = try JSONDecoder().decode(RenewalResponse.self, from: data)
+            guard !result.token.isEmpty, !result.refreshToken.isEmpty, result.sessionId == original.sessionId else {
+                throw APIClient.APIError.invalidResponse
+            }
+            try KeychainService.shared.replaceSession(MobileSessionCredentials(accessToken: result.token,
+                refreshToken: result.refreshToken, sessionId: result.sessionId), matching: original)
+            return result.token
+        }
+        inFlight = task
+        defer { inFlight = nil }
+        return try await task.value
+    }
+}
+
+extension APIClient {
+    struct RecoveryAccountLookupResponse: Decodable {
+        let maskedEmail: String
+        let lookupToken: String
+    }
+    struct RecoveryStartResponse: Decodable {
+        let requestId: String
+        let statusToken: String
+        let matchCode: String
+        let expiresAt: String
+        let maskedEmail: String?
+    }
+    struct RecoveryStatusResponse: Decodable { let status: String; let expiresAt: String }
+    struct AdminRecoveryRequest: Decodable, Identifiable {
+        let id: String
+        let matchCode: String
+        let createdAt: Date
+        let expiresAt: Date
+        let user: RecoveryMember?
+    }
+    struct RecoveryMember: Decodable { let id: String; let name: String?; let email: String; let role: String }
 }

@@ -4,6 +4,7 @@ import Combine
 enum AppNotificationType: String {
     case dispatch = "dispatch"
     case dispatchCritical = "dispatch_critical"
+    case dispatchClosed = "dispatch_closed"
 
     case departmentMessage = "department_message"
     case stationMessage = "station_message"
@@ -14,6 +15,10 @@ enum AppNotificationType: String {
 
     init(rawValueSafe value: String?) {
         let normalized = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "document" {
+            self = .documentAssignment
+            return
+        }
         self = AppNotificationType(rawValue: normalized) ?? .unknown
     }
 }
@@ -105,7 +110,7 @@ struct AppNotificationPayload: Identifiable {
             address: address,
             units: units,
             isWorkingFire: isWorkingFire,
-            activeCallCount: activeCallCount,
+            activeCallCount: type == .dispatchClosed ? 0 : activeCallCount,
             stationId: userInfo["stationId"] as? String,
             messageId: userInfo["messageId"] as? String,
             trainingId: userInfo["trainingId"] as? String,
@@ -117,6 +122,8 @@ struct AppNotificationPayload: Identifiable {
         switch type {
         case .dispatch, .dispatchCritical:
             return "Dispatch Alert"
+        case .dispatchClosed:
+            return "Dispatch Closed"
         case .departmentMessage:
             return "Department Message"
         case .stationMessage:
@@ -124,7 +131,7 @@ struct AppNotificationPayload: Identifiable {
         case .trainingAssignment:
             return "Training Assignment"
         case .documentAssignment:
-            return "Document Assignment"
+            return "Policy Center Assignment"
         case .messageCenter:
             return "Message Center"
         case .unknown:
@@ -136,3 +143,22 @@ struct AppNotificationPayload: Identifiable {
 // Backward-compatible alias so older files that reference DispatchNotificationPayload
 // do not immediately explode while we migrate the app.
 typealias DispatchNotificationPayload = AppNotificationPayload
+
+// Keep distinct dispatches in arrival order and suppress repeated delivery of an alert.
+struct DispatchAttentionQueue {
+    private(set) var pending: [AppNotificationPayload] = []
+    private var seen: [String] = []
+    var current: AppNotificationPayload? { pending.first }
+
+    mutating func enqueue(_ payload: AppNotificationPayload) {
+        guard payload.type == .dispatch || payload.type == .dispatchCritical,
+              !seen.contains(payload.id), !pending.contains(where: { $0.id == payload.id }) else { return }
+        seen.append(payload.id)
+        if seen.count > 200 { seen.removeFirst(seen.count - 200) }
+        pending.append(payload)
+    }
+
+    mutating func remove(dispatchId: String) {
+        pending.removeAll { $0.id == dispatchId }
+    }
+}

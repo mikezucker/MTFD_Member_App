@@ -10,7 +10,9 @@ class NotificationPreferencesViewModel: ObservableObject {
     @Published var successMessage: String?
 
     private let key = "notification_preferences"
+    private var remoteWriteTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
+    private var pendingRemotePreferences: NotificationPreferences?
     private var hasLoadedRemote = false
 
     init() {
@@ -23,13 +25,14 @@ class NotificationPreferencesViewModel: ObservableObject {
         else { return }
 
         preferences = decoded
-        UserDefaults.standard.set(preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+        persistAlertSettings()
     }
 
     func saveLocal() {
         if let data = try? JSONEncoder().encode(preferences) {
             UserDefaults.standard.set(data, forKey: key)
         }
+        persistAlertSettings()
     }
 
     func loadRemote() async {
@@ -46,7 +49,7 @@ class NotificationPreferencesViewModel: ObservableObject {
 
             if let serverPreferences = response.preferences {
                 preferences = serverPreferences
-                UserDefaults.standard.set(preferences.hapticsEnabled, forKey: "notification_haptics_enabled")
+                persistAlertSettings()
                 saveLocal()
             } else if let error = response.error {
                 errorMessage = error
@@ -65,6 +68,7 @@ class NotificationPreferencesViewModel: ObservableObject {
         saveLocal()
         successMessage = nil
         errorMessage = nil
+        pendingRemotePreferences = preferences
 
         saveTask?.cancel()
 
@@ -80,29 +84,72 @@ class NotificationPreferencesViewModel: ObservableObject {
     }
 
     func saveRemote(_ preferencesToSave: NotificationPreferences? = nil) async {
-        isSaving = true
-        errorMessage = nil
-        successMessage = nil
-
-        defer { isSaving = false }
-
-        do {
-            let response = try await APIClient.shared.updateNotificationPreferences(
-                preferencesToSave ?? preferences
-            )
-
-            if response.success {
-                saveLocal()
-            } else if let error = response.error {
-                errorMessage = error
-            }
-        } catch {
-            errorMessage = error.localizedDescription
+        pendingRemotePreferences = preferencesToSave ?? preferences
+        if let remoteWriteTask {
+            await remoteWriteTask.value
+            return
         }
+        let task = Task { @MainActor [self] in
+            isSaving = true
+            errorMessage = nil
+            successMessage = nil
+            defer { isSaving = false; remoteWriteTask = nil }
+            while let next = pendingRemotePreferences {
+                pendingRemotePreferences = nil
+                do {
+                    let response = try await APIClient.shared.updateNotificationPreferences(next)
+                    guard response.success else {
+                        if pendingRemotePreferences == nil { pendingRemotePreferences = next }
+                        errorMessage = response.error ?? "Unable to save notification preferences."
+                        return
+                    }
+                    // Never let a response to an older edit overwrite newer choices.
+                    if preferences == next, let saved = response.preferences {
+                        preferences = saved
+                    }
+                    saveLocal()
+                    successMessage = "Preferences saved."
+                } catch {
+                    if pendingRemotePreferences == nil { pendingRemotePreferences = next }
+                    errorMessage = error.localizedDescription
+                    return
+                }
+            }
+        }
+        remoteWriteTask = task
+        await task.value
+    }
+
+    func flushPendingSave() async {
+        saveTask?.cancel()
+        saveTask = nil
+        saveLocal()
+
+        guard let pendingRemotePreferences else {
+            return
+        }
+
+        await saveRemote(pendingRemotePreferences)
+    }
+
+    func saveImmediately() async {
+        guard hasLoadedRemote else { saveLocal(); return }
+        saveTask?.cancel()
+        saveTask = nil
+        pendingRemotePreferences = preferences
+        saveLocal()
+        await saveRemote(preferences)
     }
 
     func cancelPendingSave() {
         saveTask?.cancel()
         saveTask = nil
+    }
+
+    private func persistAlertSettings() {
+        UserDefaults.standard.set(preferences.hapticAlertStyle.rawValue, forKey: "notification_haptic_alert_style")
+        UserDefaults.standard.set(preferences.hapticAlertStyle != .off, forKey: "notification_haptics_enabled")
+        UserDefaults.standard.set(preferences.dispatchAlertTone.rawValue, forKey: "notification_dispatch_alert_tone")
+        UserDefaults.standard.set(preferences.criticalDispatchAlertTone.rawValue, forKey: "notification_critical_dispatch_alert_tone")
     }
 }

@@ -17,6 +17,7 @@ struct MobileTrainingCourseDetail: Decodable, Identifiable {
     let title: String
     let description: String?
     let status: String
+    let trainingType: String?
     let progressStatus: String
     let progressPercent: Int
     let completedAt: Date?
@@ -26,7 +27,29 @@ struct MobileTrainingCourseDetail: Decodable, Identifiable {
     let completedItemCount: Int?
     let totalItemCount: Int?
     let modules: [TrainingModuleDetail]
+    let assignments: [TrainingCourseAssignmentDetail]?
+    let objectiveFeedbackToMessages: Bool?
+    let enableInstructorDashboard: Bool?
+    let allowMemberObjectiveSelfCheckoff: Bool?
     let lastUpdated: Date?
+}
+
+struct TrainingCourseAssignmentDetail: Decodable, Identifiable {
+    let id: String
+    let targetType: String
+    let targetRole: String?
+    let targetUserId: String?
+    let targetUser: TrainingCourseAssignedUser?
+    let dueAt: Date?
+    let assignedAt: Date?
+}
+
+struct TrainingCourseAssignedUser: Decodable, Identifiable {
+    let id: String
+    let name: String?
+    let email: String?
+    let role: String
+    let company: String?
 }
 
 struct TrainingModuleDetail: Decodable, Identifiable {
@@ -49,6 +72,7 @@ struct TrainingLessonDetail: Decodable, Identifiable {
     let order: Int
     let contentMd: String?
     let videoUrl: String?
+    let filePath: String?
     let fileName: String?
     let durationSeconds: Int?
     let progressStatus: String
@@ -76,6 +100,7 @@ struct TrainingSkillDetail: Decodable, Identifiable {
 struct TrainingQuizDetail: Decodable, Identifiable {
     let id: String
     let title: String?
+    let firstQuestionPrompt: String?
 }
 
 struct TrainingObjectiveDetail: Decodable, Identifiable {
@@ -84,7 +109,9 @@ struct TrainingObjectiveDetail: Decodable, Identifiable {
     let instructions: String?
     let contentMd: String?
     let videoUrl: String?
+    let videoFilePath: String?
     let videoFileName: String?
+    let contentFilePath: String?
     let contentFileName: String?
     let objectiveType: String
     let jprEnabled: Bool
@@ -139,6 +166,35 @@ struct TrainingJPRStepDetail: Decodable, Identifiable {
     }
 }
 
+struct TrainingProgressUpdateRequest: Encodable, Equatable {
+    let itemType: String
+    let itemId: String
+    let status: String
+
+    static func completeLesson(id: String) -> TrainingProgressUpdateRequest {
+        TrainingProgressUpdateRequest(
+            itemType: "LESSON",
+            itemId: id,
+            status: "COMPLETED"
+        )
+    }
+
+    static func completeObjective(id: String) -> TrainingProgressUpdateRequest {
+        TrainingProgressUpdateRequest(
+            itemType: "OBJECTIVE",
+            itemId: id,
+            status: "COMPLETED"
+        )
+    }
+}
+
+struct TrainingProgressUpdateResponse: Decodable, Equatable {
+    let success: Bool
+    let status: String?
+    let completedAt: Date?
+    let error: String?
+}
+
 extension MobileTrainingCourseDetail {
     var progressDisplayText: String {
         switch progressStatus {
@@ -157,3 +213,49 @@ extension TrainingModuleDetail {
         "\(completedItemCount) of \(totalItemCount) items complete"
     }
 }
+
+// Shared web/app lesson contract. Answer keys are never delivered to the learner.
+struct TrainingLessonSnapshotResponse: Decodable {
+    let success: Bool
+    let lesson: TrainingLessonSnapshot?
+    let error: String?
+}
+struct TrainingLessonSnapshot: Decodable {
+    let status: String
+    let lastPositionSeconds: Int
+    let quiz: TrainingLearnerQuiz?
+}
+struct TrainingLearnerQuiz: Decodable {
+    let attemptsUsed: Int?
+    let attemptLimit: Int?
+    let passingScorePercent: Int
+    let timeLimitSeconds: Int?
+    let passed: Bool
+    let scorePercent: Int?
+    let questions: [TrainingLearnerQuestion]
+}
+struct TrainingLearnerQuestion: Decodable, Identifiable {
+    let id: String
+    let type: String
+    let prompt: String
+    let options: [TrainingLearnerOption]
+}
+struct TrainingLearnerOption: Decodable, Identifiable { let id: String; let text: String }
+struct TrainingLessonAnswer: Encodable { let questionId: String; let selectedOptionIds: [String] }
+struct TrainingLessonAction: Encodable {
+    let action: String
+    var positionSeconds: Int? = nil
+    var complete: Bool? = nil
+    var attemptId: String? = nil
+    var answers: [TrainingLessonAnswer]? = nil
+}
+struct TrainingLessonActionResponse: Decodable {
+    let success: Bool
+    let error: String?
+    let attemptId: String?
+    let expiresAt: Date?
+    let passed: Bool?
+    let scorePercent: Int?
+    let expired: Bool?
+}
+struct TrainingMediaResponse: Decodable { let success: Bool; let url: URL?; let error: String? }

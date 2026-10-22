@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleSpokenName</key>
+	<string>M T F D</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -35,14 +37,8 @@
 			<key>UIWindowSceneSessionRoleApplication</key>
 			<array>
 				<dict>
-					<key>UISceneClassName</key>
-					<string></string>
 					<key>UISceneConfigurationName</key>
-					<string></string>
-					<key>UISceneDelegateClassName</key>
-					<string></string>
-					<key>UISceneStoryboardFile</key>
-					<string></string>
+					<string>Default Configuration</string>
 				</dict>
 			</array>
 		</dict>

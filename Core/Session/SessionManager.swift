@@ -13,9 +13,37 @@ final class SessionManager: ObservableObject {
     @Published var isRestoringSession = false
     @Published var errorMessage: String?
 
-    private init() {}
+    private var pushRegistrationInFlight = false
+    private var lastPushRegistration: (key: String, date: Date)?
+    private var sessionInvalidatedObserver: NSObjectProtocol?
+
+    private init() {
+        sessionInvalidatedObserver = NotificationCenter.default.addObserver(
+            forName: .didInvalidateSession,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                SessionManager.shared.handleInvalidatedSession()
+            }
+        }
+    }
+
+    deinit {
+        if let sessionInvalidatedObserver {
+            NotificationCenter.default.removeObserver(sessionInvalidatedObserver)
+        }
+    }
+
+    var hasSavedSession: Bool {
+        guard let token = KeychainService.shared.loadToken() else { return false }
+        return !token.isEmpty
+    }
 
     func restoreSession() async {
+        guard !isRestoringSession else { return }
+        errorMessage = nil
+        Task { await flushPendingSessionRevocations() }
         isRestoringSession = true
         defer { isRestoringSession = false }
 
@@ -30,14 +58,20 @@ final class SessionManager: ObservableObject {
         do {
             let memberResponse = try await APIClient.shared.fetchCurrentUser()
             currentUser = memberResponse.member
+            NavigationRouter.shared.resetToHome()
             isLoggedIn = true
-            await registerPushTokenIfAvailable()
+            // Registration is best effort and must not hold the restoring/login screen open.
+            Task { await registerPushTokenIfAvailable() }
         } catch {
             print("❌ Failed to restore session: \(error)")
+            // Temporary network/server/Keychain failures must not destroy a renewable session.
+            // Definitive rejection is cleared by APIClient after refresh has been attempted.
             APIClient.shared.authToken = nil
-            KeychainService.shared.deleteToken()
             currentUser = nil
             isLoggedIn = false
+            errorMessage = KeychainService.shared.loadToken() == nil
+                ? "Your session ended. Please sign in again."
+                : "Unable to reconnect. Your saved sign-in has been kept; please try again."
         }
     }
 
@@ -68,10 +102,12 @@ final class SessionManager: ObservableObject {
             KeychainService.shared.saveToken(token)
 
             currentUser = member
+            NavigationRouter.shared.resetToHome()
             isLoggedIn = true
 
             print("✅ Login success")
-            await registerPushTokenIfAvailable()
+            // Registration is best effort and must not hold the restoring/login screen open.
+            Task { await registerPushTokenIfAvailable() }
         } catch {
             print("❌ Login failed: \(error)")
             errorMessage = error.localizedDescription
@@ -81,11 +117,46 @@ final class SessionManager: ObservableObject {
     }
 
     func logout() {
+        if let credentials = KeychainService.shared.loadSession() {
+            var pending = pendingSessionRevocations()
+            if !pending.contains(credentials.refreshToken) { pending.append(credentials.refreshToken) }
+            if let data = try? JSONEncoder().encode(pending), let text = String(data: data, encoding: .utf8) {
+                KeychainService.shared.save(text, for: "mtfd.pendingSessionRevocations")
+            }
+        }
+        NavigationRouter.shared.resetToHome()
         APIClient.shared.authToken = nil
         KeychainService.shared.deleteToken()
         currentUser = nil
         isLoggedIn = false
         errorMessage = nil
+        Task { await flushPendingSessionRevocations() }
+    }
+
+    private func pendingSessionRevocations() -> [String] {
+        guard let text = KeychainService.shared.read(for: "mtfd.pendingSessionRevocations"),
+              let data = text.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
+    private func flushPendingSessionRevocations() async {
+        for token in pendingSessionRevocations() {
+            do {
+                try await APIClient.shared.revokeSession(refreshToken: token)
+                let remaining = pendingSessionRevocations().filter { $0 != token }
+                if let data = try? JSONEncoder().encode(remaining), let text = String(data: data, encoding: .utf8) {
+                    KeychainService.shared.save(text, for: "mtfd.pendingSessionRevocations")
+                }
+            } catch { /* Retain the revocation for the next network opportunity. */ }
+        }
+    }
+
+    private func handleInvalidatedSession() {
+        NavigationRouter.shared.resetToHome()
+        APIClient.shared.authToken = nil
+        currentUser = nil
+        isLoggedIn = false
+        errorMessage = "Your session expired. Please sign in again."
     }
 
     func updateProfile(name: String, email: String, phone: String?) async throws {
@@ -99,6 +170,7 @@ final class SessionManager: ObservableObject {
     }
 
     func registerPushTokenIfAvailable() async {
+        guard isLoggedIn, !pushRegistrationInFlight else { return }
         print("📬 registerPushTokenIfAvailable called")
 
         guard let token = AppDelegate.latestAPNsToken, !token.isEmpty else {
@@ -111,16 +183,11 @@ final class SessionManager: ObservableObject {
             return
         }
 
-        guard let url = URL(string: "https://new-mtfd-site.vercel.app/api/mobile/push/register") else {
-            print("❌ Invalid push registration URL")
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        let registrationKey = "\(currentUser?.email ?? currentUser?.memberId ?? ""):\(token)"
+        if let last = lastPushRegistration, last.key == registrationKey,
+           Date().timeIntervalSince(last.date) < 60 { return }
+        pushRegistrationInFlight = true
+        defer { pushRegistrationInFlight = false }
 
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
@@ -133,20 +200,20 @@ final class SessionManager: ObservableObject {
             "buildNumber": buildNumber
         ]
 
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            if let http = response as? HTTPURLResponse {
-                print("✅ Push register status: \(http.statusCode)")
+        for attempt in 0..<3 {
+            guard isLoggedIn, APIClient.shared.authToken != nil,
+                  registrationKey == "\(currentUser?.email ?? currentUser?.memberId ?? ""):\(AppDelegate.latestAPNsToken ?? "")" else { return }
+            do {
+                try await APIClient.shared.registerPushDevice(body: body)
+                lastPushRegistration = (registrationKey, Date())
+                return
+            } catch {
+                print("❌ Push registration attempt \(attempt + 1) failed: \(error)")
+                if attempt < 2 {
+                    do { try await Task.sleep(nanoseconds: UInt64(attempt + 1) * 1_000_000_000) }
+                    catch { return }
+                }
             }
-
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📥 Push response: \(responseString)")
-            }
-        } catch {
-            print("❌ Push registration failed: \(error)")
         }
     }
 }

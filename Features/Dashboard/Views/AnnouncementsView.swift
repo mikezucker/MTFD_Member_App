@@ -6,7 +6,11 @@ struct AnnouncementsView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        AppScreen(title: "Announcements") {
+        AppScreen(
+            title: "Announcements",
+            subtitle: "Department and station updates.",
+            systemImage: "megaphone.fill"
+        ) {
             Group {
                 if isLoading {
                     ProgressView()
@@ -98,6 +102,8 @@ struct AnnouncementCard: View {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     AnnouncementsView()
 }
+#endif

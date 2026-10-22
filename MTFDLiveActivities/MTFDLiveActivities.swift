@@ -80,9 +80,11 @@ extension ConfigurationAppIntent {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview(as: .systemSmall) {
     MTFDLiveActivities()
 } timeline: {
     SimpleEntry(date: .now, configuration: .smiley)
     SimpleEntry(date: .now, configuration: .starEyes)
 }
+#endif
