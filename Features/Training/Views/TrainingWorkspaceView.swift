@@ -125,7 +125,7 @@ struct TrainingView: View {
         defer { refreshing = false }
         do { let result: TrainingWorkspaceHome = try await APIClient.shared.trainingWorkspace(); home = result; if result.guidedEnabled == true && tab == "To Do" { tab = "Required Training" }; error = nil }
         catch is CancellationError { }
-        catch let failure as URLError where failure.code == .cancelled { }
+        catch let failure where APIClient.isRequestCancellation(failure) { }
         catch APIClient.APIError.serverError(let code, _) where code == 404 { useLegacy = true }
         catch { self.error = error.localizedDescription }
     }
@@ -346,7 +346,7 @@ private struct WorkspaceCourseView: View {
     @MainActor private func load() async {
         do { let result: TrainingWorkspaceDetail = try await APIClient.shared.trainingWorkspace("/courses/\(course.id)"); if detail == nil { minutes = result.course.durationMinutes ?? 60 }; detail = result; response = result.course.followUpResponse ?? ""; error = nil }
         catch is CancellationError { }
-        catch let failure as URLError where failure.code == .cancelled { }
+        catch let failure where APIClient.isRequestCancellation(failure) { }
         catch { self.error = error.localizedDescription }
     }
 }
@@ -702,7 +702,7 @@ private struct GuidedInstructorHome: View {
     private var topic: GuidedTopic? { home?.topics.first { $0.id == topicId } }
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            if let error { WorkspaceNotice(message: error, warning: true) }
+            if let error { WorkspaceNotice(message: error, warning: true); if home == nil { Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) } }
             if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
             if let home {
                 if mode == "home" {
@@ -761,7 +761,7 @@ private struct GuidedInstructorHome: View {
         .navigationDestination(isPresented: Binding(get: { activeSession != nil }, set: { if !$0 { activeSession = nil; Task { await load() } } })) { if let activeSession { GuidedSessionView(id: activeSession) } }
     }
     private func begin() { mode = "start"; selected = []; versions = []; topicId = ""; search = ""; title = ""; notes = ""; oneOff = false; scheduled = false; date = Date(); status = ""; requestId = UUID().uuidString }
-    @MainActor private func load() async { do { home = try await APIClient.shared.trainingWorkspace("/guided"); error = nil } catch { self.error = error.localizedDescription } }
+    @MainActor private func load() async { do { home = try await APIClient.shared.trainingWorkspace("/guided"); error = nil } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
     @MainActor private func onDuty() async {
         busy = true; defer { busy = false }
         let at = ISO8601DateFormatter().string(from: date).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -925,7 +925,7 @@ private struct GuidedSessionView: View {
             Text("Attendance records training hours. Unobserved performance stays incomplete.").font(.caption)
         }
     }
-    @MainActor private func load() async { busy=true;defer{busy=false};do {let result:GuidedSessionResponse=try await APIClient.shared.trainingWorkspace("/guided/\(id)");session=result.session;duration=String(result.session.durationMinutes);error=nil;saved="Saved session loaded"}catch{self.error=error.localizedDescription} }
+    @MainActor private func load() async { busy=true;defer{busy=false};do {let result:GuidedSessionResponse=try await APIClient.shared.trainingWorkspace("/guided/\(id)");session=result.session;duration=String(result.session.durationMinutes);error=nil;saved="Saved session loaded"}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}} }
     @MainActor private func save(_ change:[String:Any]) async {
         guard let s=session,!busy,pending==nil else{return}
         do { var body=change;body["revision"]=s.revision;pending=try JSONSerialization.data(withJSONObject:body);await retry() }catch{self.error=error.localizedDescription}
@@ -975,7 +975,7 @@ private struct GuidedMemberResults:View {
             if let date=result.completedAt {Text(date.formatted(date:.abbreviated,time:.shortened)).font(.caption)}
             ForEach(result.steps?.steps ?? [],id:\.stepId){step in Text("\(step.title ?? step.stepId): \(step.rating=="PASS" ? "Pass" : step.rating=="NEEDS_WORK" ? "Needs work" : "Not evaluated")");if !step.comment.isEmpty{Text(step.comment).font(.caption)}}
         }}}else if error==nil {ProgressView("Loading JPR results…")}
-    }.task{do{results=try await APIClient.shared.trainingWorkspace("/jpr-results")}catch{self.error=error.localizedDescription}}}
+    }.task{do{results=try await APIClient.shared.trainingWorkspace("/jpr-results")}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}}}
 }
 
 private struct GuidedLibraryView:View {
@@ -1003,7 +1003,7 @@ private struct GuidedLibraryView:View {
         }
         .sheet(item:$selected,onDismiss:{Task{await load()}}){version in NavigationStack{GuidedJPREditor(version:version)}}
     }
-    @MainActor private func load()async{do{library=try await APIClient.shared.trainingWorkspace("/jprs");error=nil}catch{self.error=error.localizedDescription}}
+    @MainActor private func load()async{do{library=try await APIClient.shared.trainingWorkspace("/jprs");error=nil}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}}
     @MainActor private func upload(_ url:URL)async{
         busy=true;defer{busy=false};let scoped=url.startAccessingSecurityScopedResource();defer{if scoped{url.stopAccessingSecurityScopedResource()}}
         do{let size=try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0;guard size>0,size<=4*1024*1024 else{throw NSError(domain:"JPR",code:1,userInfo:[NSLocalizedDescriptionKey:"Choose a Word document up to 4 MB."])}
@@ -1134,7 +1134,7 @@ private struct GuidedSkillsView: View {
             Text("Counts evaluations recorded after assignment using this exact approved revision.").font(.caption).foregroundStyle(.secondary)
         }.padding(16).workspaceCard()
     }
-    @MainActor private func load() async { do { data = try await APIClient.shared.trainingWorkspace(home == nil ? "/skills" : "/skills?managed=1"); error = nil } catch { self.error = error.localizedDescription } }
+    @MainActor private func load() async { do { data = try await APIClient.shared.trainingWorkspace(home == nil ? "/skills" : "/skills?managed=1"); error = nil } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
     @MainActor private func assign() async {
         busy = true; defer { busy = false }
         do {
