@@ -135,6 +135,8 @@ struct GuidedContent: Codable {
 struct GuidedVersion: Codable, Identifiable {
     let id: String; let revision: Int; var content: GuidedContent
     let jprId: String?; let courseId: String?; let status: String?
+    var reviewToken: String? = nil
+    var approvalIssue: String? = nil
 }
 struct GuidedCourseCategory: Decodable { let id: String; let name: String }
 struct GuidedPendingCourse: Decodable, Identifiable { let id: String; let title: String; let totalJprs: Int; var category: GuidedCourseCategory? = nil }

@@ -1163,24 +1163,82 @@ private struct GuidedLibraryView:View {
     @State private var selected:GuidedVersion?
     @State private var busy=false
     @State private var error:String?
+    @State private var selectedDrafts=Set<String>()
+    @State private var confirmingBatch=false
+    @State private var reviewSearch=""
+    @State private var status=""
+    private var shown: [GuidedVersion] { (library?.versions ?? []).filter { (courseId.isEmpty || $0.courseId==courseId) && (reviewSearch.isEmpty || "\($0.content.number) \($0.content.title)".localizedCaseInsensitiveContains(reviewSearch)) }.sorted { $0.content.number.localizedStandardCompare($1.content.number) == .orderedAscending } }
+    private func ready(_ version:GuidedVersion)->Bool { version.status=="DRAFT" && version.reviewToken != nil && version.approvalIssue == nil }
+    private var selectedVersions:[GuidedVersion] { (library?.versions ?? []).filter { selectedDrafts.contains($0.id) && ready($0) } }
     var body:some View {
         ScrollView {VStack(alignment:.leading,spacing:18){
             Text("Training Library").font(.title.bold())
-            Text("Import Word documents, review each requirement, then approve the department JPR. Approved revisions are locked.")
+            Text("Review saved drafts, select ready JPRs, and approve them together. Approved revisions are locked.")
             if let error{WorkspaceNotice(message:error,warning:true)}
-            Picker("Training topic",selection:$courseId){Text("New course per uploaded JPR").tag("");ForEach(workspace.manageCourses){Text($0.title).tag($0.id)}}
+            if !status.isEmpty { WorkspaceNotice(message:status) }
+            Picker("Training topic",selection:$courseId){Text("All courses / new course per document").tag("");ForEach(workspace.manageCourses){Text($0.title).tag($0.id)}}
             Button("Upload Word JPRs (.docx)"){importing=true}.buttonStyle(WorkspaceActionStyle()).disabled(busy)
             Text("Word documents up to 4 MB. Imports always start as drafts. Older .doc files must first be saved as .docx.").font(.caption)
-            if let library {ForEach(library.versions.filter{courseId.isEmpty || $0.courseId==courseId}){version in
-                Button{selected=version}label:{WorkspaceToolRow(title:version.content.title,subtitle:"Revision \(version.revision) · \(version.status=="APPROVED" ? "Approved" : "Draft — review required")",icon:"doc.text")}.buttonStyle(.plain)
-            }}else if error==nil{ProgressView()}
+            TextField("Find a JPR by number or title",text:$reviewSearch).workspaceInput()
+            if library != nil {
+                Button("Select all ready drafts shown") { selectedDrafts.formUnion(shown.filter { ready($0) && !selectedDrafts.contains($0.id) }.map(\.id).prefix(max(0,100-selectedDrafts.count))) }.buttonStyle(WorkspaceActionStyle()).disabled(busy)
+                HStack {
+                    Button("Clear selection") { selectedDrafts=[] }.disabled(selectedDrafts.isEmpty || busy)
+                    Spacer()
+                    Button("Approve selected (\(selectedVersions.count))") { confirmingBatch=true }.disabled(selectedVersions.isEmpty || busy)
+                }.frame(minHeight:44)
+                Text("Select up to 100 saved, reviewed drafts. Incomplete JPRs remain flagged for review.").font(.caption)
+                ForEach(shown) { version in
+                    HStack(alignment:.top,spacing:10) {
+                        if version.status=="DRAFT" {
+                            Button { if selectedDrafts.contains(version.id) { selectedDrafts.remove(version.id) } else { selectedDrafts.insert(version.id) } } label: { Image(systemName:selectedDrafts.contains(version.id) ? "checkmark.square.fill" : "square").font(.title2).frame(width:44,height:48) }
+                                .accessibilityLabel("Select JPR \(version.content.number) revision \(version.revision)")
+                                .accessibilityAddTraits(selectedDrafts.contains(version.id) ? .isSelected : [])
+                                .disabled(busy || !ready(version) || (!selectedDrafts.contains(version.id) && selectedDrafts.count>=100))
+                        }
+                        VStack(alignment:.leading,spacing:6) {
+                            Button{selected=version}label:{WorkspaceToolRow(title:"\(version.content.number) · \(version.content.title)",subtitle:"Revision \(version.revision) · \(version.status=="APPROVED" ? "Approved" : "Draft — review required")",icon:"doc.text")}.buttonStyle(.plain)
+                            if version.status=="DRAFT",let issue=version.approvalIssue { Text("Needs review: \(issue)").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+            }else if error==nil{ProgressView()}
         }.padding(16)}.navigationTitle("JPR management").trainingDestinationNavigation(blocked: busy).disabled(busy).task{await load()}
         .fileImporter(isPresented:$importing,allowedContentTypes:[UTType(filenameExtension:"docx") ?? .data],allowsMultipleSelection:true){result in
             switch result{case .success(let urls):Task{for url in urls {await upload(url)}};case .failure(let error):self.error=error.localizedDescription}
         }
+        .onChange(of:courseId) { _,_ in selectedDrafts=[] }
+        .sheet(isPresented:$confirmingBatch) {
+            NavigationStack {
+                List {
+                    Section { Text("Confirm you reviewed the instructions, evaluation steps, and safety requirements for every selected JPR. Approval locks these revisions and publishes their draft practical courses.") }
+                    Section("\(selectedVersions.count) JPR revisions") {
+                        ForEach(selectedVersions) { version in
+                            VStack(alignment:.leading,spacing:5) {
+                                Text("\(version.content.number) · \(version.content.title)").font(.headline)
+                                Text("Revision \(version.revision) · \(workspace.manageCourses.first { $0.id==version.courseId }?.title ?? "Training course")").font(.caption)
+                            }
+                        }
+                    }
+                    Section { Text("If a selected draft changed or is incomplete, none will be approved.").font(.caption);Button(busy ? "Approving…" : "Confirm approval") { Task { await approveSelected() } }.disabled(busy || selectedVersions.isEmpty) }
+                }.navigationTitle("Approve selected JPRs?").navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement:.cancellationAction) { Button("Cancel") { confirmingBatch=false }.disabled(busy) } }
+                    .disabled(busy).interactiveDismissDisabled(busy)
+            }
+        }
         .sheet(item:$selected,onDismiss:{Task{await load()}}){version in NavigationStack{GuidedJPREditor(version:version)}}
     }
-    @MainActor private func load()async{do{library=try await APIClient.shared.trainingWorkspace("/jprs");error=nil}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}}
+    @MainActor private func load()async{do{library=try await APIClient.shared.trainingWorkspace("/jprs");selectedDrafts=selectedDrafts.filter { id in library?.versions.contains { $0.id==id && ready($0) } == true };error=nil}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}}
+    @MainActor private func approveSelected()async {
+        guard !selectedVersions.isEmpty,!busy else{return}
+        busy=true;defer{busy=false};error=nil;status=""
+        let count=selectedVersions.count
+        do {
+            let body:[String:Any]=["action":"approveBatch","confirmed":true,"publish":true,"versions":selectedVersions.map { ["id":$0.id,"reviewToken":$0.reviewToken ?? ""] }]
+            let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:body))
+            confirmingBatch=false;selectedDrafts=[];await load();status="\(count) JPR revisions approved and locked."
+        }catch{let message=error.localizedDescription;confirmingBatch=false;selectedDrafts=[];await load();self.error=message}
+    }
     @MainActor private func upload(_ url:URL)async{
         busy=true;defer{busy=false};let scoped=url.startAccessingSecurityScopedResource();defer{if scoped{url.stopAccessingSecurityScopedResource()}}
         do{let size=try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0;guard size>0,size<=4*1024*1024 else{throw NSError(domain:"JPR",code:1,userInfo:[NSLocalizedDescriptionKey:"Choose a Word document up to 4 MB."])}
