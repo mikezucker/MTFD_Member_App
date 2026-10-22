@@ -18,9 +18,9 @@ struct TrainingView: View {
             else {
                 NavigationStack {
                     AppScreen(title: "") {
-                        VStack(spacing: 0) {
-                            TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training Hub", subtitle: "Prepare. Practice. Perform.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats)
-                            ScrollView {
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training Hub", subtitle: "Prepare. Practice. Perform.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats)
                                 VStack(alignment: .leading, spacing: 18) {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
@@ -69,8 +69,8 @@ struct TrainingView: View {
                                         }
                                     } else if error == nil { ProgressView("Loading training…").tint(AppTheme.gold).frame(maxWidth: .infinity).padding(32) }
                                 }.padding(.horizontal, 16).padding(.vertical, 16).padding(.bottom, 20)
-                            }.refreshable { await load() }
-                        }
+                            }
+                        }.refreshable { await load() }
                     }
                     // This tab has its own header; an empty navigation bar shifts it down.
                     .toolbar(.hidden, for: .navigationBar)
@@ -1422,9 +1422,9 @@ private struct GuidedSkillsView: View {
     @State private var status = ""
     var body: some View {
         AppScreen(title: "") {
+        ScrollView {
         VStack(spacing: 0) {
             TrainingScreenHeader(title: home == nil ? "My Skills Progress" : "Crew Skills", subtitle: "Assigned JPRs and instructor evaluations.", systemImage: "checkmark.seal.fill", stats: [TrainingHeaderStat(label: "Assigned", value: "\(data?.requirements.count ?? 0)"), TrainingHeaderStat(label: "Completed", value: "\(data?.requirements.filter { $0.percent >= 100 }.count ?? 0)")])
-        ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Progress reflects instructor sign-offs on your assigned JPRs.").font(.subheadline).foregroundStyle(.secondary)
                 if let error { WorkspaceNotice(message: error, warning: true) }
@@ -1469,8 +1469,8 @@ private struct GuidedSkillsView: View {
                     }
                 } else if error == nil { ProgressView("Loading skill requirements…") }
             }.padding(16)
-        }.refreshable { await load() }
-        }.foregroundStyle(.white)
+        }
+        }.refreshable { await load() }.foregroundStyle(.white)
         }.navigationTitle(home == nil ? "My Skills" : "Crew Skills").trainingDestinationNavigation(blocked: busy).navigationBarTitleDisplayMode(.inline).tint(AppTheme.gold).environment(\.colorScheme, .dark).disabled(busy).task { await load() }
     }
     private func assignmentForm(_ home: GuidedHome) -> some View {

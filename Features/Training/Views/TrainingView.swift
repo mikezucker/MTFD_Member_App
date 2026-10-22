@@ -1038,7 +1038,7 @@ struct TrainingScreenHeader: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("MTFD · TRAINING DIVISION")
                         .font(.caption2.weight(.bold)).tracking(1.5)
-                        .foregroundStyle(AppTheme.gold)
+                        .foregroundStyle(AppTheme.gold).fixedSize(horizontal: false, vertical: true)
                     Text(title).font(.system(.title, design: .rounded, weight: .bold))
                         .foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
