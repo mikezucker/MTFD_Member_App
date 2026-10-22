@@ -37,6 +37,13 @@ import Foundation
         assert(guided.home.topics.contains{Set($0.jprs.compactMap(\.jprId)).count == 2})
         assert(guided.library.versions.contains{$0.status == "DRAFT"})
         assert(guided.results.results.count == 2 && guided.results.results.allSatisfy{$0.outcome == "INCOMPLETE"})
+        let firstTopic = guided.home.topics.first!
+        assert(firstTopic.matches(search: firstTopic.title, categoryId: ""))
+        assert(!firstTopic.matches(search: "__missing_course__", categoryId: ""))
+        assert(!firstTopic.matches(search: "", categoryId: "__missing_category__"))
+        assert(firstTopic.latestJprs.count == Set(firstTopic.jprs.compactMap(\.jprId)).count)
+        let pendingHome = try JSONDecoder().decode(GuidedHome.self, from: Data(#"{"canCreate":true,"topics":[],"members":[],"groups":[],"sessions":[],"pendingCourses":[{"id":"pending","title":"Needs review","totalJprs":2,"category":{"id":"ladder","name":"Ladders"}}]}"#.utf8))
+        assert(pendingHome.pendingCourses?.first?.totalJprs == 2)
         let member = guided.session.session.participants.first!
         assert(guided.session.session.outcome(guided.session.session.jprs[0],member) == "Passed")
         let skills = try JSONDecoder.mtfdTrainingDecoder.decode(GuidedSkillsResponse.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]+".skills")))

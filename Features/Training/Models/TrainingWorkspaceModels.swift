@@ -136,13 +136,26 @@ struct GuidedVersion: Codable, Identifiable {
     let id: String; let revision: Int; var content: GuidedContent
     let jprId: String?; let courseId: String?; let status: String?
 }
+struct GuidedCourseCategory: Decodable { let id: String; let name: String }
+struct GuidedPendingCourse: Decodable, Identifiable { let id: String; let title: String; let totalJprs: Int; var category: GuidedCourseCategory? = nil }
 struct GuidedTopic: Decodable, Identifiable {
+    var category: GuidedCourseCategory? = nil
     let id: String; let title: String; let description: String?; let durationMinutes: Int; let jprs: [GuidedVersion]
+}
+extension GuidedTopic {
+    var latestJprs: [GuidedVersion] {
+        var seen = Set<String>()
+        return jprs.filter { seen.insert($0.jprId ?? $0.id).inserted }
+    }
+    func matches(search: String, categoryId: String) -> Bool {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (categoryId.isEmpty || category?.id == categoryId) && (query.isEmpty || ([title, description ?? "", category?.name ?? ""] + jprs.map { "\($0.content.number) \($0.content.title)" }).joined(separator: " ").localizedCaseInsensitiveContains(query))
+    }
 }
 struct GuidedMember: Decodable, Identifiable { let id: String; let name: String; let attended: Bool? }
 struct GuidedGroup: Decodable { let name: String; let userIds: [String] }
 struct GuidedHistory: Decodable, Identifiable { let startAt: Date?; let location: String?; let oneOff: Bool?; let id: String; let title: String; let status: String; let stage: String; let updatedAt: Date; let participantCount: Int }
-struct GuidedHome: Decodable { let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
+struct GuidedHome: Decodable { var pendingCourses: [GuidedPendingCourse]? = nil; let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
 struct GuidedObservation: Decodable { let rating: String; let comment: String; let observedAt: String? }
 struct GuidedSessionResponse: Decodable { let session: GuidedSession }
 struct GuidedSession: Decodable, Identifiable {
