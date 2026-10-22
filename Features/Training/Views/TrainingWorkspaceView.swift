@@ -882,6 +882,9 @@ private struct GuidedInstructorHome: View {
 
 private struct GuidedSessionView: View {
     let id: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var editingSchedule = false
+    @State private var deletingSchedule = false
     @State private var session: GuidedSession?
     @State private var error: String?
     @State private var saved = ""
@@ -906,6 +909,8 @@ private struct GuidedSessionView: View {
                             if let date = s.startAt { Text(date.formatted(date: .abbreviated, time: .shortened)) }
                             if let location = s.location { Text(location) }
                             Text("\(s.participants.count) participants · No credit awarded until training is recorded.")
+                            Button("Edit schedule") { editingSchedule = true }.buttonStyle(WorkspaceActionStyle()).disabled(blocked)
+                            Button("Delete scheduled training", role: .destructive) { deletingSchedule = true }.frame(minHeight: 44).disabled(blocked)
                             Button("Begin scheduled training") { Task { await save(["begin": true]) } }.buttonStyle(WorkspaceActionStyle()).disabled(blocked)
                         } else if s.oneOff == true { summary(s) }
                         else if s.jprs.indices.contains(s.jprIndex), s.jprs[s.jprIndex].content.steps.indices.contains(s.stepIndex) {
@@ -920,6 +925,13 @@ private struct GuidedSessionView: View {
         .navigationBarBackButtonHidden(busy || pending != nil || commentDraft != nil || durationDirty)
         .interactiveDismissDisabled(busy || pending != nil || commentDraft != nil || durationDirty)
         .task { await load() }
+        .sheet(isPresented: $editingSchedule) {
+            if let session { NavigationStack { GuidedScheduleEditor(session: session) { Task { await load() } } } }
+        }
+        .confirmationDialog("Delete scheduled training?", isPresented: $deletingSchedule, titleVisibility: .visible) {
+            Button("Delete scheduled training", role: .destructive) { Task { await deleteSchedule() } }
+            Button("Keep scheduled training", role: .cancel) { }
+        } message: { Text("Remove this scheduled session? This cannot be undone. Existing course and skill assignments remain.") }
         .alert("Reload last saved session?", isPresented: $confirmReload) { Button("Cancel",role:.cancel) {}; Button("Discard unconfirmed change",role:.destructive) { pending = nil; Task { await load() } } } message: { Text("Only confirmed saved work will be restored.") }
         .sheet(item: $commenting) { member in
             NavigationStack { Form {
@@ -1027,6 +1039,15 @@ private struct GuidedSessionView: View {
             Text("Attendance records training hours. Unobserved performance stays incomplete.").font(.caption)
         }
     }
+    @MainActor private func deleteSchedule() async {
+        guard let session, session.status == "SCHEDULED", !blocked else { return }
+        busy = true; defer { busy = false }
+        do {
+            let _: GuidedMutation = try await APIClient.shared.trainingWorkspace("/guided/\(id)", body: JSONSerialization.data(withJSONObject: ["action":"deleteSchedule", "revision":session.revision,"confirmed":true]))
+            dismiss()
+        } catch APIClient.APIError.serverError(let code, _) where code == 404 { dismiss() }
+        catch { self.error = error.localizedDescription }
+    }
     @MainActor private func load() async { busy=true;defer{busy=false};do {let result:GuidedSessionResponse=try await APIClient.shared.trainingWorkspace("/guided/\(id)");session=result.session;duration=String(result.session.durationMinutes);error=nil;saved="Saved session loaded"}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}} }
     @MainActor private func save(_ change:[String:Any]) async {
         guard let s=session,!busy,pending==nil else{return}
@@ -1043,6 +1064,60 @@ private struct GuidedSessionView: View {
         else {await save(["stage":s.stage=="TEACH" ? "PRACTICE" : s.stage=="PRACTICE" ? "EVALUATE" : "SUMMARY","jprIndex":0,"stepIndex":0])}
     }
     @MainActor private func printVersion(_ version:String) async {do{printHTML=try await APIClient.shared.guidedJPRPrint(version)}catch{self.error=error.localizedDescription}}
+}
+
+private struct GuidedScheduleEditor: View {
+    let session: GuidedSession
+    let onSaved: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var date: Date
+    @State private var location: String
+    @State private var minutes: Int
+    @State private var selected: Set<String>
+    @State private var members: [GuidedMember] = []
+    @State private var search = ""
+    @State private var busy = false
+    @State private var error: String?
+    @State private var discard = false
+    init(session: GuidedSession, onSaved: @escaping () -> Void) {
+        self.session = session; self.onSaved = onSaved
+        _date = State(initialValue: session.startAt ?? Date())
+        _location = State(initialValue: session.location ?? "")
+        _minutes = State(initialValue: session.durationMinutes)
+        _selected = State(initialValue: Set(session.participants.map(\.id)))
+    }
+    private var dirty: Bool { date != session.startAt || location != (session.location ?? "") || minutes != session.durationMinutes || selected != Set(session.participants.map(\.id)) }
+    var body: some View {
+        Form {
+            Section(session.title) {
+                DatePicker("Date and time", selection: $date)
+                TextField("Location", text: $location)
+                TextField("Duration (minutes)", value: $minutes, format: .number).keyboardType(.numberPad)
+            }
+            Section("Participants · \(selected.count) selected") {
+                TextField("Find a firefighter", text: $search).autocorrectionDisabled()
+                ForEach((members.isEmpty ? session.participants : members).filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }) { member in
+                    Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } }))
+                }
+            }
+            Section { Text("Changes update this session’s roster. Existing course and skill assignments remain.").font(.caption) }
+            if let error { Section { Text(error).foregroundStyle(.red) } }
+            Section { Button(busy ? "Saving…" : "Save schedule changes") { Task { await save() } }.disabled(busy || selected.isEmpty || !dirty || !(1...1440).contains(minutes)) }
+        }
+        .navigationTitle("Edit schedule").navigationBarTitleDisplayMode(.inline)
+        .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { if dirty { discard = true } else { dismiss() } }.disabled(busy) } }
+        .disabled(busy).interactiveDismissDisabled(dirty || busy)
+        .confirmationDialog("Discard schedule changes?", isPresented: $discard, titleVisibility: .visible) { Button("Discard changes", role: .destructive) { dismiss() }; Button("Keep editing", role: .cancel) { } }
+        .task { do { let home: GuidedHome = try await APIClient.shared.trainingWorkspace("/guided"); members = home.members } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
+    }
+    @MainActor private func save() async {
+        busy = true; defer { busy = false }
+        do {
+            let body: [String:Any] = ["action":"editSchedule","revision":session.revision,"startAt":ISO8601DateFormatter().string(from:date),"location":location,"durationMinutes":minutes,"participantIds":Array(selected)]
+            let _: GuidedMutation = try await APIClient.shared.trainingWorkspace("/guided/\(session.id)", body: JSONSerialization.data(withJSONObject:body))
+            onSaved(); dismiss()
+        } catch { self.error = error.localizedDescription }
+    }
 }
 
 private struct GuidedPrintSheet:UIViewControllerRepresentable {
