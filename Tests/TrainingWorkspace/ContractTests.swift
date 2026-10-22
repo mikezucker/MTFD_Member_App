@@ -37,6 +37,11 @@ import Foundation
         assert(guided.home.topics.contains{Set($0.jprs.compactMap(\.jprId)).count == 2})
         assert(guided.library.versions.contains{$0.status == "DRAFT"})
         assert(guided.results.results.count == 2 && guided.results.results.allSatisfy{$0.outcome == "INCOMPLETE"})
+        let oldVersion=guided.library.versions.first!
+        var reviewObject=try JSONSerialization.jsonObject(with:JSONEncoder().encode(oldVersion)) as! [String:Any]
+        reviewObject["reviewToken"]=String(repeating:"a",count:64);reviewObject["approvalIssue"]="Complete equipment before approving this JPR."
+        let reviewed=try JSONDecoder().decode(GuidedVersion.self,from:JSONSerialization.data(withJSONObject:reviewObject))
+        assert(reviewed.reviewToken==String(repeating:"a",count:64) && reviewed.approvalIssue?.contains("equipment")==true)
         let firstTopic = guided.home.topics.first!
         assert(firstTopic.matches(search: firstTopic.title, categoryId: ""))
         assert(!firstTopic.matches(search: "__missing_course__", categoryId: ""))
