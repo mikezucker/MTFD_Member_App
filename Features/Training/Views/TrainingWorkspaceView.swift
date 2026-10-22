@@ -723,8 +723,8 @@ private struct GuidedInstructorHome: View {
                     Text("Assign & Run Training").font(.title2.bold())
                     Picker("Training source", selection: $oneOff) { Text("Course catalog").tag(false); Text("One-off topic").tag(true) }.pickerStyle(.segmented).onChange(of: oneOff) { _, value in if value { assignmentOnly = false } }
                     if oneOff {
-                        TextField("Training topic", text: $title).textFieldStyle(.roundedBorder)
-                        TextField("Session notes", text: $notes, axis: .vertical).textFieldStyle(.roundedBorder)
+                        TextField("Training topic", text: $title).workspaceInput()
+                        TextField("Session notes", text: $notes, axis: .vertical).workspaceInput()
                         Text("Attendance and hours only. Practical competency requires an approved JPR.").font(.caption).foregroundStyle(.secondary)
                     } else {
                         Picker("Training course", selection: $topicId) { Text("Choose a course").tag(""); ForEach(home.topics) { Text($0.title).tag($0.id) } }
@@ -741,18 +741,24 @@ private struct GuidedInstructorHome: View {
                         if !oneOff { Text("Assign only").tag("assign") }
                         Text("Run now").tag("run"); Text("Schedule").tag("schedule")
                     }.pickerStyle(.segmented)
-                    Text(oneOff ? "Records attendance and hours." : "Assigns this course and the selected JPRs to your crew. Existing skill requirements and progress are preserved.").font(.caption).foregroundStyle(.white.opacity(0.65))
+                    Text(oneOff ? "Records attendance and hours." : "Assigns this course and the selected JPRs to your crew.").font(.caption).foregroundStyle(.white.opacity(0.65))
                     if scheduled { DatePicker("Session time", selection: $date)
                         .onChange(of: date) { _, _ in status = "Time changed. Reload the roster or check your selected participants." } }
-                    TextField("Location", text: $location).textFieldStyle(.roundedBorder)
-                    Stepper("\(minutes) minutes", value: $minutes, in: 5...1440, step: 5)
+                    if !assignmentOnly { DisclosureGroup("Session details · \(minutes) minutes") {
+                        TextField("Location", text: $location).workspaceInput()
+                        Stepper("\(minutes) minutes", value: $minutes, in: 5...1440, step: 5)
+                    }.tint(AppTheme.gold) }
                     Divider()
                     Text("Participants · \(selected.count)").font(.headline)
                     Button("Load FirstDue roster at session time") { Task { await onDuty() } }.buttonStyle(WorkspaceActionStyle())
                     Menu("Add a department group") { ForEach(home.groups, id: \.name) { group in Button(group.name) { selected.formUnion(group.userIds) } } }.frame(minHeight: 44)
-                    TextField("Find a firefighter", text: $search).textFieldStyle(.roundedBorder)
-                    ForEach(home.members.filter { selected.contains($0.id) || (!search.isEmpty && $0.name.localizedCaseInsensitiveContains(search)) }) { member in
-                        Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })).padding(12).workspaceCard()
+                    TextField("Find a firefighter", text: $search).workspaceInput()
+                    if search.isEmpty {
+                        if !selected.isEmpty { DisclosureGroup("Review \(selected.count) selected members") {
+                            ForEach(home.members.filter { selected.contains($0.id) }) { member in memberRow(member) }
+                        }.tint(AppTheme.gold) }
+                    } else {
+                        ForEach(home.members.filter { $0.name.localizedCaseInsensitiveContains(search) }) { member in memberRow(member) }
                     }
                     if selected.isEmpty && search.isEmpty { Text("Load the shift roster, choose a group, or search for members above.").font(.caption).foregroundStyle(.white.opacity(0.65)) }
                     Button(assignmentOnly ? "Assign Course & JPRs" : scheduled ? "Assign & Schedule Training" : oneOff ? "Start Training" : "Assign & Start Training") { Task { await start() } }.buttonStyle(WorkspaceActionStyle()).disabled(selected.isEmpty || busy || (oneOff ? title.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 : topic == nil || versions.isEmpty))
@@ -770,6 +776,9 @@ private struct GuidedInstructorHome: View {
             Text("Online connection required. Confirmed saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary)
         }.disabled(busy).task { await load() }
         .navigationDestination(isPresented: Binding(get: { activeSession != nil }, set: { if !$0 { activeSession = nil; Task { await load() } } })) { if let activeSession { GuidedSessionView(id: activeSession) } }
+    }
+    private func memberRow(_ member: GuidedMember) -> some View {
+        Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })).workspaceCard()
     }
     private func choose(_ course: GuidedTopic) {
         begin(); topicId = course.id; versions = Set(course.latestJprs.map(\.id)); minutes = course.durationMinutes
