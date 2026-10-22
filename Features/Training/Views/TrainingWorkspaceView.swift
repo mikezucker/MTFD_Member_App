@@ -35,13 +35,13 @@ struct TrainingView: View {
                                             TextField("Search courses", text: $search).foregroundStyle(.white).autocorrectionDisabled()
                                             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("Clear search") }
                                         }.workspaceCard()
-                                        sectionHeading(tab == "Catalog" ? "Course Catalog" : tab == "Completed" ? "Completed Training" : "My Training", subtitle: tab == "Catalog" ? "Available for your member type. Enroll to get started." : tab == "Completed" ? "Completion dates, results, and credited hours." : "Assigned courses and your next steps.")
+                                        sectionHeading(trainingSectionTitle, subtitle: tab == "Catalog" ? "Available for your member type. Enroll to get started." : tab == "Completed" ? "Completion dates, results, and credited hours." : "Assigned courses and your next steps.")
                                         if shownCourses.isEmpty {
                                             WorkspacePanel {
                                                 Label(search.isEmpty ? (tab == "Catalog" ? "No courses available" : tab == "Completed" ? "Your training record starts here" : "You're up to date") : "No matching courses", systemImage: tab == "Completed" ? "checkmark.seal" : "graduationcap")
                                                     .font(.headline).foregroundStyle(AppTheme.gold)
                                                 Text(search.isEmpty ? (tab == "Catalog" ? "Your instructors will publish eligible courses here." : tab == "Completed" ? "Completed courses and earned hours will appear here." : "You have no outstanding course assignments. Browse the catalog to find available training.") : "Try a different course name.").font(.subheadline).foregroundStyle(.white.opacity(0.72))
-                                                if search.isEmpty && tab == "To Do" { Button("Browse course catalog") { tab = "Catalog" }.buttonStyle(WorkspaceActionStyle()) }
+                                                if search.isEmpty && isRequiredTab { Button("Browse course catalog") { tab = "Catalog" }.buttonStyle(WorkspaceActionStyle()) }
                                             }
                                         }
                                         ForEach(shownCourses) { course in
@@ -50,7 +50,7 @@ struct TrainingView: View {
                                                 else { WorkspaceCourseView(course: course, members: home.members, manage: false) }
                                             } label: { WorkspaceCourseCard(course: course) }.buttonStyle(.plain)
                                         }
-                                        if tab == "To Do" && home.courses.contains(where: { $0.pendingForm }) {
+                                        if isRequiredTab && home.courses.contains(where: { $0.pendingForm }) {
                                             sectionHeading("Outstanding Forms", subtitle: "Follow-up items are separate from earned credit.")
                                             ForEach(home.courses.filter { $0.pendingForm }) { course in
                                                 NavigationLink { WorkspaceCourseView(course: course, members: home.members, manage: false) } label: {
@@ -92,12 +92,17 @@ struct TrainingView: View {
         }
     }
     private var trainingTabs: some View {
-        ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 4) {
-            ForEach(home?.guidedEnabled == true ? ["Required Training", "In Progress", "Completed", "My JPR Results", "Catalog"] : ["To Do", "Completed", "Catalog"], id: \.self) { value in
-                Button { tab = value } label: { Text(value).font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12).foregroundStyle(tab == value ? AppTheme.navy : .white.opacity(0.78)).background(tab == value ? AppTheme.gold : Color.clear, in: RoundedRectangle(cornerRadius: 12)) }
-                    .buttonStyle(.plain).accessibilityAddTraits(tab == value ? .isSelected : [])
-            }
-        }.padding(4).background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16)) }
+        WorkspaceTrainingNavigation(selection: $tab, guided: home?.guidedEnabled == true)
+    }
+    private var isRequiredTab: Bool { tab == "To Do" || tab == "Required Training" }
+    private var trainingSectionTitle: String {
+        switch tab {
+        case "Catalog": return "Course Catalog"
+        case "Completed": return "Completed Training"
+        case "In Progress": return "In Progress"
+        case "Required Training": return "Required Training"
+        default: return "My Training"
+        }
     }
     private func sectionHeading(_ title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(title).font(.title3.bold()).foregroundStyle(.white); Text(subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.65)) }
@@ -122,6 +127,58 @@ struct TrainingView: View {
         catch let failure as URLError where failure.code == .cancelled { }
         catch APIClient.APIError.serverError(let code, _) where code == 404 { useLegacy = true }
         catch { self.error = error.localizedDescription }
+    }
+}
+
+// Status filters and destinations stay visible without horizontal scrolling.
+private struct WorkspaceTrainingNavigation: View {
+    @Binding var selection: String
+    let guided: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        VStack(spacing: 12) {
+            LazyVGrid(columns: columns(count: 3), spacing: 6) {
+                if guided {
+                    navigationButton("Required", value: "Required Training")
+                    navigationButton("In Progress", value: "In Progress")
+                    navigationButton("Completed", value: "Completed")
+                } else {
+                    navigationButton("To Do", value: "To Do")
+                    navigationButton("Completed", value: "Completed")
+                    navigationButton("Catalog", value: "Catalog")
+                }
+            }
+            .padding(4)
+            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+
+            if guided {
+                LazyVGrid(columns: columns(count: 2), spacing: 10) {
+                    navigationButton("JPR Results", value: "My JPR Results", icon: "checklist")
+                    navigationButton("Browse Catalog", value: "Catalog", icon: "magnifyingglass")
+                }
+            }
+        }
+    }
+    private func columns(count: Int) -> [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 6), count: dynamicTypeSize.isAccessibilitySize ? 1 : count)
+    }
+    private func navigationButton(_ title: String, value: String, icon: String? = nil) -> some View {
+        Button { selection = value } label: {
+            HStack(spacing: 6) {
+                if let icon { Image(systemName: icon).accessibilityHidden(true) }
+                Text(title).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.subheadline.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: icon == nil ? 48 : 52)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .foregroundStyle(selection == value ? AppTheme.navy : .white.opacity(0.85))
+            .background(selection == value ? AppTheme.gold : icon == nil ? Color.clear : .white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == value ? .isSelected : [])
+        .accessibilityIdentifier("training-filter-" + value)
     }
 }
 
