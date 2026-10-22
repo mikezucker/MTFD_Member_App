@@ -19,14 +19,14 @@ struct TrainingView: View {
                 NavigationStack {
                     AppScreen(title: "") {
                         VStack(spacing: 0) {
-                            TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training", subtitle: "Courses, practical training, and earned hours.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats)
+                            TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training Hub", subtitle: "Prepare. Practice. Perform.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats)
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 18) {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
                                         if home.guidedEnabled == true && home.canManage && !showingMyTraining {
                                             GuidedInstructorHome(workspace: home)
-                                            Button("My Training") { showingMyTraining = true }.buttonStyle(WorkspaceActionStyle())
+                                            Button { showingMyTraining = true } label: { WorkspaceToolRow(title: "My Training", subtitle: "Your courses, earned hours, and personal progress", icon: "person.crop.circle.fill") }.buttonStyle(.plain)
                                         } else {
                                         if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
                                         trainingTabs
@@ -610,14 +610,17 @@ private struct WorkspaceBadge: View {
 
 private struct WorkspaceActionStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var primary = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity).padding(.horizontal, 12).padding(.vertical, 14)
             .foregroundStyle(primary ? AppTheme.navy : .white)
-            .background(primary ? AppTheme.gold : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 13))
+            .background(LinearGradient(colors: primary ? [Color(red: 1, green: 0.84, blue: 0.26), AppTheme.gold] : [TrainingVisualStyle.raised, TrainingVisualStyle.surface], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14))
             .overlay { RoundedRectangle(cornerRadius: 13).stroke(.white.opacity(primary ? 0 : 0.1), lineWidth: 1) }
-            .opacity(!enabled ? 0.4 : configuration.isPressed ? 0.75 : 1)
+            .opacity(!enabled ? 0.4 : configuration.isPressed ? 0.8 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -638,7 +641,7 @@ private struct WorkspaceToolRow: View {
     let icon: String
     var body: some View {
         HStack(spacing: 13) {
-            AppDashboardIcon(systemImage: icon, size: 30)
+            TrainingEmblem(symbol: icon, compact: true)
             VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.headline).foregroundStyle(.white)
                 Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.68)).fixedSize(horizontal: false, vertical: true)
@@ -649,6 +652,94 @@ private struct WorkspaceToolRow: View {
     }
 }
 
+private struct TrainingEmblem: View {
+    let symbol: String
+    var compact = false
+    var color: Color = AppTheme.gold
+    var body: some View {
+        Image(systemName: symbol).font(.system(size: compact ? 22 : 30, weight: .semibold))
+            .foregroundStyle(color).frame(width: compact ? 46 : 62, height: compact ? 46 : 66)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: compact ? 14 : 19))
+            .overlay { RoundedRectangle(cornerRadius: compact ? 14 : 19).stroke(color.opacity(0.25), lineWidth: 1) }
+            .accessibilityHidden(true)
+    }
+}
+
+private struct TrainingQuickAction: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: symbol).font(.title3).foregroundStyle(AppTheme.gold).accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.subheadline.bold()).foregroundStyle(.white)
+                Text(subtitle).font(.caption).foregroundStyle(.white.opacity(0.68)).fixedSize(horizontal: false, vertical: true)
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).workspaceCard()
+    }
+}
+
+private struct TrainingMetricStrip: View {
+    let stats: [TrainingHeaderStat]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: dynamicTypeSize.isAccessibilitySize ? 1 : 3), spacing: 8) {
+            ForEach(stats) { stat in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(stat.value).font(.system(.title2, design: .rounded, weight: .bold)).monospacedDigit().foregroundStyle(AppTheme.gold)
+                    Text(stat.label).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.75))
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 13))
+                    .accessibilityElement(children: .combine)
+            }
+        }
+    }
+}
+
+private struct TrainingProgressDial: View {
+    let percent: Int
+    private var progress: Int { min(100, max(0, percent)) }
+    private var accent: Color { progress >= 100 ? TrainingVisualStyle.mint : AppTheme.gold }
+    var body: some View {
+        ZStack {
+            Circle().stroke(.white.opacity(0.1), lineWidth: 6)
+            Circle().trim(from: 0, to: Double(progress) / 100).stroke(accent, style: StrokeStyle(lineWidth: 6, lineCap: .round)).rotationEffect(.degrees(-90))
+            Text("\(progress)%").font(.system(.subheadline, design: .rounded, weight: .bold)).monospacedDigit().foregroundStyle(accent).lineLimit(1).minimumScaleFactor(0.5).frame(width: 48)
+        }.frame(width: 60, height: 60).padding(3)
+            .accessibilityElement(children: .ignore).accessibilityLabel("\(progress) percent complete")
+    }
+}
+
+private struct GuidedCatalogCourseCard: View {
+    let course: GuidedTopic
+    let choose: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                TrainingEmblem(symbol: TrainingVisualStyle.symbol(for: course.title + " " + (course.category?.name ?? "")))
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("PRACTICAL TRAINING").font(.caption2.bold()).tracking(1).foregroundStyle(AppTheme.gold)
+                    Text(course.title).font(.system(.title3, design: .rounded, weight: .bold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                    if let category = course.category { Text(category.name).font(.caption).foregroundStyle(.white.opacity(0.68)) }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 16) { metadata }
+                VStack(alignment: .leading, spacing: 8) { metadata }
+            }.font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.8))
+            Button(action: choose) { HStack { Text("Select course"); Spacer(); Image(systemName: "arrow.right") } }
+                .buttonStyle(WorkspaceActionStyle(primary: true))
+                .accessibilityLabel("Select course: " + course.title)
+        }.workspaceCard()
+            .overlay(alignment: .top) { Capsule().fill(AppTheme.gold.opacity(0.75)).frame(width: 44, height: 3).padding(.top, 1).accessibilityHidden(true) }
+    }
+    @ViewBuilder private var metadata: some View {
+        Label("\(course.latestJprs.count) approved JPRs", systemImage: "checkmark.shield")
+        Label("\(course.durationMinutes) min", systemImage: "clock")
+    }
+}
+
 private struct WorkspaceCourseCard: View {
     let course: TrainingWorkspaceCourse
     private var completed: Bool { course.progressStatus == "COMPLETED" }
@@ -656,18 +747,18 @@ private struct WorkspaceCourseCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 10) {
-                AppDashboardIcon(systemImage: completed ? "checkmark.seal.fill" : course.delivery == "CBT" ? "play.circle.fill" : "person.2.fill", size: 30)
+                TrainingEmblem(symbol: completed ? "checkmark.seal.fill" : course.delivery == "CBT" ? "play.rectangle.fill" : TrainingVisualStyle.symbol(for: course.title), compact: true, color: completed ? TrainingVisualStyle.mint : AppTheme.gold)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(course.delivery == "CBT" ? "ONLINE CBT" : course.delivery == "PRACTICAL" ? "PRACTICAL TRAINING" : "TRAINING").font(.caption2.bold()).foregroundStyle(AppTheme.gold)
-                    Text(course.title).font(.headline).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                    Text(course.title).font(.system(.title3, design: .rounded, weight: .bold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.white.opacity(0.45)).padding(.top, 6)
             }
             if let description = course.description, !description.isEmpty { Text(description).font(.subheadline).foregroundStyle(.white.opacity(0.72)).lineLimit(3) }
             HStack(spacing: 14) {
-                if completed { Label("\(workspaceHours(course.creditedMinutes)) hours credited", systemImage: "checkmark.seal").foregroundStyle(.green) }
-                else if let duration = course.durationMinutes { Label("\(workspaceHours(duration)) hours", systemImage: "clock").foregroundStyle(.white.opacity(0.7)) }
+                if completed { Label("\(workspaceHours(course.creditedMinutes)) hr credited", systemImage: "checkmark.seal").foregroundStyle(.green) }
+                else if let duration = course.durationMinutes { Label("\(workspaceHours(duration)) hr", systemImage: "clock").foregroundStyle(.white.opacity(0.7)) }
                 Spacer(minLength: 0)
                 Text(completed ? "Completed" : !course.assigned ? "Available" : course.progressStatus == "IN_PROGRESS" ? "In progress" : "Not started").fontWeight(.semibold).foregroundStyle(completed ? .green : AppTheme.gold)
             }.font(.caption)
@@ -713,8 +804,9 @@ private struct WorkspaceBuilderSteps: View {
 private extension View {
     func workspaceCard() -> some View {
         self.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay { RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.08), lineWidth: 1) }
+            .background(LinearGradient(colors: [TrainingVisualStyle.raised, TrainingVisualStyle.surface], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(.white.opacity(0.12), lineWidth: 1) }
+            .shadow(color: .black.opacity(0.12), radius: 10, y: 5)
     }
     func workspaceInput() -> some View {
         self.textFieldStyle(.plain).foregroundStyle(.white).padding(12)
@@ -728,6 +820,7 @@ private extension View {
 private struct GuidedInstructorHome: View {
     let workspace: TrainingWorkspaceHome
     @State private var home: GuidedHome?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var mode = "catalog"
     @State private var courseSearch = ""
     @State private var categoryId = ""
@@ -833,33 +926,50 @@ private struct GuidedInstructorHome: View {
         begin(); topicId = course.id; versions = Set(course.latestJprs.map(\.id)); minutes = course.durationMinutes
     }
     private func catalog(_ home: GuidedHome) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Course Catalog").font(.title2.bold()).foregroundStyle(.white)
-            Text("Find a course, choose your crew, and assign or run its JPRs.").font(.subheadline).foregroundStyle(.white.opacity(0.65))
-            HStack { Image(systemName: "magnifyingglass"); TextField("Search courses or JPRs", text: $courseSearch).autocorrectionDisabled() }.workspaceCard()
-            let categories = (home.topics.compactMap(\.category) + (home.pendingCourses ?? []).compactMap(\.category)).reduce(into: [String:String]()) { $0[$1.id] = $1.name }
-            Picker("Category", selection: $categoryId) { Text("All categories").tag(""); ForEach(categories.keys.sorted { (categories[$0] ?? "") < (categories[$1] ?? "") },id:\.self) { id in Text(categories[id] ?? id).tag(id) } }.tint(AppTheme.gold)
-            HStack(spacing: 12) {
-                Button("Sessions") { mode = "home" }.buttonStyle(WorkspaceActionStyle())
-                NavigationLink { GuidedSkillsView(home: home) } label: { Text("Crew Skills") }.buttonStyle(WorkspaceActionStyle())
+        VStack(alignment: .leading, spacing: 18) {
+            TrainingMetricStrip(stats: [
+                TrainingHeaderStat(label: "Ready courses", value: "\(home.topics.count)"),
+                TrainingHeaderStat(label: "Scheduled", value: "\(home.sessions.filter { $0.status == "SCHEDULED" }.count)"),
+                TrainingHeaderStat(label: "To resume", value: "\(home.sessions.filter { $0.status == "IN_PROGRESS" }.count)")
+            ])
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
+                Button { mode = "home" } label: { TrainingQuickAction(title: "Sessions", subtitle: "Schedule & history", symbol: "calendar.badge.clock") }.buttonStyle(.plain)
+                NavigationLink { GuidedSkillsView(home: home) } label: { TrainingQuickAction(title: "Crew Skills", subtitle: "Assignments & progress", symbol: "person.2.badge.gearshape.fill") }.buttonStyle(.plain)
             }
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass").foregroundStyle(AppTheme.gold)
+                TextField("Search courses or JPRs", text: $courseSearch).autocorrectionDisabled()
+            }.workspaceCard()
+            let categories = (home.topics.compactMap(\.category) + (home.pendingCourses ?? []).compactMap(\.category)).reduce(into: [String:String]()) { $0[$1.id] = $1.name }
             let courses = home.topics.filter { $0.matches(search: courseSearch, categoryId: categoryId) }
-            Text("\(courses.count) courses ready").font(.caption).foregroundStyle(.white.opacity(0.65))
-            ForEach(courses) { course in
-                WorkspacePanel {
-                    if let category = course.category { Text(category.name.uppercased()).font(.caption2.bold()).foregroundStyle(AppTheme.gold) }
-                    Text(course.title).font(.headline)
-                    Text("\(course.latestJprs.count) JPRs · \(course.durationMinutes) minutes").font(.subheadline).foregroundStyle(.white.opacity(0.65))
-                    Button("Select course →") { choose(course) }.buttonStyle(WorkspaceActionStyle(primary: true))
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) { catalogHeading; categoryPicker(categories) }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack { catalogHeading; Spacer(minLength: 8); categoryPicker(categories) }
+                    VStack(alignment: .leading, spacing: 8) { catalogHeading; categoryPicker(categories) }
                 }
+            }
+            if !courseSearch.isEmpty || !categoryId.isEmpty { Text("\(courses.count) matching courses").font(.caption).foregroundStyle(.white.opacity(0.7)) }
+            LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 300), alignment: .top)], spacing: 16) {
+                ForEach(courses) { course in GuidedCatalogCourseCard(course: course) { choose(course) } }
             }
             if courses.isEmpty { WorkspacePanel { Text(home.topics.isEmpty ? "No courses ready yet" : "No matching courses").font(.headline); Text(home.topics.isEmpty ? "Published courses with approved JPRs appear here." : "Try a course name, JPR number, or another category.").font(.subheadline).foregroundStyle(.white.opacity(0.65)) } }
             ForEach((home.pendingCourses ?? []).filter { (categoryId.isEmpty || $0.category?.id == categoryId) && (courseSearch.isEmpty || $0.title.localizedCaseInsensitiveContains(courseSearch)) }) { course in
                 WorkspacePanel { Text(course.title).font(.headline); WorkspaceBadge(text: "JPR REVIEW PENDING"); Text("\(course.totalJprs) JPRs awaiting review. Guided training becomes available after approval.").font(.caption).foregroundStyle(.white.opacity(0.65)); if home.canCreate { NavigationLink("Review JPRs") { GuidedLibraryView(workspace: workspace) }.tint(AppTheme.gold) } }
             }
-            Button("Record one-off training") { begin(); oneOff = true }.buttonStyle(WorkspaceActionStyle())
-            if home.canCreate { NavigationLink("Build & Manage Training") { GuidedLibraryView(workspace: workspace) }.tint(AppTheme.gold) }
+            Button { begin(); oneOff = true } label: { Label("Record one-off training", systemImage: "plus.circle.fill") }.buttonStyle(WorkspaceActionStyle())
+            if home.canCreate { NavigationLink { GuidedLibraryView(workspace: workspace) } label: { WorkspaceToolRow(title: "Build & Manage", subtitle: "Courses, Word JPRs, and approvals", icon: "books.vertical.fill") }.buttonStyle(.plain) }
         }
+    }
+    private var catalogHeading: some View {
+        Text("Course Catalog").font(.title3.bold()).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+    }
+    private func categoryPicker(_ categories: [String: String]) -> some View {
+        Picker("Category", selection: $categoryId) {
+            Text("All categories").tag("")
+            ForEach(categories.keys.sorted { (categories[$0] ?? "") < (categories[$1] ?? "") }, id: \.self) { id in Text(categories[id] ?? id).tag(id) }
+        }.pickerStyle(.menu).tint(AppTheme.gold)
     }
     private func begin() { assignmentOnly = false; mode = "start"; selected = []; versions = []; topicId = ""; search = ""; title = ""; notes = ""; oneOff = false; scheduled = false; date = Date(); status = ""; requestId = UUID().uuidString }
     @MainActor private func load() async { do { home = try await APIClient.shared.trainingWorkspace("/guided"); error = nil } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
@@ -1335,11 +1445,15 @@ private struct GuidedSkillsView: View {
                     if data.requirements.isEmpty { Text("No JPR requirements assigned yet.").foregroundStyle(.secondary) }
                     ForEach(data.requirements.filter { skillSearch.isEmpty || "\($0.member) \($0.number) \($0.title)".localizedCaseInsensitiveContains(skillSearch) }) { requirement in
                         WorkspacePanel {
-                            Text("\(requirement.number) · \(requirement.title)").font(.headline)
-                            if home != nil { Text(requirement.member).font(.subheadline) }
-                            Text("Revision \(requirement.revision) · \(requirement.completed) / \(requirement.required) successful evaluations")
-                            ProgressView(value: Double(min(requirement.required, requirement.completed)), total: Double(requirement.required)).tint(AppTheme.gold)
-                            Text("\(requirement.percent)% complete").font(.caption)
+                            HStack(alignment: .top, spacing: 16) {
+                                TrainingProgressDial(percent: requirement.percent)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(requirement.number).font(.caption.bold()).foregroundStyle(AppTheme.gold)
+                                    Text(requirement.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                                    if home != nil { Text(requirement.member).font(.subheadline).foregroundStyle(.white.opacity(0.75)) }
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            Text("Revision \(requirement.revision) · \(requirement.completed) / \(requirement.required) successful evaluations").font(.subheadline).foregroundStyle(.white.opacity(0.75))
                             if let date = requirement.dueAt { Text("Due \(date.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
                             DisclosureGroup("Evaluation history") {
                                 if requirement.history.isEmpty { Text("No finalized evaluations since assignment.").font(.caption) }

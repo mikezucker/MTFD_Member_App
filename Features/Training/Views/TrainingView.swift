@@ -998,72 +998,72 @@ struct TrainingHeaderStat: Identifiable {
     var isWarning = false
 }
 
+// A shared visual language for the native training screens.
+enum TrainingVisualStyle {
+    static let blue = Color(red: 42/255, green: 131/255, blue: 198/255)
+    static let surface = Color(red: 12/255, green: 38/255, blue: 72/255)
+    static let raised = Color(red: 18/255, green: 52/255, blue: 91/255)
+    static let mint = Color(red: 102/255, green: 221/255, blue: 178/255)
+    static func symbol(for title: String) -> String {
+        let text = title.lowercased()
+        if text.contains("ladder") || text.contains("aerial") { return "figure.climbing" }
+        if text.contains("rescue") || text.contains("medical") || text.contains("ems") { return "cross.case.fill" }
+        if text.contains("hose") || text.contains("water") { return "water.waves" }
+        if text.contains("driver") || text.contains("apparatus") { return "steeringwheel" }
+        if text.contains("fire") { return "flame.fill" }
+        return "checkmark.shield.fill"
+    }
+}
+
 struct TrainingScreenHeader: View {
     let title: String
     let subtitle: String
     let systemImage: String
     var isRefreshing = false
     var stats: [TrainingHeaderStat] = []
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                AppDashboardIcon(systemImage: systemImage, size: 32)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.72)
-                        .allowsTightening(true)
-
-                    Text(subtitle)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.72))
-                        .lineLimit(2)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 14) {
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 25, weight: .semibold))
+                        .foregroundStyle(AppTheme.gold)
+                        .frame(width: 54, height: 60)
+                        .background(AppTheme.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: 17))
+                        .overlay { RoundedRectangle(cornerRadius: 17).stroke(AppTheme.gold.opacity(0.3), lineWidth: 1) }
+                        .accessibilityHidden(true)
                 }
-                .layoutPriority(1)
-
-                Spacer(minLength: 8)
-
-                if isRefreshing {
-                    ProgressView()
-                        .tint(AppTheme.gold)
-                }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("MTFD · TRAINING DIVISION")
+                        .font(.caption2.weight(.bold)).tracking(1.5)
+                        .foregroundStyle(AppTheme.gold)
+                    Text(title).font(.system(.title, design: .rounded, weight: .bold))
+                        .foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(subtitle).font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                if isRefreshing { ProgressView().tint(AppTheme.gold).accessibilityLabel("Refreshing training") }
             }
-
             if !stats.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(stats) { stat in
-                            HStack(spacing: 6) {
-                                Text(stat.value)
-                                    .font(.caption.monospacedDigit().bold())
-                                    .foregroundStyle(stat.isWarning ? .orange : AppTheme.gold)
-
-                                Text(stat.label)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.72))
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .background(Color.white.opacity(0.09))
-                            .clipShape(Capsule())
-                        }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: dynamicTypeSize.isAccessibilitySize ? 1 : min(stats.count, 3)), spacing: 8) {
+                    ForEach(stats) { stat in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(stat.value).font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit()
+                                .foregroundStyle(stat.isWarning ? .orange : AppTheme.gold)
+                            Text(stat.label).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.75))
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13))
+                            .accessibilityElement(children: .combine)
                     }
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        .padding(.bottom, 12)
-        .background(AppTheme.navy)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(.white.opacity(0.08))
-                .frame(height: 1)
-        }
+        .padding(.horizontal, 18).padding(.vertical, 18)
+        .background(LinearGradient(colors: [TrainingVisualStyle.raised, AppTheme.navy], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .overlay(alignment: .bottom) { Rectangle().fill(LinearGradient(colors: [AppTheme.gold, TrainingVisualStyle.blue.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing)).frame(height: 2) }
     }
 }
 
