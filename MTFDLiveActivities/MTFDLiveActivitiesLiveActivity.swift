@@ -208,6 +208,7 @@ struct MTFDLiveActivitiesLiveActivity: Widget {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview("Dispatch", as: .content, using: DispatchLiveActivityAttributes(
     dispatchId: "preview",
     startedAt: Date()
@@ -225,3 +226,4 @@ struct MTFDLiveActivitiesLiveActivity: Widget {
         lastUpdated: Date()
     )
 }
+#endif

@@ -1,8 +1,7 @@
 import PhotosUI
 import SwiftUI
-import UniformTypeIdentifiers
 
-struct TrainingView: View {
+struct LegacyTrainingView: View {
     @StateObject private var viewModel = TrainingViewModel()
     @State private var selectedTool: TrainingToolDestination?
 
@@ -33,6 +32,7 @@ struct TrainingView: View {
                     }
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: TrainingHomeSection.self) { section in
                 trainingSectionDestination(section)
             }
@@ -991,14 +991,14 @@ private struct TrainingHomeActionButton: View {
     }
 }
 
-private struct TrainingHeaderStat: Identifiable {
+struct TrainingHeaderStat: Identifiable {
     let id = UUID()
     let label: String
     let value: String
     var isWarning = false
 }
 
-private struct TrainingScreenHeader: View {
+struct TrainingScreenHeader: View {
     let title: String
     let subtitle: String
     let systemImage: String
@@ -1056,7 +1056,7 @@ private struct TrainingScreenHeader: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 0)
+        .padding(.top, 10)
         .padding(.bottom, 12)
         .background(AppTheme.navy)
         .overlay(alignment: .bottom) {

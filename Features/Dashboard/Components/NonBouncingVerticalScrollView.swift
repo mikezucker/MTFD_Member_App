@@ -94,6 +94,7 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
         alwaysBounceVertical = false
         alwaysBounceHorizontal = false
         isDirectionalLockEnabled = true
+        canCancelContentTouches = true
         showsHorizontalScrollIndicator = false
         contentInsetAdjustmentBehavior = .never
         contentInset = .zero
@@ -210,8 +211,10 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
         }
 
         let touchLocation = panGestureRecognizer.location(in: self)
+        // Horizontal filter strips must not swallow a vertical swipe over their buttons.
         if let touchedView = hitTest(touchLocation, with: nil),
-           touchedView.isDescendantOfNestedScrollView(inside: self) {
+           let nestedScrollView = touchedView.nestedScrollView(inside: self),
+           nestedScrollView.contentSize.height > nestedScrollView.bounds.height + 1 {
             return false
         }
 
@@ -221,6 +224,24 @@ final class MTFDNonBouncingHostingScrollView: UIScrollView, UIGestureRecognizerD
 
         let velocity = panGestureRecognizer.velocity(in: self)
         return abs(velocity.y) > abs(velocity.x)
+    }
+
+    override func touchesShouldCancel(in view: UIView) -> Bool {
+        // A drag that starts on a dashboard button should scroll instead of sticking to it.
+        if view is UIControl { return true }
+        return super.touchesShouldCancel(in: view)
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        guard gestureRecognizer === panGestureRecognizer,
+              let nested = otherGestureRecognizer.view as? UIScrollView,
+              nested !== self,
+              nested.isDescendant(of: self),
+              otherGestureRecognizer === nested.panGestureRecognizer else { return false }
+        return nested.contentSize.height <= nested.bounds.height + 1
     }
 
     private func updatePullIndicator() {
@@ -263,21 +284,21 @@ private let refreshPullDistanceLimit: CGFloat = 180
 private let refreshTriggerDistance: CGFloat = 70
 
 private extension UIView {
-    func isDescendantOfNestedScrollView(inside parentScrollView: UIScrollView) -> Bool {
+    func nestedScrollView(inside parentScrollView: UIScrollView) -> UIScrollView? {
         var candidate: UIView? = self
 
         while let view = candidate {
             if let scrollView = view as? UIScrollView, scrollView !== parentScrollView {
-                return true
+                return scrollView
             }
 
             if view === parentScrollView {
-                return false
+                return nil
             }
 
             candidate = view.superview
         }
 
-        return false
+        return nil
     }
 }

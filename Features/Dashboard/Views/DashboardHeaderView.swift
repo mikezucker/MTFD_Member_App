@@ -191,9 +191,8 @@ struct DashboardHeaderView: View {
                 Text("\(timeBasedGreeting), \(displayName)")
                     .font(.system(size: 24, weight: .bold, design: .default))
                     .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.58)
-                    .allowsTightening(true)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if !headerSubtitle.isEmpty {
                     Text(headerSubtitle)
@@ -223,7 +222,6 @@ struct DashboardHeaderView: View {
                         .clipShape(Circle())
                         .rotationEffect(.degrees(effectiveShouldAnimate ? -10 : 0))
                         .scaleEffect(effectiveShouldAnimate ? 1.08 : 1.0)
-                        
 
                     if alertMode.badgeCount > 0 {
                         Text(alertMode.badgeCount > 99 ? "99+" : "\(alertMode.badgeCount)")

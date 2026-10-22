@@ -8,20 +8,12 @@ struct DashboardLayoutView: View {
 
     var body: some View {
         List {
-            if usesFixedDashboardLayout {
-                Section {
-                    Text("This role uses a fixed command dashboard layout.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
             Section("Pinned") {
                 pinnedRow(title: "Active Dispatches", systemImage: "flame.fill")
                 pinnedRow(title: "Call Totals", systemImage: "chart.bar.fill")
             }
 
-            if !usesFixedDashboardLayout {
+            Group {
                 Section {
                     ForEach(cards) { card in
                         HStack(spacing: 12) {
@@ -56,7 +48,7 @@ struct DashboardLayoutView: View {
                 } header: {
                     Text("Customize")
                 } footer: {
-                    Text("Cards can be reordered and hidden. Cards with no current data may not appear on the dashboard even when enabled.")
+                    Text("Enabled cards appear in this order, including when there are no current items. Active dispatches appear when available; call totals stay pinned above your cards.")
                 }
 
                 Section {
@@ -71,21 +63,13 @@ struct DashboardLayoutView: View {
         }
         .navigationTitle("Dashboard Layout")
         .toolbar {
-            if !usesFixedDashboardLayout {
-                EditButton()
-            }
+            EditButton()
         }
         .onAppear {
             loadLayout()
         }
-    }
-
-    private var usesFixedDashboardLayout: Bool {
-        switch session.currentUser?.role.uppercased() {
-        case "CHIEF", "BATTALION_CHIEF", "OFFICER_CAREER":
-            return true
-        default:
-            return false
+        .onChange(of: session.currentUser?.role) { _, _ in
+            loadLayout()
         }
     }
 

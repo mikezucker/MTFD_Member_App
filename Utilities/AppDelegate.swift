@@ -17,13 +17,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         configureWatchConnectivity()
 
         Task {
-            await NotificationManager.shared.requestPermission()
+            await NotificationManager.shared.requestPermission(includeCriticalAlert: true)
         }
 
         return true
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
+        Task { @MainActor in DispatchAttentionPresenter.shared.resume() }
         // Do not automatically clear badge count here.
         // Dispatch badges should reflect uncleared dispatches, not whether the app is open.
     }
@@ -55,8 +56,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     private func configureWatchConnectivity() {
         guard WCSession.isSupported() else { return }
 
-        WCSession.default.delegate = self
-        WCSession.default.activate()
+        let session = WCSession.default
+        session.delegate = self
+
+        if session.activationState == .notActivated {
+            session.activate()
+        }
     }
 
     private func handleWatchMessage(_ message: [String: Any]) {
@@ -93,6 +98,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if let error {
             print("📱 WatchConnectivity activation failed: \(error.localizedDescription)")
         }
+        Task { @MainActor in WatchSettingsController.shared.sync() }
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor in WatchSettingsController.shared.refreshConnection() }
+    }
+
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        Task { @MainActor in WatchSettingsController.shared.sync() }
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
@@ -109,38 +123,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         handleWatchMessage(applicationContext)
     }
 
-    private static func currentHapticAlertStyle() -> HapticAlertStyle {
-        if let rawValue = UserDefaults.standard.string(forKey: "notification_haptic_alert_style"),
-           let style = HapticAlertStyle(rawValue: rawValue) {
-            return style
-        }
-
-        if UserDefaults.standard.object(forKey: "notification_haptics_enabled") == nil {
-            return .normal
-        }
-
-        return UserDefaults.standard.bool(forKey: "notification_haptics_enabled") ? .normal : .off
-    }
-
-    private static func currentDispatchAlertTone(isCritical: Bool) -> DispatchAlertTone {
-        let key = isCritical
-            ? "notification_critical_dispatch_alert_tone"
-            : "notification_dispatch_alert_tone"
-
-        if let rawValue = UserDefaults.standard.string(forKey: key),
-           let tone = DispatchAlertTone(rawValue: rawValue) {
-            return tone
-        }
-
-        guard let data = UserDefaults.standard.data(forKey: "notification_preferences"),
-              let preferences = try? JSONDecoder().decode(NotificationPreferences.self, from: data)
-        else {
-            return isCritical ? .airHornBlast : .systemDefault
-        }
-
-        return isCritical ? preferences.criticalDispatchAlertTone : preferences.dispatchAlertTone
-    }
-
     // MARK: - Foreground Notifications
 
     func userNotificationCenter(
@@ -149,6 +131,27 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         let userInfo = notification.request.content.userInfo
+        if userInfo["type"] as? String == "password_recovery_admin" {
+            // Security alerts never enter dispatch filtering, receipts, badges, haptics or Live Activities.
+            completionHandler([.banner, .sound])
+            return
+        }
+
+        if userInfo["type"] as? String == "test_push" {
+            // Exercise the real foreground feedback path without creating a call,
+            // receipt, Live Activity, or dispatch navigation target.
+            Task { @MainActor in
+                let preferences = NotificationPreferencesViewModel().preferences
+                let style = (userInfo["hapticAlertStyle"] as? String).flatMap(HapticAlertStyle.init(rawValue:))
+                    ?? preferences.hapticAlertStyle
+                self.playForegroundDispatchHaptics(
+                    id: userInfo["id"] as? String ?? notification.request.identifier,
+                    style: style, isCritical: userInfo["critical"] as? Bool ?? false
+                )
+                completionHandler([.banner, .sound])
+            }
+            return
+        }
 
         print("🔍 FULL PAYLOAD:", userInfo)
         print("🔔 Notification received foreground:", userInfo)
@@ -163,8 +166,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         recordDispatchPushReceipt(payload: payload, event: "foreground_received")
 
         Task {
+            // A closure clears an existing popup even when closure alerts are disabled.
+            if payload.type == .dispatchClosed {
+                await MainActor.run { DispatchAttentionPresenter.shared.receive(payload) }
+            }
             let preferences = NotificationPreferencesViewModel().preferences
-            let scheduleContext = await makeScheduleNotificationContext()
+            let needsSchedule = preferences.normalAlertScheduleMode == .onlyWhenWorking
+                || preferences.criticalAlertScheduleMode == .onlyWhenWorking
+            let scheduleContext = needsSchedule
+                ? await makeScheduleNotificationContext()
+                : (canUseScheduleBasedNotifications: false, isCurrentlyWorking: false)
 
             guard NotificationEngine.shouldNotify(
                 payload: payload,
@@ -180,28 +191,46 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
             print("✅ Notification allowed by preferences:", payload.id)
 
+            let isNewDispatch = payload.type == .dispatch || payload.type == .dispatchCritical
+            let isDispatch = isNewDispatch || payload.type == .dispatchClosed
+            let isCritical = NotificationEngine.usesCriticalAlert(payload: payload, preferences: preferences)
             DispatchQueue.main.async {
-                let isCritical = payload.type == .dispatchCritical
-
-                DispatchAlertSoundManager.shared.playDispatchAlert(
-                    dispatchId: payload.id,
-                    tone: Self.currentDispatchAlertTone(isCritical: isCritical),
-                    isCritical: isCritical
-                )
-
-                HapticAlertManager.shared.playDispatchAlert(
-                    dispatchId: payload.id,
-                    style: Self.currentHapticAlertStyle(),
-                    isCritical: isCritical
-                )
-
+                if isNewDispatch {
+                    DispatchAttentionPresenter.shared.receive(payload)
+                    self.playForegroundDispatchHaptics(
+                        id: payload.id, style: preferences.hapticAlertStyle, isCritical: isCritical
+                    )
+                }
+                // iOS owns incoming alert audio so hardware buttons can silence it.
+                // AVAudioPlayer is reserved for tone previews in Settings.
                 NotificationCenter.default.post(
                     name: .didReceiveDispatchNotification,
                     object: payload
                 )
             }
 
-            completionHandler([.banner, .sound, .badge])
+            var presentation: UNNotificationPresentationOptions = [.banner, .badge]
+            let tone = isCritical ? preferences.criticalDispatchAlertTone : preferences.dispatchAlertTone
+            if !isDispatch || tone != .silent {
+                presentation.insert(.sound)
+            }
+            completionHandler(presentation)
+        }
+    }
+
+    @MainActor
+    private func playForegroundDispatchHaptics(id: String, style: HapticAlertStyle, isCritical: Bool) {
+        guard UIApplication.shared.applicationState == .active else { return }
+        HapticAlertManager.shared.playDispatchAlert(dispatchId: id, style: style, isCritical: isCritical)
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        if session.activationState == .activated, session.isPaired,
+           session.isWatchAppInstalled, session.isReachable {
+            session.sendMessage([
+                "action": "dispatch_haptic", "dispatchId": id,
+                "hapticAlertStyle": style.rawValue, "critical": isCritical,
+                "sentAt": Date().timeIntervalSince1970
+            ], replyHandler: nil, errorHandler: { _ in })
         }
     }
 
@@ -213,6 +242,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
+        if userInfo["type"] as? String == "test_push" {
+            completionHandler()
+            return
+        }
+        if userInfo["type"] as? String == "password_recovery_admin" {
+            DispatchQueue.main.async {
+                NavigationRouter.shared.selectedTab = .more
+                NavigationRouter.shared.showPasswordRecoveryRequests = true
+            }
+            completionHandler()
+            return
+        }
 
         print("📲 Notification tapped:", userInfo)
 
@@ -226,27 +267,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         recordDispatchPushReceipt(payload: payload, event: "opened")
 
         Task {
-            let preferences = NotificationPreferencesViewModel().preferences
-            let scheduleContext = await makeScheduleNotificationContext()
-
-            guard NotificationEngine.shouldNotify(
-                payload: payload,
-                preferences: preferences,
-                canUseScheduleBasedNotifications: scheduleContext.canUseScheduleBasedNotifications,
-                isCurrentlyWorking: scheduleContext.isCurrentlyWorking
-            ) else {
-                print("🔕 Tapped notification ignored by preferences:", payload.id)
-
-                completionHandler()
-                return
-            }
-
+            // Opening a delivered alert must work after cold launch or a settings change.
             DispatchQueue.main.async {
                 NotificationCenter.default.post(
                     name: .didReceiveDispatchNotification,
                     object: payload
                 )
 
+                DispatchAttentionPresenter.shared.opened(dispatchId: payload.id)
                 NavigationRouter.shared.route(from: payload)
             }
 
@@ -288,7 +316,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     private func recordDispatchPushReceipt(payload: AppNotificationPayload, event: String) {
-        guard payload.type == .dispatch || payload.type == .dispatchCritical else {
+        guard payload.type == .dispatch || payload.type == .dispatchCritical || payload.type == .dispatchClosed else {
             return
         }
 

@@ -231,47 +231,33 @@ struct CareerMemberDashboardView: View {
             messagesSection
 
         case .scheduleEvents:
-            if isLoading || upcomingSchedule?.isWorkingNow == true || upcomingSchedule?.nextShift != nil {
-                scheduleSection
-            }
+            scheduleSection
 
         case .apparatusWorkOrders:
-            if isLoading || !workOrders.isEmpty {
-                workOrdersSection
-            }
+            workOrdersSection
 
         case .assignedTraining:
-            if isLoading || !assignedTraining.isEmpty {
-                trainingSection
-            }
+            trainingSection
 
         case .documents:
-            if isLoading || pendingDocuments > 0 {
-                documentsSection
-            }
+            documentsSection
 
         case .departmentUpdates:
-            if isLoading || !departmentUpdates.isEmpty {
-                updatesGroup(
-                    title: "Department Updates",
-                    emptyMessage: "No department updates posted.",
-                    updates: departmentUpdates
-                )
-            }
+            updatesGroup(
+                title: "Department Updates",
+                emptyMessage: "No department updates posted.",
+                updates: departmentUpdates
+            )
 
         case .stationUpdates:
-            if isLoading || !stationUpdates.isEmpty {
-                updatesGroup(
-                    title: "Station Updates",
-                    emptyMessage: "No station updates posted.",
-                    updates: stationUpdates
-                )
-            }
+            updatesGroup(
+                title: "Station Updates",
+                emptyMessage: "No station updates posted.",
+                updates: stationUpdates
+            )
 
         case .recentCalls:
-            if isLoading || !recentCalls.isEmpty {
-                pastDispatchesSection
-            }
+            pastDispatchesSection
 
         case .commandOverview, .needsAttention:
             EmptyView()

@@ -1,6 +1,18 @@
 import Foundation
 import ActivityKit
 
+struct DispatchLiveActivitySettings {
+    let enabled: Bool
+    let endWhenDispatchClears: Bool
+
+    init(defaults: UserDefaults = .standard) {
+        enabled = defaults.object(forKey: "liveActivitiesEnabled") as? Bool ?? true
+        endWhenDispatchClears = defaults.object(forKey: "liveActivitiesEndWhenDispatchClears") as? Bool ?? true
+    }
+
+    var shouldEndAfterClear: Bool { !enabled || endWhenDispatchClears }
+}
+
 @MainActor
 final class DispatchLiveActivityManager {
     static let shared = DispatchLiveActivityManager()
@@ -56,7 +68,33 @@ final class DispatchLiveActivityManager {
         return false
     }
 
+    var isEnabled: Bool {
+        DispatchLiveActivitySettings().enabled
+    }
+
+    var endWhenDispatchClears: Bool {
+        DispatchLiveActivitySettings().endWhenDispatchClears
+    }
+
+    func dispatchesCleared(dispatchId: String? = nil) {
+        if DispatchLiveActivitySettings().shouldEndAfterClear {
+            end(dispatchId: dispatchId)
+        } else {
+            Task {
+                for activity in Activity<DispatchLiveActivityAttributes>.activities {
+                    if let dispatchId, activity.attributes.dispatchId != dispatchId { continue }
+                    var state = activity.content.state
+                    state.statusText = "Dispatch Cleared"
+                    state.activeCallCount = 0
+                    state.lastUpdated = Date()
+                    await activity.update(ActivityContent(state: state, staleDate: nil))
+                }
+            }
+        }
+    }
+
     func startOrUpdate(from dispatch: DispatchNotificationPayload) {
+        guard isEnabled else { endAll(); return }
         print("🟣 LiveActivity startOrUpdate called:", dispatch.id, dispatch.title)
 
         guard #available(iOS 16.2, *) else {
@@ -99,6 +137,7 @@ final class DispatchLiveActivityManager {
 
         Task {
             await endAllExcept(dispatchId: dispatch.id)
+            guard isEnabled else { return }
 
             do {
                 print("🟣 LiveActivity requesting new activity for dispatch:", dispatch.id)

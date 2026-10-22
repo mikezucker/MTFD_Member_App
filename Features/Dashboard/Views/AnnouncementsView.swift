@@ -102,6 +102,8 @@ struct AnnouncementCard: View {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     AnnouncementsView()
 }
+#endif

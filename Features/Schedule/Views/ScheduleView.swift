@@ -771,9 +771,11 @@ private extension String {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     NavigationStack {
         ScheduleView()
             .environmentObject(SessionManager.shared)
     }
 }
+#endif

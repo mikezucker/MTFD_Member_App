@@ -51,6 +51,7 @@ struct DashboardAttentionCard: View {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     DashboardAttentionCard(
         item: DashboardAttentionItem(
@@ -62,3 +63,4 @@ struct DashboardAttentionCard: View {
         onTap: {}
     )
 }
+#endif

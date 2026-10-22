@@ -1,8 +1,15 @@
 import AVFoundation
 import SwiftUI
+import UserNotifications
 
 struct NotificationPreferencesView: View {
     @EnvironmentObject private var session: SessionManager
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("persistent_dispatch_popup_enabled") private var persistentDispatchPopup = false
+    @State private var systemNotificationSettings: UNNotificationSettings?
+    @State private var notificationTestTask: Task<Void, Never>?
+    @State private var notificationTestStatus: String?
+    @State private var isTestingNotification = false
 
     @StateObject private var vm = NotificationPreferencesViewModel()
     @StateObject private var unitCatalog = UnitCatalog()
@@ -31,9 +38,7 @@ struct NotificationPreferencesView: View {
     }
 
     private var criticalAlertTones: [DispatchAlertTone] {
-        DispatchAlertTone.allCases.filter { tone in
-            tone != .systemDefault && tone != .silent
-        }
+        DispatchAlertTone.allCases
     }
 
     private var normalAlertScheduleBinding: Binding<NotificationScheduleMode> {
@@ -93,6 +98,8 @@ struct NotificationPreferencesView: View {
 
     var body: some View {
         Form {
+            systemNotificationStatusSection
+
             if vm.isLoading || vm.errorMessage != nil {
                 Section {
                     if vm.isLoading {
@@ -100,15 +107,24 @@ struct NotificationPreferencesView: View {
                     } else if let errorMessage = vm.errorMessage {
                         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
+                        Button("Retry Saving My Choices") {
+                            Task { await vm.saveImmediately() }
+                        }
                     }
                 }
+            }
+
+            if vm.isSaving {
+                Section { ProgressView("Saving preferences…") }
+            } else if let saved = vm.successMessage, vm.errorMessage == nil {
+                Section { Label(saved, systemImage: "checkmark.circle").foregroundStyle(.secondary) }
             }
 
             Section {
                 settingToggle(
                     title: "Notifications",
                     description: vm.preferences.isEnabled
-                        ? "Notifications are enabled for this device."
+                        ? "Notifications are enabled for your account."
                         : "All app notifications are currently disabled.",
                     isOn: $vm.preferences.isEnabled
                 )
@@ -122,6 +138,23 @@ struct NotificationPreferencesView: View {
                     Toggle("Dispatch Alerts", isOn: $vm.preferences.dispatchAlertsEnabled)
 
                     if vm.preferences.dispatchAlertsEnabled {
+                        settingToggle(
+                            title: "Persistent Dispatch Popup",
+                            description: "While MTFD is open, show new dispatches over your current screen until you tap View Dispatch or Dismiss Alert. Dismissing does not mark you responding. Off by default; saved on this iPhone.",
+                            isOn: $persistentDispatchPopup
+                        )
+                        if persistentDispatchPopup {
+                            Button("Preview Dispatch Popup") {
+                                DispatchAttentionPresenter.shared.preview()
+                            }
+                        }
+
+                        settingToggle(
+                            title: "Dispatch Closed Notifications",
+                            description: "Notify me when a dispatch closes. Off by default. Uses your normal alert tone, dispatch filters, normal schedule and quiet hours.",
+                            isOn: $vm.preferences.dispatchClosedAlertsEnabled
+                        )
+
                         if canUseScheduleBasedNotifications {
                             scheduleLinkCard
                         }
@@ -164,7 +197,7 @@ struct NotificationPreferencesView: View {
                                 }
                             }
 
-                            Text("Critical Alerts use this tone when iOS allows emergency alert sounds.")
+                            Text(vm.preferences.criticalDispatchAlertTone.subtitle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -178,6 +211,24 @@ struct NotificationPreferencesView: View {
                         Text(vm.preferences.dispatchAlertTone.subtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        Toggle("All Call Types", isOn: Binding(
+                            get: { vm.preferences.callTypes.isEmpty },
+                            set: { vm.preferences.callTypes = $0 ? [] : ["FIRE", "EMS", "MVA"] }
+                        ))
+                        if !vm.preferences.callTypes.isEmpty {
+                            ForEach(Array(Set(["FIRE", "EMS", "MVA", "ALARM", "HAZMAT", "RESCUE", "SERVICE"]).union(vm.preferences.callTypes)).sorted(), id: \.self) { callType in
+                                Toggle(callType, isOn: Binding(
+                                    get: { vm.preferences.callTypes.contains(callType) },
+                                    set: { selected in
+                                        if selected { vm.preferences.callTypes.insert(callType) }
+                                        else if vm.preferences.callTypes.count > 1 { vm.preferences.callTypes.remove(callType) }
+                                    }
+                                ))
+                            }
+                            Text("Keep at least one type selected, or enable All Call Types.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
 
                         settingToggle(
                             title: "Working Fires Only",
@@ -193,6 +244,10 @@ struct NotificationPreferencesView: View {
                     }
 
                     if vm.preferences.dispatchAlertsEnabled && !vm.preferences.allUnits {
+                        if vm.preferences.units.isEmpty {
+                            Text("Select at least one apparatus. Dispatches are muted until you select one or enable All Apparatus.")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
                         unitListView
                     }
                 } header: {
@@ -217,7 +272,7 @@ struct NotificationPreferencesView: View {
 
                     settingToggle(
                         title: "Message Center",
-                        description: "Show messages in the app Message Center and update unread counts.",
+                        description: "Receive Message Center notification alerts. Existing messages remain available in the inbox.",
                         isOn: $vm.preferences.messageCenterEnabled
                     )
                 } header: {
@@ -273,24 +328,33 @@ struct NotificationPreferencesView: View {
 
                 // MARK: - Behavior
                 Section {
-                    settingToggle(
-                        title: "Respect Focus / Do Not Disturb",
-                        description: "Routine notifications follow your iPhone Focus and Do Not Disturb settings.",
-                        isOn: $vm.preferences.respectDoNotDisturb
-                    )
+                    Text("Routine alerts follow iPhone Focus and silent-mode settings.")
+                    Text("For every dispatch to bypass Focus, enable Critical Alert, choose All dispatches, and allow Critical Alerts in iPhone Settings.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } header: {
                     Text("Behavior")
                 }
             }
         }
         .navigationTitle("Notifications")
+        .onChange(of: persistentDispatchPopup) { _, enabled in
+            if !enabled { DispatchAttentionPresenter.shared.clear() }
+        }
         .listStyle(.insetGrouped)
         .tint(.blue)
+        .disabled(vm.isLoading)
         .task {
+            await refreshSystemNotificationSettings()
             await unitCatalog.loadUnits()
             await vm.loadRemote()
             sanitizeScheduleModesIfNeeded()
             await refreshScheduleLinkStatus()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await refreshSystemNotificationSettings() }
+            }
         }
         .onChange(of: vm.preferences) { _, _ in
             UserDefaults.standard.set(vm.preferences.hapticAlertStyle.rawValue, forKey: "notification_haptic_alert_style")
@@ -309,6 +373,7 @@ struct NotificationPreferencesView: View {
 
             Task {
                 await NotificationManager.shared.requestCriticalAlertPermission()
+                await refreshSystemNotificationSettings()
             }
         }
         .onChange(of: vm.preferences.dispatchAlertTone) { _, tone in
@@ -336,6 +401,117 @@ struct NotificationPreferencesView: View {
             Task {
                 await vm.flushPendingSave()
             }
+        }
+    }
+
+    private var systemNotificationStatusSection: some View {
+        Section {
+            if let settings = systemNotificationSettings {
+                LabeledContent("Permission", value: authorizationDescription(settings.authorizationStatus))
+                LabeledContent("Lock Screen", value: settingDescription(settings.lockScreenSetting))
+                LabeledContent("Notification Center", value: settingDescription(settings.notificationCenterSetting))
+                LabeledContent("Banners", value: settingDescription(settings.alertSetting))
+                LabeledContent("Sounds", value: settingDescription(settings.soundSetting))
+                LabeledContent("Critical Alerts", value: settingDescription(settings.criticalAlertSetting))
+                LabeledContent("CarPlay", value: settingDescription(settings.carPlaySetting))
+                LabeledContent("Scheduled Summary", value: settingDescription(settings.scheduledDeliverySetting))
+                if settings.authorizationStatus == .denied {
+                    Text("iPhone notification permission is off. Enable it in iPhone Settings to receive alerts.")
+                        .font(.caption).foregroundStyle(.orange)
+                } else if settings.soundSetting == .disabled {
+                    Text("Sounds are disabled in iPhone Settings. Enable Sounds for audible alerts and check Sounds & Haptics for vibration settings.")
+                        .font(.caption).foregroundStyle(.orange)
+                } else if settings.scheduledDeliverySetting == .enabled {
+                    Text("Scheduled Summary can delay routine alerts. Choose immediate delivery in iPhone Settings for pager use.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+            } else {
+                ProgressView("Checking iPhone notification settings…")
+            }
+            Button(isTestingNotification ? "Test in progress…" : "Test Normal Alert in 10 Seconds") {
+                startNotificationTest(isCritical: false)
+            }
+            .disabled(isTestingNotification)
+            if vm.preferences.criticalDispatchAlerts {
+                Button("Test Critical Alert in 10 Seconds") {
+                    startNotificationTest(isCritical: true)
+                }
+                .disabled(isTestingNotification)
+            }
+            if let notificationTestStatus {
+                Text(notificationTestStatus)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Text("For banners that stay visible outside MTFD, open iPhone Notification Settings and choose Banner Style → Persistent. Enable Lock Screen, Banners, and Sounds. Apple controls locked-screen presentation.")
+                .font(.caption).foregroundStyle(.secondary)
+            Button("Open iPhone Notification Settings") {
+                guard let url = URL(string: UIApplication.openNotificationSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            }
+        } header: {
+            Text("iPhone Notification Status")
+        } footer: {
+            Text("iPhone settings control where alerts appear and whether sounds are allowed. Routine alerts also follow Focus. Critical Alerts require both app settings and iPhone permission.")
+        }
+    }
+
+    @MainActor
+    private func startNotificationTest(isCritical: Bool) {
+        guard !isTestingNotification else { return }
+        isTestingNotification = true
+        notificationTestStatus = isCritical
+            ? "Lock your iPhone now. A critical push using your saved critical tone will be requested in 10 seconds."
+            : "Lock your iPhone now. A routine push using your saved normal tone will be requested in 10 seconds. This test follows Focus."
+        let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Notification delivery test") {
+            Task { @MainActor in notificationTestTask?.cancel() }
+        }
+        notificationTestTask = Task { @MainActor in
+            defer {
+                if backgroundTask != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTask)
+                }
+                isTestingNotification = false
+                notificationTestTask = nil
+            }
+            do {
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                let result = try await APIClient.shared.sendNotificationTest(isCritical: isCritical)
+                if let deliveries = result.results, !deliveries.isEmpty, deliveries.allSatisfy({ $0.ok && $0.status == 200 }) {
+                    notificationTestStatus = "Apple accepted the test on all registered devices. Confirm sound and vibration on each device; acceptance alone does not confirm display."
+                } else {
+                    let statuses = result.results?.map { String($0.status) }.joined(separator: ", ") ?? "none"
+                    notificationTestStatus = result.error ?? "At least one device failed. APNs statuses: \(statuses)."
+                }
+            } catch is CancellationError {
+                notificationTestStatus = "Test interrupted. Try again and lock the phone during the countdown."
+            } catch {
+                notificationTestStatus = "Test failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func refreshSystemNotificationSettings() async {
+        systemNotificationSettings = await UNUserNotificationCenter.current().notificationSettings()
+    }
+
+    private func settingDescription(_ setting: UNNotificationSetting) -> String {
+        switch setting {
+        case .enabled: return "On"
+        case .disabled: return "Off"
+        case .notSupported: return "Not available"
+        @unknown default: return "Unknown"
+        }
+    }
+
+    private func authorizationDescription(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .authorized: return "Allowed"
+        case .denied: return "Off"
+        case .notDetermined: return "Not requested"
+        case .provisional: return "Quiet delivery"
+        case .ephemeral: return "Temporary"
+        @unknown default: return "Unknown"
         }
     }
 
@@ -445,6 +621,10 @@ struct NotificationPreferencesView: View {
             }
 
             Text(vm.preferences.hapticAlertStyle.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Text("Custom patterns play while the app is active. For stronger background alerts on Apple Watch, choose Prominent in the Watch’s Sounds & Haptics settings. Apple controls background notification vibrations.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

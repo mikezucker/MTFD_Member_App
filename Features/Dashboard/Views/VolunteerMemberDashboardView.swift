@@ -21,16 +21,9 @@ struct VolunteerMemberDashboardView: View {
     let onOpenPastDispatches: () -> Void
     let onOpenMessages: () -> Void
 
-    @State private var selectedAnnouncementScope: AnnouncementScope = .all
     @State private var selectedApparatusName: String = "All"
     @AppStorage("volunteerMemberDashboardTotalsWindow") private var selectedWindowRawValue = DashboardTotalsWindow.ytd.rawValue
     @State private var selectedTotalsScope: TotalsScope = .station
-
-    private enum AnnouncementScope: String, CaseIterable {
-        case all = "All"
-        case station = "Station"
-        case department = "Department"
-    }
 
     private enum TotalsScope {
         case station
@@ -64,10 +57,9 @@ struct VolunteerMemberDashboardView: View {
         NonBouncingVerticalScrollView(showsIndicators: false, onRefresh: onRefresh) {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
-                belongingCard
                 contributionCard
 
-                ForEach(volunteerDashboardCards) { card in
+                ForEach(dashboardCards) { card in
                     dashboardCard(card)
                 }
             }
@@ -76,31 +68,6 @@ struct VolunteerMemberDashboardView: View {
             .padding(.bottom, 120)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    private var volunteerDashboardCards: [DashboardCardID] {
-        var result: [DashboardCardID] = []
-        var hasAnnouncements = false
-
-        for card in dashboardCards {
-            switch card {
-            case .assignedTraining, .apparatusWorkOrders, .recentCalls:
-                result.append(card)
-
-            case .departmentUpdates, .stationUpdates:
-                if !hasAnnouncements {
-                    result.append(card)
-                    hasAnnouncements = true
-                }
-
-            case .commandOverview, .messages, .documents, .scheduleEvents, .needsAttention:
-                break
-            }
-        }
-
-        return result.isEmpty
-            ? [.assignedTraining, .departmentUpdates, .apparatusWorkOrders, .recentCalls]
-            : result
     }
 
     @ViewBuilder
@@ -129,13 +96,16 @@ struct VolunteerMemberDashboardView: View {
     private func dashboardCard(_ card: DashboardCardID) -> some View {
         switch card {
         case .commandOverview:
-            EmptyView()
+            belongingCard
 
         case .assignedTraining:
             nextStepCard
 
-        case .departmentUpdates, .stationUpdates:
-            announcementsCard
+        case .departmentUpdates:
+            announcementsCard(title: "Department Updates", updates: departmentUpdates)
+
+        case .stationUpdates:
+            announcementsCard(title: "Station Updates", updates: stationUpdates)
 
         case .apparatusWorkOrders:
             apparatusStatusCard
@@ -285,23 +255,14 @@ struct VolunteerMemberDashboardView: View {
 
     }
 
-    private var announcementsCard: some View {
+    private func announcementsCard(title: String, updates: [DashboardBulletin]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionTitle("Announcements", systemImage: "megaphone.fill")
+            sectionTitle(title, systemImage: "megaphone.fill")
 
             volunteerCard {
                 VStack(alignment: .leading, spacing: 12) {
-                filterChips(
-                    items: AnnouncementScope.allCases.map(\.rawValue),
-                    selected: selectedAnnouncementScope.rawValue
-                ) { value in
-                    selectedAnnouncementScope = AnnouncementScope(rawValue: value) ?? .all
-                }
-
-                let updates = filteredAnnouncements
-
                 if updates.isEmpty {
-                    emptyText("No station or department announcements right now.")
+                    emptyText("No \(title.lowercased()) posted.")
                 } else {
                     DashboardScrollableList(itemCount: updates.count, maxHeight: 420) {
                         VStack(alignment: .leading, spacing: 12) {
@@ -416,7 +377,9 @@ struct VolunteerMemberDashboardView: View {
                     }
                 }
             } else if recentCalls.isEmpty {
-                EmptyView()
+                volunteerCard {
+                    emptyText("No recent dispatches for your station.")
+                }
             } else {
                 DashboardRecentCallsCard(
                     calls: recentCalls,
@@ -687,17 +650,6 @@ struct VolunteerMemberDashboardView: View {
         }
 
         return "Assigned training • \(item.progressText)"
-    }
-
-    private var filteredAnnouncements: [DashboardBulletin] {
-        switch selectedAnnouncementScope {
-        case .all:
-            return stationUpdates + departmentUpdates
-        case .station:
-            return stationUpdates
-        case .department:
-            return departmentUpdates
-        }
     }
 
     private var apparatusFilterNames: [String] {

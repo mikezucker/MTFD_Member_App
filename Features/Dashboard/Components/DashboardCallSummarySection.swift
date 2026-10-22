@@ -203,6 +203,7 @@ struct DashboardCallSummarySection: View {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     DashboardCallSummarySection(
         selectedWindowRawValue: .constant(DashboardTotalsWindow.ytd.rawValue),
@@ -247,3 +248,4 @@ struct DashboardCallSummarySection: View {
     .padding()
     .background(Color.black)
 }
+#endif

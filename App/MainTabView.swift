@@ -21,6 +21,7 @@ enum AppIconKey: String {
     case inbox
     case profile
     case settings
+    case more
     case uniform
     case announcement
     case location
@@ -52,6 +53,7 @@ enum AppIconCatalog {
     static let inbox = "📥"
     static let profile = "👤"
     static let settings = "⚙️"
+    static let more = "🧰"
     static let uniform = "👕"
     static let announcement = "📣"
     static let location = "📍"
@@ -83,6 +85,7 @@ enum AppIconCatalog {
         case .inbox: return "📥"
         case .profile: return "👤"
         case .settings: return "⚙️"
+        case .more: return "🧰"
         case .uniform: return "👕"
         case .announcement: return "📣"
         case .location: return "📍"
@@ -123,6 +126,7 @@ enum AppIconCatalog {
         case "chart.line.uptrend.xyaxis", "chart.bar.fill": return .progress
         case "person.crop.circle.fill", "person.fill": return .profile
         case "gearshape", "slider.horizontal.3": return .settings
+        case "ellipsis.circle.fill": return .more
         case "mappin.and.ellipse", "location.fill": return .location
         default: return .unknown
         }

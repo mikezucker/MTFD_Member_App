@@ -11,6 +11,7 @@ struct ChiefDashboardView: View {
     let recentCalls: [RecentDepartmentCall]
     let messagePreviews: [DashboardMessagePreview]
     let unreadMessageCount: Int
+    let dashboardCards: [DashboardCardID]
     let isLoading: Bool
     let onRefresh: () async -> Void
 
@@ -97,18 +98,8 @@ struct ChiefDashboardView: View {
 
                 callTotalsSection
 
-                chiefBriefSection
-
-                scheduleOutlookSection
-
-                commandMessagesSection
-
-                if isLoading || !workOrders.isEmpty {
-                    apparatusWorkOrdersSection
-                }
-
-                if isLoading || !recentCalls.isEmpty {
-                    recentDispatchesSection
+                ForEach(dashboardCards) { card in
+                    dashboardCard(card)
                 }
             }
             .padding(.horizontal, 24)
@@ -122,6 +113,19 @@ struct ChiefDashboardView: View {
             if scheduleViewModel.outlookDays.isEmpty {
                 await scheduleViewModel.loadOutlookDays(count: 4)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func dashboardCard(_ card: DashboardCardID) -> some View {
+        switch card {
+        case .commandOverview: chiefBriefSection
+        case .scheduleEvents: scheduleOutlookSection
+        case .messages: commandMessagesSection
+        case .apparatusWorkOrders: apparatusWorkOrdersSection
+        case .recentCalls: recentDispatchesSection
+        case .assignedTraining, .documents, .departmentUpdates, .stationUpdates, .needsAttention:
+            EmptyView()
         }
     }
 
@@ -835,7 +839,7 @@ struct ChiefDashboardView: View {
                 loadingCard("Loading call totals...")
             } else {
                 HStack(spacing: 0) {
-                    chiefInlineTotal(value: callTotal(.total), label: selectedTotalsScope.title)
+                    chiefInlineTotal(value: callTotal(.total), label: "Total")
 
                     Divider()
                         .frame(height: 48)
@@ -884,7 +888,7 @@ private func selectNextTotalsWindow() {
     private func chiefInlineTotal(value: Int, label: String) -> some View {
         VStack(alignment: .center, spacing: 4) {
             Text("\(value)")
-                .font(.system(size: 30, weight: .bold))
+                .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
@@ -895,7 +899,7 @@ private func selectNextTotalsWindow() {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(minWidth: 0, maxWidth: .infinity, alignment: .center)
     }
 
     private func callTotal(_ kind: ChiefCallTotalKind) -> Int {

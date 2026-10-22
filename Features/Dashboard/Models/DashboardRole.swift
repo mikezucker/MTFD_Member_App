@@ -16,7 +16,13 @@ enum DashboardRole {
 
     static func from(_ rawRole: String?) -> DashboardRole {
 
-        switch rawRole?.uppercased() {
+        let role = rawRole?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "-", with: "_")
+
+        switch role {
 
         case "ADMIN": return .admin
 

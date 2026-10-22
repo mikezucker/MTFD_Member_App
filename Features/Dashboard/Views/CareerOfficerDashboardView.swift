@@ -16,6 +16,7 @@ struct CareerOfficerDashboardView: View {
     let stationUpdates: [DashboardBulletin]
     let messagePreviews: [DashboardMessagePreview]
     let unreadMessageCount: Int
+    let dashboardCards: [DashboardCardID]
     let isLoading: Bool
     let onRefresh: () async -> Void
 
@@ -76,28 +77,8 @@ struct CareerOfficerDashboardView: View {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
                 callTotalsSection
-                careerOfficerOverviewSection
-
-                if isLoading || upcomingSchedule?.isWorkingNow == true || upcomingSchedule?.nextShift != nil {
-                    scheduleSection
-                }
-
-                if isLoading || !workOrders.isEmpty {
-                    workOrdersSection
-                }
-
-                if isLoading || !assignedTraining.isEmpty {
-                    trainingSection
-                }
-
-                if isLoading || pendingDocuments > 0 {
-                    documentsSection
-                }
-
-                messagesSection
-
-                if isLoading || !recentCalls.isEmpty {
-                    pastDispatchesSection
+                ForEach(dashboardCards) { card in
+                    dashboardCard(card)
                 }
             }
             .padding(.horizontal, 24)
@@ -106,6 +87,24 @@ struct CareerOfficerDashboardView: View {
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func dashboardCard(_ card: DashboardCardID) -> some View {
+        switch card {
+        case .commandOverview: careerOfficerOverviewSection
+        case .scheduleEvents: scheduleSection
+        case .apparatusWorkOrders: workOrdersSection
+        case .assignedTraining: trainingSection
+        case .documents: documentsSection
+        case .messages: messagesSection
+        case .recentCalls: pastDispatchesSection
+        case .departmentUpdates:
+            updatesGroup(title: "Department Updates", emptyMessage: "No department updates posted.", updates: departmentUpdates)
+        case .stationUpdates:
+            updatesGroup(title: "Station Updates", emptyMessage: "No station updates posted.", updates: stationUpdates)
+        case .needsAttention: EmptyView()
+        }
     }
 
     private var careerOfficerOverviewSection: some View {

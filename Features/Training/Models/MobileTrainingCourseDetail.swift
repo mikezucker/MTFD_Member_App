@@ -213,3 +213,49 @@ extension TrainingModuleDetail {
         "\(completedItemCount) of \(totalItemCount) items complete"
     }
 }
+
+// Shared web/app lesson contract. Answer keys are never delivered to the learner.
+struct TrainingLessonSnapshotResponse: Decodable {
+    let success: Bool
+    let lesson: TrainingLessonSnapshot?
+    let error: String?
+}
+struct TrainingLessonSnapshot: Decodable {
+    let status: String
+    let lastPositionSeconds: Int
+    let quiz: TrainingLearnerQuiz?
+}
+struct TrainingLearnerQuiz: Decodable {
+    let attemptsUsed: Int?
+    let attemptLimit: Int?
+    let passingScorePercent: Int
+    let timeLimitSeconds: Int?
+    let passed: Bool
+    let scorePercent: Int?
+    let questions: [TrainingLearnerQuestion]
+}
+struct TrainingLearnerQuestion: Decodable, Identifiable {
+    let id: String
+    let type: String
+    let prompt: String
+    let options: [TrainingLearnerOption]
+}
+struct TrainingLearnerOption: Decodable, Identifiable { let id: String; let text: String }
+struct TrainingLessonAnswer: Encodable { let questionId: String; let selectedOptionIds: [String] }
+struct TrainingLessonAction: Encodable {
+    let action: String
+    var positionSeconds: Int? = nil
+    var complete: Bool? = nil
+    var attemptId: String? = nil
+    var answers: [TrainingLessonAnswer]? = nil
+}
+struct TrainingLessonActionResponse: Decodable {
+    let success: Bool
+    let error: String?
+    let attemptId: String?
+    let expiresAt: Date?
+    let passed: Bool?
+    let scorePercent: Int?
+    let expired: Bool?
+}
+struct TrainingMediaResponse: Decodable { let success: Bool; let url: URL?; let error: String? }

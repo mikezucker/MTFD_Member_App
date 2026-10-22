@@ -10,6 +10,7 @@ class NotificationPreferencesViewModel: ObservableObject {
     @Published var successMessage: String?
 
     private let key = "notification_preferences"
+    private var remoteWriteTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     private var pendingRemotePreferences: NotificationPreferences?
     private var hasLoadedRemote = false
@@ -83,31 +84,40 @@ class NotificationPreferencesViewModel: ObservableObject {
     }
 
     func saveRemote(_ preferencesToSave: NotificationPreferences? = nil) async {
-        let preferencesForRequest = preferencesToSave ?? preferences
-
-        isSaving = true
-        errorMessage = nil
-        successMessage = nil
-
-        defer { isSaving = false }
-
-        do {
-            let response = try await APIClient.shared.updateNotificationPreferences(
-                preferencesForRequest
-            )
-
-            if response.success {
-                pendingRemotePreferences = nil
-                if let serverPreferences = response.preferences {
-                    preferences = serverPreferences
-                }
-                saveLocal()
-            } else if let error = response.error {
-                errorMessage = error
-            }
-        } catch {
-            errorMessage = error.localizedDescription
+        pendingRemotePreferences = preferencesToSave ?? preferences
+        if let remoteWriteTask {
+            await remoteWriteTask.value
+            return
         }
+        let task = Task { @MainActor [self] in
+            isSaving = true
+            errorMessage = nil
+            successMessage = nil
+            defer { isSaving = false; remoteWriteTask = nil }
+            while let next = pendingRemotePreferences {
+                pendingRemotePreferences = nil
+                do {
+                    let response = try await APIClient.shared.updateNotificationPreferences(next)
+                    guard response.success else {
+                        if pendingRemotePreferences == nil { pendingRemotePreferences = next }
+                        errorMessage = response.error ?? "Unable to save notification preferences."
+                        return
+                    }
+                    // Never let a response to an older edit overwrite newer choices.
+                    if preferences == next, let saved = response.preferences {
+                        preferences = saved
+                    }
+                    saveLocal()
+                    successMessage = "Preferences saved."
+                } catch {
+                    if pendingRemotePreferences == nil { pendingRemotePreferences = next }
+                    errorMessage = error.localizedDescription
+                    return
+                }
+            }
+        }
+        remoteWriteTask = task
+        await task.value
     }
 
     func flushPendingSave() async {
@@ -123,6 +133,7 @@ class NotificationPreferencesViewModel: ObservableObject {
     }
 
     func saveImmediately() async {
+        guard hasLoadedRemote else { saveLocal(); return }
         saveTask?.cancel()
         saveTask = nil
         pendingRemotePreferences = preferences

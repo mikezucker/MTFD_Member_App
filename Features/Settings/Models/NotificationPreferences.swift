@@ -67,6 +67,14 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
     case quickSiren = "quick-siren.caf"
     case smokeAlarm = "smoke-alarm.caf"
     case truckBacking = "truck-backing.caf"
+    case windChime = "wind-chime.caf"
+    case sonarPing = "sonar-ping.caf"
+    case radioChirp = "radio-chirp.caf"
+    case bellDing = "bell-ding.caf"
+    case woodblock = "woodblock.caf"
+    case retroArcade = "retro-arcade.caf"
+    case threeNoteMarimba = "three-note-marimba.caf"
+    case softGong = "soft-gong.caf"
 
     var id: String { rawValue }
 
@@ -90,6 +98,22 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
             return "Smoke Alarm"
         case .truckBacking:
             return "Truck Backing"
+        case .windChime:
+            return "Wind Chime"
+        case .sonarPing:
+            return "Sonar Ping"
+        case .radioChirp:
+            return "Radio Chirp"
+        case .bellDing:
+            return "Bell Ding"
+        case .woodblock:
+            return "Woodblock"
+        case .retroArcade:
+            return "Retro Arcade"
+        case .threeNoteMarimba:
+            return "Three-Note Marimba"
+        case .softGong:
+            return "Soft Gong"
         }
     }
 
@@ -105,7 +129,15 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
              .leroy,
              .quickSiren,
              .smokeAlarm,
-             .truckBacking:
+             .truckBacking,
+             .windChime,
+             .sonarPing,
+             .radioChirp,
+             .bellDing,
+             .woodblock,
+             .retroArcade,
+             .threeNoteMarimba,
+             .softGong:
             return "Uses \(title) for dispatch alert notifications."
         }
     }
@@ -122,7 +154,15 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
              .leroy,
              .quickSiren,
              .smokeAlarm,
-             .truckBacking:
+             .truckBacking,
+             .windChime,
+             .sonarPing,
+             .radioChirp,
+             .bellDing,
+             .woodblock,
+             .retroArcade,
+             .threeNoteMarimba,
+             .softGong:
             return rawValue
         }
     }
@@ -138,7 +178,15 @@ enum DispatchAlertTone: String, Codable, CaseIterable, Identifiable {
              .leroy,
              .quickSiren,
              .smokeAlarm,
-             .truckBacking:
+             .truckBacking,
+             .windChime,
+             .sonarPing,
+             .radioChirp,
+             .bellDing,
+             .woodblock,
+             .retroArcade,
+             .threeNoteMarimba,
+             .softGong:
             return rawValue
         }
     }
@@ -190,13 +238,14 @@ struct NotificationPreferences: Codable, Equatable {
     var isEnabled: Bool = true
 
     var dispatchAlertsEnabled: Bool = true
+    var dispatchClosedAlertsEnabled: Bool = false
     var hapticsEnabled: Bool = true
     var hapticAlertStyle: HapticAlertStyle = .normal
     var criticalDispatchAlerts: Bool = false
     var criticalDispatchAlertMode: CriticalDispatchAlertMode = .seriousOnly
     var dispatchAlertTone: DispatchAlertTone = .systemDefault
     var criticalDispatchAlertTone: DispatchAlertTone = .airHornBlast
-    var callTypes: Set<String> = ["FIRE", "EMS", "MVA"]
+    var callTypes: Set<String> = []
     var workingOnly: Bool = false
 
     var normalAlertScheduleMode: NotificationScheduleMode = .always
@@ -222,6 +271,7 @@ struct NotificationPreferences: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case isEnabled
         case dispatchAlertsEnabled
+        case dispatchClosedAlertsEnabled
         case hapticsEnabled
         case hapticAlertStyle
         case criticalDispatchAlerts
@@ -253,6 +303,7 @@ struct NotificationPreferences: Codable, Equatable {
 
         isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
         dispatchAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .dispatchAlertsEnabled) ?? true
+        dispatchClosedAlertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .dispatchClosedAlertsEnabled) ?? false
         let decodedHapticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .hapticsEnabled) ?? true
         hapticAlertStyle = try container.decodeIfPresent(HapticAlertStyle.self, forKey: .hapticAlertStyle)
             ?? (decodedHapticsEnabled ? .normal : .off)
@@ -261,7 +312,7 @@ struct NotificationPreferences: Codable, Equatable {
         criticalDispatchAlertMode = try container.decodeIfPresent(CriticalDispatchAlertMode.self, forKey: .criticalDispatchAlertMode) ?? .seriousOnly
         dispatchAlertTone = try container.decodeIfPresent(DispatchAlertTone.self, forKey: .dispatchAlertTone) ?? .systemDefault
         criticalDispatchAlertTone = try container.decodeIfPresent(DispatchAlertTone.self, forKey: .criticalDispatchAlertTone) ?? .airHornBlast
-        callTypes = try container.decodeIfPresent(Set<String>.self, forKey: .callTypes) ?? ["FIRE", "EMS", "MVA"]
+        callTypes = try container.decodeIfPresent(Set<String>.self, forKey: .callTypes) ?? []
         workingOnly = try container.decodeIfPresent(Bool.self, forKey: .workingOnly) ?? false
 
         normalAlertScheduleMode = try container.decodeIfPresent(NotificationScheduleMode.self, forKey: .normalAlertScheduleMode) ?? .always
@@ -294,6 +345,7 @@ struct NotificationPreferences: Codable, Equatable {
 
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(dispatchAlertsEnabled, forKey: .dispatchAlertsEnabled)
+        try container.encode(dispatchClosedAlertsEnabled, forKey: .dispatchClosedAlertsEnabled)
         try container.encode(hapticAlertStyle != .off, forKey: .hapticsEnabled)
         try container.encode(hapticAlertStyle, forKey: .hapticAlertStyle)
         try container.encode(criticalDispatchAlerts, forKey: .criticalDispatchAlerts)

@@ -238,6 +238,7 @@ struct ApparatusWorkOrdersView: View {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     ApparatusWorkOrdersView(
         workOrders: [
@@ -265,3 +266,4 @@ struct ApparatusWorkOrdersView: View {
         ]
     )
 }
+#endif

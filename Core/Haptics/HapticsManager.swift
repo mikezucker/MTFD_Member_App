@@ -129,6 +129,7 @@ final class HapticAlertManager {
     }
 
     func play(style: HapticAlertStyle, isCritical: Bool = false) {
+        playbackTask?.cancel()
         switch style {
         case .off:
             return
@@ -145,12 +146,13 @@ final class HapticAlertManager {
         playbackTask?.cancel()
         playbackTask = Task { @MainActor in
             for index in 0..<3 {
+                guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { return }
                 let generator = UINotificationFeedbackGenerator()
                 generator.prepare()
                 generator.notificationOccurred(isCritical ? .warning : .success)
 
                 if index < 2 {
-                    try? await Task.sleep(nanoseconds: 450_000_000)
+                    do { try await Task.sleep(nanoseconds: 450_000_000) } catch { return }
                 }
             }
         }
@@ -160,12 +162,13 @@ final class HapticAlertManager {
         playbackTask?.cancel()
         playbackTask = Task { @MainActor in
             for index in 0..<8 {
+                guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { return }
                 let generator = UIImpactFeedbackGenerator(style: .heavy)
                 generator.prepare()
                 generator.impactOccurred(intensity: 1.0)
 
                 if index < 7 {
-                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    do { try await Task.sleep(nanoseconds: 500_000_000) } catch { return }
                 }
             }
         }
@@ -175,12 +178,15 @@ final class HapticAlertManager {
         playbackTask?.cancel()
         playbackTask = Task { @MainActor in
             for index in 0..<12 {
+                guard !Task.isCancelled, UIApplication.shared.applicationState == .active else { return }
                 let generator = UIImpactFeedbackGenerator(style: .heavy)
                 generator.prepare()
                 generator.impactOccurred(intensity: 1.0)
 
                 if index < 11 {
-                    try? await Task.sleep(nanoseconds: index.isMultiple(of: 2) ? 250_000_000 : 650_000_000)
+                    do {
+                        try await Task.sleep(nanoseconds: index.isMultiple(of: 2) ? 250_000_000 : 650_000_000)
+                    } catch { return }
                 }
             }
         }

@@ -353,7 +353,9 @@ private struct ProfileInfoRow: Identifiable {
     let value: String
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     ProfileView()
         .environmentObject(SessionManager.shared)
 }
+#endif

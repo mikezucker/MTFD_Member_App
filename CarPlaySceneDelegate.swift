@@ -9,8 +9,9 @@ import MapKit
 import CoreLocation
 import UIKit
 
-final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPInterfaceControllerDelegate, CPMapTemplateDelegate {
+final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegate, CPInterfaceControllerDelegate {
     private weak var interfaceController: CPInterfaceController?
+    private weak var carPlayScene: CPTemplateApplicationScene?
 
     private var hasConfiguredRootTemplate = false
     private var refreshTimer: Timer?
@@ -24,7 +25,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var knownActiveDispatchIds = Set<String>()
     private var hasLoadedDispatchBaseline = false
     private var selectedActiveDispatchId: String?
-    private var activeNavigationSession: CPNavigationSession?
 
     private enum CarPlayScreen {
         case root
@@ -40,6 +40,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         _ templateApplicationScene: CPTemplateApplicationScene,
         didConnect interfaceController: CPInterfaceController
     ) {
+        carPlayScene = templateApplicationScene
         configureCarPlay(interfaceController: interfaceController)
     }
 
@@ -47,6 +48,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         _ templateApplicationScene: CPTemplateApplicationScene,
         didDisconnectInterfaceController interfaceController: CPInterfaceController
     ) {
+        carPlayScene = nil
         tearDownCarPlay(interfaceController: interfaceController)
     }
 
@@ -93,7 +95,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         lastErrorMessage = nil
         selectedActiveDispatchId = nil
         detailParentScreen = nil
-        activeNavigationSession = nil
     }
 
     // MARK: - Refresh
@@ -135,6 +136,13 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func handleDispatchNotification(_ payload: DispatchNotificationPayload) {
+        if payload.type == .dispatchClosed {
+            activeDispatches.removeAll { $0.id == payload.id }
+            knownActiveDispatchIds.remove(payload.id)
+            updateVisibleScreenAfterDispatchChange()
+            refreshDispatches(updateVisibleScreen: true)
+            return
+        }
         guard payload.type == .dispatch || payload.type == .dispatchCritical else {
             return
         }
@@ -281,9 +289,17 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func replaceVisibleTemplate(with template: CPTemplate, screen: CarPlayScreen) {
         guard let interfaceController else { return }
 
+        let parentScreen = detailParentScreen
+        let activeDispatchId = selectedActiveDispatchId
         if interfaceController.templates.count > 1 {
-            interfaceController.popTemplate(animated: false) { [weak self] _, _ in
-                self?.interfaceController?.pushTemplate(template, animated: false, completion: nil)
+            interfaceController.popTemplate(animated: false) { [weak self] success, _ in
+                guard let self, success else { return }
+                if screen == .detail {
+                    self.currentScreen = .detail
+                    self.detailParentScreen = parentScreen
+                    self.selectedActiveDispatchId = activeDispatchId
+                }
+                self.interfaceController?.pushTemplate(template, animated: false, completion: nil)
             }
         } else {
             rebuildTemplateStack(endingWith: template, screen: screen)
@@ -293,6 +309,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private func rebuildTemplateStack(endingWith template: CPTemplate, screen: CarPlayScreen) {
         guard let interfaceController else { return }
 
+        let parentScreen = detailParentScreen
+        let activeDispatchId = selectedActiveDispatchId
         let rootTemplate = makeRootTemplate(isLoading: isLoading)
         interfaceController.setRootTemplate(rootTemplate, animated: false) { [weak self] _, _ in
             guard let self else { return }
@@ -303,20 +321,38 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             case .active, .recent:
                 self.interfaceController?.pushTemplate(template, animated: false, completion: nil)
             case .detail:
-                let parentScreen = self.detailParentScreen ?? .active
-                let parentTemplate: CPTemplate
-
-                switch parentScreen {
-                case .recent:
-                    parentTemplate = self.makeRecentDispatchesTemplate()
-                default:
-                    parentTemplate = self.makeActiveDispatchesTemplate()
-                }
-
-                self.interfaceController?.pushTemplate(parentTemplate, animated: false) { [weak self] _, _ in
-                    self?.interfaceController?.pushTemplate(template, animated: false, completion: nil)
-                }
+                // Root + detail also fits Driving Task's two-template limit on older iOS.
+                self.openDispatchDetail(template, parentScreen: parentScreen ?? .active, activeDispatchId: activeDispatchId)
             }
+        }
+    }
+
+    private func openDispatchDetail(
+        _ template: CPTemplate,
+        parentScreen: CarPlayScreen,
+        activeDispatchId: String?
+    ) {
+        guard let interfaceController else { return }
+        let pushDetail = { [weak self] in
+            guard let self else { return }
+            self.currentScreen = .detail
+            self.detailParentScreen = parentScreen
+            self.selectedActiveDispatchId = activeDispatchId
+            self.interfaceController?.pushTemplate(template, animated: true, completion: nil)
+        }
+
+        let maximumDepth: Int
+        if #available(iOS 26.4, *) {
+            maximumDepth = 3
+        } else {
+            maximumDepth = 2
+        }
+        if interfaceController.templates.count >= maximumDepth {
+            interfaceController.popTemplate(animated: false) { success, _ in
+                if success { pushDetail() }
+            }
+        } else {
+            pushDetail()
         }
     }
 
@@ -435,13 +471,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                         return
                     }
 
-                    self.currentScreen = .detail
-                    self.detailParentScreen = .active
-                    self.selectedActiveDispatchId = dispatch.id
-                    self.interfaceController?.pushTemplate(
+                    self.openDispatchDetail(
                         self.makeActiveDispatchDetailTemplate(dispatch),
-                        animated: true,
-                        completion: nil
+                        parentScreen: .active,
+                        activeDispatchId: dispatch.id
                     )
                     completion()
                 }
@@ -568,13 +601,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                         return
                     }
 
-                    self.currentScreen = .detail
-                    self.detailParentScreen = .recent
-                    self.selectedActiveDispatchId = nil
-                    self.interfaceController?.pushTemplate(
+                    self.openDispatchDetail(
                         self.makeRecentDispatchDetailTemplate(dispatch),
-                        animated: true,
-                        completion: nil
+                        parentScreen: .recent,
+                        activeDispatchId: nil
                     )
                     completion()
                 }
@@ -1089,36 +1119,16 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func showCarPlayNavigation(to destination: MKMapItem, displayName: String, searchAddress: String) {
-        guard let interfaceController else {
-            return
-        }
-
-        let origin = MKMapItem.forCurrentLocation()
-        origin.name = "Current Location"
-
-        let routeChoice = CPRouteChoice(
-            summaryVariants: ["Route to Call", "Dispatch Route"],
-            additionalInformationVariants: [carPlayReadableAddress(searchAddress), "CarPlay only"],
-            selectionSummaryVariants: ["Start Route"]
-        )
-
-        let trip = CPTrip(origin: origin, destination: destination, routeChoices: [routeChoice])
-        let destinationName = displayName.isEmpty ? destination.name ?? "Dispatch Location" : displayName
-        trip.destinationNameVariants = [destinationName, "Dispatch Location"]
-
-        let mapTemplate = CPMapTemplate()
-        mapTemplate.mapDelegate = self
-        mapTemplate.guidanceBackgroundColor = .systemBlue
-
-        let textConfiguration = CPTripPreviewTextConfiguration(
-            startButtonTitle: "Navigate",
-            additionalRoutesButtonTitle: nil,
-            overviewButtonTitle: "Overview"
-        )
-
-        interfaceController.pushTemplate(mapTemplate, animated: true) { _, _ in
-            mapTemplate.showTripPreviews([trip], selectedTrip: trip, textConfiguration: textConfiguration)
-            self.activeNavigationSession = mapTemplate.startNavigationSession(for: trip)
+        guard let carPlayScene else { return }
+        // Driving Task apps cannot present CPMapTemplate. Apple Maps owns route guidance.
+        destination.openInMaps(
+            launchOptions: [MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving],
+            from: carPlayScene
+        ) { [weak self] success in
+            guard !success else { return }
+            DispatchQueue.main.async {
+                self?.presentCarPlayNavigationError(address: searchAddress)
+            }
         }
     }
 
@@ -1153,19 +1163,6 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         interfaceController?.presentTemplate(alert, animated: true, completion: nil)
     }
 
-    func mapTemplate(
-        _ mapTemplate: CPMapTemplate,
-        startedTrip trip: CPTrip,
-        using routeChoice: CPRouteChoice
-    ) {
-        activeNavigationSession = mapTemplate.startNavigationSession(for: trip)
-    }
-
-    func mapTemplateDidCancelNavigation(_ mapTemplate: CPMapTemplate) {
-        activeNavigationSession?.cancelTrip()
-        activeNavigationSession = nil
-    }
-
     private func presentNewDispatchAlert(_ dispatch: APIClient.ActiveDispatch) {
         guard let interfaceController else { return }
 
@@ -1173,13 +1170,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             guard let self else { return }
 
             self.interfaceController?.dismissTemplate(animated: true) { _, _ in
-                self.currentScreen = .detail
-                self.detailParentScreen = .active
-                self.selectedActiveDispatchId = dispatch.id
-                self.interfaceController?.pushTemplate(
+                self.openDispatchDetail(
                     self.makeActiveDispatchDetailTemplate(dispatch),
-                    animated: true,
-                    completion: nil
+                    parentScreen: .active,
+                    activeDispatchId: dispatch.id
                 )
             }
         }

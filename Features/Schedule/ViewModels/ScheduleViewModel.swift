@@ -16,37 +16,56 @@ final class ScheduleViewModel: ObservableObject {
     @Published var entries: [APIClient.MobileScheduleEntry] = []
     @Published var outlookDays: [ScheduleOutlookDay] = []
 
+    private var requestTask: Task<Void, Never>?
+
     func load() async {
-        isLoading = true
-        errorMessage = nil
-
-        defer {
-            isLoading = false
-        }
-
-        do {
-            let response = try await APIClient.shared.fetchMobileSchedule()
-
-            date = response.date
-            entries = response.entries
-
-            if !response.success {
-                errorMessage = response.message ?? "Schedule unavailable."
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-            entries = []
-        }
+        await performLoad(outlookCount: nil)
     }
 
     func loadOutlookDays(count: Int = 4) async {
+        await performLoad(outlookCount: count)
+    }
+
+    private func performLoad(outlookCount: Int?) async {
+        // Keep the network work alive when SwiftUI cancels the refresh gesture.
+        if let requestTask {
+            await requestTask.value
+            return
+        }
         isLoading = true
         errorMessage = nil
-
-        defer {
-            isLoading = false
+        let task = Task { @MainActor [self] in
+            defer { isLoading = false; requestTask = nil }
+            if let outlookCount {
+                await fetchOutlookDays(count: outlookCount)
+            } else {
+                do {
+                    let response = try await APIClient.shared.fetchMobileSchedule()
+                    if response.success {
+                        date = response.date
+                        entries = response.entries
+                    } else {
+                        errorMessage = response.message ?? "Schedule unavailable."
+                    }
+                } catch {
+                    if !isCancellation(error) { errorMessage = error.localizedDescription }
+                }
+            }
         }
+        requestTask = task
+        await task.value
+    }
 
+    private func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let error = error as? URLError { return error.code == .cancelled }
+        if let error = error as? APIClient.APIError, case .networkError(let urlError) = error {
+            return urlError.code == .cancelled
+        }
+        return false
+    }
+
+    private func fetchOutlookDays(count: Int) async {
         let apiDateFormatter = DateFormatter()
         apiDateFormatter.calendar = Calendar(identifier: .gregorian)
         apiDateFormatter.locale = Locale(identifier: "en_US_POSIX")
@@ -92,12 +111,13 @@ final class ScheduleViewModel: ObservableObject {
                 }
 
             } catch {
+                if isCancellation(error) { return }
                 days.append(
                     ScheduleOutlookDay(
                         id: dateString,
                         label: label,
                         date: dateString,
-                        entries: []
+                        entries: outlookDays.first(where: { $0.id == dateString })?.entries ?? []
                     )
                 )
 

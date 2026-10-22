@@ -113,6 +113,15 @@ final class APIClient {
         return URLSession(configuration: config)
     }()
 
+    // Startup must fail promptly when offline so the member can retry their saved sign-in.
+    private let sessionValidationSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 12
+        config.timeoutIntervalForResource = 15
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     // MARK: - Request Builder
 
     private func makeURL(path: String, queryItems: [URLQueryItem] = []) throws -> URL {
@@ -167,13 +176,19 @@ final class APIClient {
 
     // MARK: - Generic Network Layer
 
-    private func performRequest(_ request: URLRequest) async throws -> Data {
+    private func performRequest(_ originalRequest: URLRequest, allowRefresh: Bool = true, using requestSession: URLSession? = nil) async throws -> Data {
+        var request = originalRequest
+        let authenticated = request.value(forHTTPHeaderField: "Authorization") != nil
+        if authenticated {
+            guard let current = KeychainService.shared.loadToken() else { throw APIError.sessionExpired }
+            request.setValue("Bearer \(current)", forHTTPHeaderField: "Authorization")
+        }
         #if DEBUG
         debugPrint("🌐 REQUEST: \(request.httpMethod ?? "UNKNOWN") \(request.url?.absoluteString ?? "nil")")
         #endif
 
         do {
-            let (data, response) = try await session.data(for: request)
+            let (data, response) = try await (requestSession ?? session).data(for: request)
 
             guard let http = response as? HTTPURLResponse else {
                 throw APIError.invalidResponse
@@ -181,15 +196,28 @@ final class APIClient {
 
             #if DEBUG
             debugPrint("📡 RESPONSE STATUS: \(http.statusCode)")
-            if let responseString = String(data: data, encoding: .utf8), !responseString.isEmpty {
-                debugPrint("📥 RESPONSE BODY: \(responseString)")
-            }
             #endif
 
             guard 200...299 ~= http.statusCode else {
                 let serverMessage = extractServerMessage(from: data)
 
                 if http.statusCode == 401 {
+                    if authenticated {
+                        let rejectedToken = request.value(forHTTPHeaderField: "Authorization")?.replacingOccurrences(of: "Bearer ", with: "") ?? ""
+                        if allowRefresh, KeychainService.shared.loadSession() != nil {
+                            do {
+                                let renewed = try await MobileSessionRenewal.shared.renew(rejectedToken: rejectedToken, baseURL: baseURL)
+                                guard KeychainService.shared.loadSession()?.accessToken == renewed else { throw CancellationError() }
+                                request.setValue("Bearer \(renewed)", forHTTPHeaderField: "Authorization")
+                                return try await performRequest(request, allowRefresh: false, using: requestSession)
+                            } catch APIError.sessionExpired {
+                                invalidateSession(matching: rejectedToken)
+                                throw APIError.sessionExpired
+                            }
+                        }
+                        invalidateSession(matching: rejectedToken)
+                        throw APIError.sessionExpired
+                    }
                     throw APIError.unauthorized(message: serverMessage)
                 } else {
                     throw APIError.serverError(statusCode: http.statusCode, message: serverMessage)
@@ -286,6 +314,23 @@ final class APIClient {
 
         return nil
     }
+    func trainingWorkspace<T: Decodable>(_ path: String = "", body: Data? = nil) async throws -> T {
+        let request = try makeRequest(path: "/api/training/workspace" + path, method: body == nil ? "GET" : "POST", body: body, requiresAuth: true)
+        return try decode(T.self, from: await performRequest(request))
+    }
+
+    func uploadWorkspaceTraining(data: Data, fileName: String, mimeType: String) async throws -> WorkspaceUploadResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        let name = fileName.replacingOccurrences(of: "\"", with: "_").replacingOccurrences(of: "\r", with: "_").replacingOccurrences(of: "\n", with: "_")
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\nContent-Type: \(mimeType)\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+        var request = try makeRequest(path: "/api/training/workspace/uploads", method: "POST", body: body, requiresAuth: true)
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        return try decode(WorkspaceUploadResponse.self, from: await performRequest(request))
+    }
+
     // MARK: - Training
 
     func fetchTraining() async throws -> MobileTrainingResponse {
@@ -346,6 +391,26 @@ final class APIClient {
         } catch {
             throw error
         }
+    }
+
+    func fetchTrainingLesson(courseId: String, lessonId: String) async throws -> TrainingLessonSnapshotResponse {
+        let request = try makeRequest(path: "/api/training/courses/\(courseId)/lessons/\(lessonId)", method: "GET", requiresAuth: true)
+        return try decode(TrainingLessonSnapshotResponse.self, from: await performRequest(request))
+    }
+
+    func trainingLessonAction(courseId: String, lessonId: String, action: TrainingLessonAction) async throws -> TrainingLessonActionResponse {
+        let request = try makeRequest(path: "/api/training/courses/\(courseId)/lessons/\(lessonId)", method: "POST", body: try encode(action), requiresAuth: true)
+        return try decode(TrainingLessonActionResponse.self, from: await performRequest(request))
+    }
+
+    func trainingMediaURL(_ url: URL) async throws -> URL {
+        guard url.host == absoluteURL(from: "/")?.host, url.path.hasPrefix("/api/") else { return url }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.queryItems = (components.queryItems ?? []).filter { $0.name != "format" } + [URLQueryItem(name: "format", value: "json")]
+        let request = try makeRequest(path: components.percentEncodedPath + "?" + (components.percentEncodedQuery ?? ""), method: "GET", requiresAuth: true)
+        let response = try decode(TrainingMediaResponse.self, from: await performRequest(request))
+        guard response.success, let mediaURL = response.url else { throw APIError.serverError(statusCode: 503, message: response.error ?? "Training media unavailable.") }
+        return mediaURL
     }
 
     func fetchTrainingManageCourses() async throws -> MobileTrainingManageCoursesResponse {
@@ -500,6 +565,12 @@ final class APIClient {
         return true
     }
 
+    private func invalidateSession(matching rejectedToken: String) {
+        // A late response from an old request must not sign out a newly signed-in user.
+        guard KeychainService.shared.loadToken() == rejectedToken else { return }
+        clearSession()
+    }
+
     func clearSession() {
         authToken = nil
         KeychainService.shared.deleteToken()
@@ -512,7 +583,13 @@ final class APIClient {
     // MARK: - Auth
 
     func login(email: String, password: String) async throws -> LoginResponse {
-        let payload = LoginRequest(email: email, password: password)
+        struct RenewableLogin: Encodable {
+            let email: String
+            let password: String
+            let sessionVersion = 2
+            let deviceName = "iPhone"
+        }
+        let payload = RenewableLogin(email: email, password: password)
         let body = try encode(payload)
 
         let request = try makeRequest(
@@ -536,6 +613,16 @@ final class APIClient {
             throw APIError.missingTokenInResponse
         }
 
+        guard response.member != nil else { throw APIError.invalidResponse }
+        if let refreshToken = response.refreshToken, let sessionId = response.sessionId {
+            try KeychainService.shared.saveSession(MobileSessionCredentials(accessToken: token, refreshToken: refreshToken, sessionId: sessionId))
+        } else if response.refreshToken == nil && response.sessionId == nil {
+            // Backend-first rollout: a pre-renewal backend still returns a legacy session.
+            KeychainService.shared.deleteSession()
+        } else {
+            throw APIError.invalidResponse
+        }
+        KeychainService.shared.saveToken(token)
         authToken = token
         return response
     }
@@ -548,7 +635,7 @@ final class APIClient {
         )
 
         do {
-            let data = try await performRequest(request)
+            let data = try await performRequest(request, using: sessionValidationSession)
             return try decode(MemberResponse.self, from: data)
         } catch APIError.unauthorized {
             clearSession()
@@ -895,21 +982,116 @@ final class APIClient {
         }
     }
 
-    func requestPasswordReset(email: String) async throws -> MemberAccessRequestResponse {
-        let payload = MemberAccessRequest(
-            email: email,
-            type: "RESET"
-        )
+    func startPasswordRecovery(identifier: String, publicKey: String) async throws -> RecoveryStartResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["identifier":identifier,"publicKey":publicKey])
+        let request = try makeRequest(path:"/api/mobile/security/recovery/request",method:"POST",body:body)
+        return try decode(RecoveryStartResponse.self,from:await performRequest(request))
+    }
+    func findRecoveryAccount(firstName: String, lastName: String, station: String) async throws -> RecoveryAccountLookupResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["firstName": firstName, "lastName": lastName, "station": station])
+        let request = try makeRequest(path: "/api/mobile/security/recovery/lookup", method: "POST", body: body)
+        return try decode(RecoveryAccountLookupResponse.self, from: await performRequest(request))
+    }
+    func startPasswordRecovery(lookupToken: String, publicKey: String) async throws -> RecoveryStartResponse {
+        let body = try JSONSerialization.data(withJSONObject: ["lookupToken": lookupToken, "publicKey": publicKey])
+        let request = try makeRequest(path: "/api/mobile/security/recovery/request", method: "POST", body: body)
+        return try decode(RecoveryStartResponse.self, from: await performRequest(request))
+    }
+    func passwordRecoveryStatus(_ pending: PendingPasswordRecovery) async throws -> RecoveryStatusResponse {
+        let request = try makeRequest(path:"/api/mobile/security/recovery/status",method:"POST",body:recoveryOwnerBody(pending))
+        return try decode(RecoveryStatusResponse.self,from:await performRequest(request))
+    }
+    func passwordRecoveryChallenge(_ pending: PendingPasswordRecovery) async throws -> String {
+        struct Response: Decodable { let challenge: String }
+        let request = try makeRequest(path:"/api/mobile/security/recovery/challenge",method:"POST",body:recoveryOwnerBody(pending))
+        return try decode(Response.self,from:await performRequest(request)).challenge
+    }
+    private func recoveryOwnerBody(_ pending: PendingPasswordRecovery) throws -> Data {
+        try JSONSerialization.data(withJSONObject:["requestId":pending.requestId,"statusToken":pending.statusToken])
+    }
+    func completePasswordRecovery(_ pending: PendingPasswordRecovery, signature: String, password: String, confirmation: String) async throws -> String? {
+        let body = try JSONSerialization.data(withJSONObject:["requestId":pending.requestId,"statusToken":pending.statusToken,
+                                                             "signature":signature,"password":password,"confirmation":confirmation])
+        let request = try makeRequest(path:"/api/mobile/security/recovery/complete",method:"POST",body:body)
+        struct Response: Decodable { let identifier: String? }
+        return try decode(Response.self, from: await performRequest(request)).identifier
+    }
+    struct RecoveryApproverMember: Decodable, Identifiable {
+        let id: String
+        let name: String?
+        let email: String
+        let role: String
+        let canApprove: Bool
+        let inheritedRoleAccess: Bool
+        let isCurrentUser: Bool
+    }
 
-        let request = try makeRequest(
-            path: "/api/members/access/request",
-            method: "POST",
-            body: try encode(payload),
-            requiresAuth: false
-        )
+    func fetchRecoveryApprovers() async throws -> [RecoveryApproverMember] {
+        struct Response: Decodable { let members: [RecoveryApproverMember] }
+        let request = try makeRequest(path: "/api/mobile/admin/recovery/approvers", requiresAuth: true)
+        return try decode(Response.self, from: await performRequest(request)).members
+    }
 
+    func setRecoveryApprover(userId: String, enabled: Bool, password: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["userId": userId, "enabled": enabled, "password": password])
+        let request = try makeRequest(path: "/api/mobile/admin/recovery/approvers", method: "PATCH", body: body, requiresAuth: true)
+        _ = try await performRequest(request)
+    }
+
+    func fetchPasswordRecoveryRequests() async throws -> [AdminRecoveryRequest] {
+        struct Response: Decodable { let requests: [AdminRecoveryRequest] }
+        let request = try makeRequest(path:"/api/mobile/admin/recovery",requiresAuth:true)
+        return try decode(Response.self,from:await performRequest(request)).requests
+    }
+    func decidePasswordRecovery(requestId: String, password: String, decision: String, matchCode: String,
+                                method: String, verificationReference: String) async throws {
+        var body = ["requestId":requestId,"password":password,"decision":decision,"matchCode":matchCode]
+        if decision == "APPROVE" { body["method"]=method; body["verificationReference"]=verificationReference }
+        let request = try makeRequest(path:"/api/mobile/admin/recovery",method:"POST",body:JSONSerialization.data(withJSONObject:body),requiresAuth:true)
+        _ = try await performRequest(request)
+    }
+
+    func fetchDispatchUnits() async throws -> [DispatchUnitOption] {
+        let request = try makeRequest(path: "/api/mobile/dispatch-units", requiresAuth: true)
         let data = try await performRequest(request)
-        return try decode(MemberAccessRequestResponse.self, from: data)
+        let response = try decode(DispatchUnitsResponse.self, from: data)
+        guard response.success else { throw APIError.invalidResponse }
+        return response.units ?? []
+    }
+
+
+
+    struct NotificationTestResponse: Decodable {
+        struct Delivery: Decodable {
+            let ok: Bool
+            let status: Int
+        }
+        let success: Bool
+        let results: [Delivery]?
+        let error: String?
+    }
+
+    func sendNotificationTest(isCritical: Bool = false) async throws -> NotificationTestResponse {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "title": isCritical ? "MTFD Critical Notification Test" : "MTFD Notification Test",
+            "body": "Push test. No dispatch or response is required.",
+            "alertKind": isCritical ? "critical" : "normal"
+        ])
+        var request = try makeRequest(path: "/api/admin/push/test", method: "POST", body: body, requiresAuth: true)
+        request.timeoutInterval = 15
+        return try decode(NotificationTestResponse.self, from: await performRequest(request))
+    }
+
+    func registerPushDevice(body: [String: Any]) async throws {
+        let request = try makeRequest(path: "/api/mobile/push/register", method: "POST",
+                                      body: JSONSerialization.data(withJSONObject: body), requiresAuth: true)
+        _ = try await performRequest(request)
+    }
+
+    func revokeSession(refreshToken: String) async throws {
+        let body = try JSONSerialization.data(withJSONObject: ["refreshToken": refreshToken])
+        let request = try makeRequest(path: "/api/mobile/session/logout", method: "POST", body: body)
+        _ = try await performRequest(request)
     }
 
     // MARK: - Dispatch
@@ -1143,6 +1325,7 @@ extension APIClient {
         let badgeNumber: String?
         let stationMessageDelegate: Bool?
         let attributeIds: [String]?
+        let actorPassword: String?
     }
 
     struct MemberAccessRequest: Encodable {
@@ -1176,6 +1359,8 @@ extension APIClient {
     struct LoginResponse: Decodable {
         let success: Bool
         let token: String?
+        let refreshToken: String?
+        let sessionId: String?
         let member: Member?
         let error: String?
     }
@@ -1195,6 +1380,10 @@ extension APIClient {
         let phone: String?
         let attributes: [String]?
         let permissions: MobileMemberPermissions?
+
+        var canApprovePasswordRecovery: Bool {
+            permissions?.canApprovePasswordRecovery == true || role == "ADMIN" || role == "CHIEF"
+        }
 
         var canPostStationMessages: Bool {
             permissions?.canPostStationMessages == true
@@ -1240,6 +1429,7 @@ extension APIClient {
     }
 
     struct MobileMemberPermissions: Decodable {
+        let canApprovePasswordRecovery: Bool?
         let canPostStationMessages: Bool?
         let canManageReporting: Bool?
     }
@@ -1719,4 +1909,69 @@ extension APIClient {
         let qualifier: String?
         let isVacant: Bool
     }
+}
+
+// One renewal per process; dashboard, push registration and CarPlay share the result.
+actor MobileSessionRenewal {
+    static let shared = MobileSessionRenewal()
+    private var inFlight: Task<String, Error>?
+
+    func renew(rejectedToken: String, baseURL: String) async throws -> String {
+        if let current = KeychainService.shared.loadSession(), current.accessToken != rejectedToken {
+            return current.accessToken
+        }
+        if let inFlight { return try await inFlight.value }
+        let task = Task<String, Error> {
+            let original = try KeychainService.shared.prepareSessionRefresh()
+            guard let url = URL(string: baseURL + "/api/mobile/session/refresh") else { throw APIClient.APIError.invalidURL }
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 30
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.httpBody = try JSONSerialization.data(withJSONObject: [
+                "refreshToken": original.refreshToken, "requestId": original.refreshRequestId!
+            ])
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIClient.APIError.invalidResponse }
+            if http.statusCode == 401 { throw APIClient.APIError.sessionExpired }
+            guard http.statusCode == 200 else {
+                throw APIClient.APIError.serverError(statusCode: http.statusCode, message: "Unable to renew your session. Please try again.")
+            }
+            struct RenewalResponse: Decodable { let token: String; let refreshToken: String; let sessionId: String }
+            let result = try JSONDecoder().decode(RenewalResponse.self, from: data)
+            guard !result.token.isEmpty, !result.refreshToken.isEmpty, result.sessionId == original.sessionId else {
+                throw APIClient.APIError.invalidResponse
+            }
+            try KeychainService.shared.replaceSession(MobileSessionCredentials(accessToken: result.token,
+                refreshToken: result.refreshToken, sessionId: result.sessionId), matching: original)
+            return result.token
+        }
+        inFlight = task
+        defer { inFlight = nil }
+        return try await task.value
+    }
+}
+
+extension APIClient {
+    struct RecoveryAccountLookupResponse: Decodable {
+        let maskedEmail: String
+        let lookupToken: String
+    }
+    struct RecoveryStartResponse: Decodable {
+        let requestId: String
+        let statusToken: String
+        let matchCode: String
+        let expiresAt: String
+        let maskedEmail: String?
+    }
+    struct RecoveryStatusResponse: Decodable { let status: String; let expiresAt: String }
+    struct AdminRecoveryRequest: Decodable, Identifiable {
+        let id: String
+        let matchCode: String
+        let createdAt: Date
+        let expiresAt: Date
+        let user: RecoveryMember?
+    }
+    struct RecoveryMember: Decodable { let id: String; let name: String?; let email: String; let role: String }
 }

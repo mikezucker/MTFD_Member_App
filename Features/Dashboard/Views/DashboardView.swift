@@ -46,10 +46,7 @@ struct DashboardView: View {
     private var configuredDashboardCards: [DashboardCardID] {
         _ = dashboardLayoutRefreshID
 
-        let hiddenCards = DashboardCardLayoutDefaults.hiddenCards(for: session.currentUser?.role)
-        return DashboardCardLayoutDefaults
-            .savedOrder(for: session.currentUser?.role)
-            .filter { !hiddenCards.contains($0) }
+        return DashboardCardLayoutDefaults.visibleCards(for: session.currentUser?.role)
     }
 
     var body: some View {
@@ -80,10 +77,7 @@ struct DashboardView: View {
 
                         switch dashboardRole {
 
-                        case .admin:
-                            AdminDashboardView()
-
-                        case .chief:
+                        case .admin, .chief:
                             ChiefDashboardView(
                                 activeDispatches: viewModel.activeDispatches,
                                 workOrders: viewModel.state.apparatusWorkOrders,
@@ -93,6 +87,7 @@ struct DashboardView: View {
                                 recentCalls: dashboardRecentCalls,
                                 messagePreviews: viewModel.state.messagePreviews,
                                 unreadMessageCount: viewModel.state.unreadNonDispatchMessageCount,
+                                dashboardCards: configuredDashboardCards,
                                 isLoading: dashboardIsLoading,
                                 onRefresh: {
                                     await refreshDashboard()
@@ -125,6 +120,7 @@ struct DashboardView: View {
                                 stationUpdates: viewModel.state.stationUpdates,
                                 messagePreviews: viewModel.state.messagePreviews,
                                 unreadMessageCount: viewModel.state.unreadNonDispatchMessageCount,
+                                dashboardCards: configuredDashboardCards,
                                 isLoading: dashboardIsLoading,
                                 onRefresh: {
                                     await refreshDashboard()
@@ -310,6 +306,9 @@ struct DashboardView: View {
                     showMessageModal = true
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("liveActivityPreferencesDidChange"))) { _ in
+                syncLiveActivityWithDashboardActiveDispatches()
+            }
             .onChange(of: activeDispatchLiveActivitySignature) { _, _ in
                 syncLiveActivityWithDashboardActiveDispatches()
             }
@@ -342,26 +341,20 @@ struct DashboardView: View {
                 print("🔔 Dispatch RECEIVED:", dispatch.id)
                 guard hasAuthToken else { return }
 
-                latestDispatch = dispatch
+                if dispatch.type != .dispatchClosed { latestDispatch = dispatch }
                 viewModel.refreshAfterDispatchNotification(role: mappedUserRole(from: session.currentUser?.role))
                 Task {
                     statsStore.markStale()
                     await statsStore.refreshIfNeeded(reason: "pushDispatch")
                 }
 
-                let isCritical = dispatch.type == .dispatchCritical
+                if dispatch.type == .dispatchClosed {
+                    if latestDispatch?.id == dispatch.id { latestDispatch = nil }
+                    DispatchLiveActivityManager.shared.dispatchesCleared(dispatchId: dispatch.id)
+                    return
+                }
 
-                DispatchAlertSoundManager.shared.playDispatchAlert(
-                    dispatchId: dispatch.id,
-                    tone: dashboardDispatchAlertTone(isCritical: isCritical),
-                    isCritical: isCritical
-                )
-
-                HapticAlertManager.shared.playDispatchAlert(
-                    dispatchId: dispatch.id,
-                    style: dashboardHapticAlertStyle,
-                    isCritical: isCritical
-                )
+                // AppDelegate owns foreground audio. Opening a delivered alert only refreshes the UI.
                 dispatchNotificationCount += 1
 
                 isDispatchBellRinging = true
@@ -369,6 +362,12 @@ struct DashboardView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
                     isDispatchBellRinging = false
                 }
+            }
+            .onReceive(router.$closedDispatchToOpen.compactMap { $0 }) { _ in
+                guard hasAuthToken else { return }
+                selectedDispatch = nil
+                openMessageCenter(mode: .dispatchesOnly)
+                router.closedDispatchToOpen = nil
             }
             .onReceive(router.$dispatchToOpen.compactMap { $0 }) { dispatch in
                 print("🧭 Dashboard opening dispatch:", dispatch.id)
@@ -732,7 +731,7 @@ struct DashboardView: View {
 
         guard let newestDispatch = activeDispatches.first else {
             print("🟣 Dashboard LiveActivity no active dispatches. Ending all.")
-            DispatchLiveActivityManager.shared.endAll()
+            DispatchLiveActivityManager.shared.dispatchesCleared()
             return
         }
 
@@ -778,38 +777,6 @@ struct DashboardView: View {
         } else {
             return .member
         }
-    }
-
-    private var dashboardHapticAlertStyle: HapticAlertStyle {
-        if let rawValue = UserDefaults.standard.string(forKey: "notification_haptic_alert_style"),
-           let style = HapticAlertStyle(rawValue: rawValue) {
-            return style
-        }
-
-        if UserDefaults.standard.object(forKey: "notification_haptics_enabled") == nil {
-            return .normal
-        }
-
-        return UserDefaults.standard.bool(forKey: "notification_haptics_enabled") ? .normal : .off
-    }
-
-    private func dashboardDispatchAlertTone(isCritical: Bool) -> DispatchAlertTone {
-        let key = isCritical
-            ? "notification_critical_dispatch_alert_tone"
-            : "notification_dispatch_alert_tone"
-
-        if let rawValue = UserDefaults.standard.string(forKey: key),
-           let tone = DispatchAlertTone(rawValue: rawValue) {
-            return tone
-        }
-
-        guard let data = UserDefaults.standard.data(forKey: "notification_preferences"),
-              let preferences = try? JSONDecoder().decode(NotificationPreferences.self, from: data)
-        else {
-            return isCritical ? .airHornBlast : .systemDefault
-        }
-
-        return isCritical ? preferences.criticalDispatchAlertTone : preferences.dispatchAlertTone
     }
 
     private func makeDispatchPayload(

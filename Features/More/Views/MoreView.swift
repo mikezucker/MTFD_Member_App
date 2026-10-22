@@ -4,6 +4,7 @@ import SwiftUI
 struct MoreView: View {
     @EnvironmentObject var sessionManager: SessionManager
     @State private var showLogoutConfirm = false
+    @ObservedObject private var recoveryRouter = NavigationRouter.shared
 
     var body: some View {
         NavigationStack {
@@ -59,6 +60,15 @@ struct MoreView: View {
                                 .buttonStyle(.plain)
                             }
 
+                            if sessionManager.currentUser?.canApprovePasswordRecovery == true {
+                                Button {
+                                    recoveryRouter.showPasswordRecoveryRequests = true
+                                } label: {
+                                    menuRow(title:"Password Recovery Requests",subtitle:"Review and authorize member account recovery",emoji:"🔐")
+                                }
+                                .buttonStyle(.plain)
+                            }
+
                             if sessionManager.currentUser?.canManageUsers == true {
                                 NavigationLink {
                                     UserAdminView()
@@ -106,6 +116,7 @@ struct MoreView: View {
                     }
                 }
             }
+            .toolbar(.hidden, for: .navigationBar)
             .confirmationDialog(
                 "Are you sure you want to log out?",
                 isPresented: $showLogoutConfirm,
@@ -121,7 +132,16 @@ struct MoreView: View {
             }
             
         }
+        .task {
+            if sessionManager.isLoggedIn, let response = try? await APIClient.shared.fetchCurrentUser() {
+                sessionManager.currentUser = response.member
+            }
+        }
+        .sheet(isPresented:$recoveryRouter.showPasswordRecoveryRequests) {
+            AdminPasswordRecoveryView()
+        }
     }
+
 
     private func profileCard(member: APIClient.Member) -> some View {
         HStack(spacing: 14) {
@@ -404,6 +424,7 @@ private struct UserAdminEditView: View {
     @State private var badgeNumber: String
     @State private var stationMessageDelegate: Bool
     @State private var selectedAttributeIds: Set<String>
+    @State private var actorPassword = ""
     @State private var isSaving = false
     @State private var errorMessage: String?
 
@@ -446,6 +467,9 @@ private struct UserAdminEditView: View {
                         }
                     }
                     .disabled(!canEditDepartmentRoles)
+                    if role != user.role && (["ADMIN", "CHIEF"].contains(role) || ["ADMIN", "CHIEF"].contains(user.role)) {
+                        SecureField("Your current password",text:$actorPassword).textContentType(.password)
+                    }
 
                     Picker("Status", selection: $status) {
                         Text("Active").tag("ACTIVE")
@@ -600,7 +624,7 @@ private struct UserAdminEditView: View {
     private func save() async {
         isSaving = true
         errorMessage = nil
-        defer { isSaving = false }
+        defer { isSaving = false; actorPassword = "" }
 
         let payload = APIClient.MobileAdminUserUpdateRequest(
             id: user.id,
@@ -612,7 +636,8 @@ private struct UserAdminEditView: View {
                 ? nil
                 : badgeNumber.trimmingCharacters(in: .whitespacesAndNewlines),
             stationMessageDelegate: stationMessageDelegate,
-            attributeIds: Array(selectedAttributeIds)
+            attributeIds: Array(selectedAttributeIds),
+            actorPassword: actorPassword.isEmpty ? nil : actorPassword
         )
 
         do {
@@ -621,5 +646,318 @@ private struct UserAdminEditView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct AdminPasswordRecoveryView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var requests: [APIClient.AdminRecoveryRequest] = []
+    @State private var selected: APIClient.AdminRecoveryRequest?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    NavigationLink {
+                        PasswordRecoveryApproversView()
+                    } label: {
+                        Label("Manage Approvers", systemImage: "person.badge.key.fill")
+                    }
+                }
+                if isLoading { ProgressView("Loading requests…") }
+                if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                if requests.isEmpty && !isLoading {
+                    ContentUnavailableView("No pending requests",systemImage:"checkmark.shield",description:Text("Member password recovery requests will appear here."))
+                }
+                ForEach(requests) { request in
+                    Button { selected = request } label: {
+                        VStack(alignment:.leading,spacing:6) {
+                            Text(request.user?.name ?? "Member").font(.headline)
+                            Text(request.user?.email ?? "").font(.subheadline).foregroundStyle(.secondary)
+                            Text("Request code: \(request.matchCode)").font(.body.monospaced())
+                            Text("Expires \(request.expiresAt, style:.relative)").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Password Recovery")
+            .toolbar {
+                ToolbarItem(placement:.cancellationAction) { Button("Close") { dismiss() } }
+                ToolbarItem(placement:.primaryAction) { Button("Refresh") { Task { await load() } } }
+            }
+            .refreshable { await load() }
+            .task {
+                await load()
+                while !Task.isCancelled {
+                    try? await Task.sleep(for:.seconds(15))
+                    guard !Task.isCancelled else { break }
+                    await load()
+                }
+            }
+            .sheet(item:$selected,onDismiss:{Task{await load()}}) { request in
+                AdminPasswordRecoveryDecisionView(request:request)
+            }
+        }
+    }
+    @MainActor private func load() async {
+        guard !isLoading else { return }
+        isLoading = true; defer { isLoading = false }
+        do { requests = try await APIClient.shared.fetchPasswordRecoveryRequests(); errorMessage = nil }
+        catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct AdminPasswordRecoveryDecisionView: View {
+    @Environment(\.dismiss) private var dismiss
+    let request: APIClient.AdminRecoveryRequest
+    @State private var method = "IN_PERSON"
+    @State private var verificationReference = ""
+    @State private var matchCode = ""
+    @State private var password = ""
+    @State private var isWorking = false
+    @State private var errorMessage: String?
+    @State private var didFinish = false
+    @State private var wasApproved = false
+    @FocusState private var isEditing: Bool
+    var body: some View {
+        NavigationStack {
+            Form {
+                if didFinish {
+                    Section {
+                        Label("Request reviewed",systemImage:"checkmark.shield")
+                        Text(wasApproved ? "Only the requesting iPhone can finish this reset. Existing sessions end when the member successfully creates a new password." : "This request was declined and cannot be used to reset the member’s password.")
+                        Button("Done") { dismiss() }
+                    }
+                } else {
+                    Section("Member") {
+                        Text(request.user?.name ?? "Member").font(.headline)
+                        Text(request.user?.email ?? "").foregroundStyle(.secondary)
+                        LabeledContent("Requested",value:request.createdAt.formatted(date:.abbreviated,time:.shortened))
+                    }
+                    Section {
+                        Text("Confirm you are speaking with the member before approving a reset.")
+                        Picker("How did you confirm their identity?",selection:$method) {
+                            Text("In person").tag("IN_PERSON")
+                            Text("Phone call").tag("ESTABLISHED_PHONE")
+                        }
+                        .pickerStyle(.segmented)
+                        if method == "ESTABLISHED_PHONE" {
+                            Text("Call the member using the number already in the department directory.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        VStack(alignment:.leading,spacing:6) {
+                            Text("How you verified the member")
+                            TextField(method == "IN_PERSON" ? "Example: Spoke in person at Station 1" : "Example: Called number in department directory",text:$verificationReference,axis:.vertical)
+                                .focused($isEditing)
+                                .lineLimit(2...3)
+                        }
+                    } header: {
+                        Text("1. Confirm the member")
+                    } footer: {
+                        Text("To approve, enter a short note of at least 8 characters. Do not include passwords or sensitive personal details.")
+                    }
+                    Section {
+                        Text("Ask the member to read or show the 6-character code on the iPhone they used to request this reset.")
+                        VStack(alignment:.leading,spacing:6) {
+                            Text("Code from the member’s iPhone")
+                            TextField("Enter 6-character code",text:$matchCode)
+                                .textInputAutocapitalization(.characters).autocorrectionDisabled()
+                                .focused($isEditing)
+                        }
+                    } header: {
+                        Text("2. Enter the member’s code")
+                    }
+                    Section {
+                        VStack(alignment:.leading,spacing:6) {
+                            Text("Your MTFD password")
+                            SecureField("Enter your own password",text:$password)
+                                .textContentType(.password)
+                                .focused($isEditing)
+                        }
+                    } header: {
+                        Text("3. Authorize your decision")
+                    } footer: {
+                        Text("Use your own password, not the member’s. Both Approve and Deny require the member’s code and your password.")
+                    }
+                    Section {
+                        Button("Approve password reset") { Task { await decide("APPROVE") } }
+                        Button("Deny request",role:.destructive) { Task { await decide("DENY") } }
+                    } footer: {
+                        Text("Approval lets the member create a new password on their requesting iPhone.")
+                    }
+                }
+                if isWorking { ProgressView("Saving decision…") }
+
+            }
+            .disabled(isWorking)
+            .scrollDismissesKeyboard(.interactively)
+            .alert("Check reset request",isPresented:Binding(get:{errorMessage != nil},set:{if !$0 { errorMessage = nil }})) {
+                Button("OK",role:.cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+            .navigationTitle("Review Reset Request")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement:.cancellationAction) { Button("Close") { password = ""; dismiss() } }
+                ToolbarItemGroup(placement:.keyboard) {
+                    Spacer()
+                    Button("Done") { isEditing = false }
+                }
+            }
+        }
+    }
+    @MainActor private func decide(_ decision: String) async {
+        guard !isWorking else { return }
+        isEditing = false
+        var missing: [String] = []
+        let reference = verificationReference.trimmingCharacters(in:.whitespacesAndNewlines)
+        let code = matchCode.trimmingCharacters(in:.whitespacesAndNewlines).uppercased()
+        if decision == "APPROVE" && reference.count < 8 {
+            missing.append("Add a short note explaining how you verified the member (at least 8 characters).")
+        }
+        if decision == "APPROVE" && reference.count > 200 {
+            missing.append("Keep your verification note to 200 characters or fewer.")
+        }
+        if code.count != 6 { missing.append("Enter the 6-character code from the member’s requesting iPhone.") }
+        if password.isEmpty { missing.append("Enter your own MTFD password to authorize this decision.") }
+        guard missing.isEmpty else {
+            errorMessage = missing.joined(separator:"\n\n")
+            return
+        }
+        isWorking = true; errorMessage = nil
+        defer { isWorking = false; password = "" }
+        do {
+            try await APIClient.shared.decidePasswordRecovery(requestId:request.id,password:password,decision:decision,
+                matchCode:code,method:method,verificationReference:reference)
+            wasApproved = decision == "APPROVE"
+            didFinish = true
+        } catch { errorMessage = error.localizedDescription }
+    }
+}
+
+
+private struct PasswordRecoveryApproversView: View {
+    @State private var members: [APIClient.RecoveryApproverMember] = []
+    @State private var selectedMember: APIClient.RecoveryApproverMember?
+    @State private var search = ""
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private var filteredMembers: [APIClient.RecoveryApproverMember] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return members.filter { query.isEmpty || ($0.name ?? "").localizedCaseInsensitiveContains(query) || $0.email.localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        List {
+            if isLoading { ProgressView("Loading members…") }
+            if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+            Section {
+                ForEach(filteredMembers.filter { $0.canApprove }) { member in
+                    memberRow(member)
+                }
+            } header: { Text("Current Approvers") } footer: {
+                Text("Approvers can review password recovery requests and add or remove other approvers. Admin and Chief access comes from their department role.")
+            }
+            Section("Add an Approver") {
+                ForEach(filteredMembers.filter { !$0.canApprove }) { member in
+                    memberRow(member)
+                }
+            }
+        }
+        .navigationTitle("Recovery Approvers")
+        .searchable(text: $search, prompt: "Find a member")
+        .task { await load() }
+        .refreshable { await load() }
+        .sheet(item: $selectedMember, onDismiss: { Task { await load() } }) { member in
+            RecoveryApproverAccessView(member: member)
+        }
+    }
+
+    private func memberRow(_ member: APIClient.RecoveryApproverMember) -> some View {
+        Button { selectedMember = member } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(member.name ?? "Member").foregroundStyle(.primary)
+                    Text(member.email).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if member.inheritedRoleAccess {
+                    Text(member.role == "CHIEF" ? "Chief" : "Admin").font(.caption)
+                } else if member.isCurrentUser {
+                    Text("You").font(.caption)
+                } else {
+                    Image(systemName: member.canApprove ? "person.badge.minus" : "person.badge.plus")
+                }
+            }
+        }
+        .disabled(member.inheritedRoleAccess || member.isCurrentUser)
+    }
+
+    @MainActor private func load() async {
+        guard !isLoading else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            members = try await APIClient.shared.fetchRecoveryApprovers()
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct RecoveryApproverAccessView: View {
+    @Environment(\.dismiss) private var dismiss
+    let member: APIClient.RecoveryApproverMember
+    @State private var password = ""
+    @State private var isSaving = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Member") {
+                    Text(member.name ?? "Member").font(.headline)
+                    Text(member.email).foregroundStyle(.secondary)
+                }
+                Section {
+                    Text(member.canApprove
+                         ? "Remove this member’s ability to approve password recovery requests and manage other approvers. Pending approvals they issued will be invalidated."
+                         : "This member will be able to approve password recovery requests and add or remove other approvers. Their department role stays the same.")
+                    SecureField("Your current MTFD password", text: $password).textContentType(.password)
+                    if member.canApprove {
+                        Button("Remove Approver Access", role: .destructive) { Task { await save() } }
+                            .disabled(password.isEmpty || isSaving)
+                    } else {
+                        Button("Add Approver Access") { Task { await save() } }
+                            .disabled(password.isEmpty || isSaving)
+                    }
+                    if isSaving { ProgressView("Saving access…") }
+                    if let errorMessage { Text(errorMessage).foregroundStyle(.red) }
+                } header: { Text("Confirm access change") } footer: {
+                    Text("This change is recorded in the security audit log.")
+                }
+            }
+            .navigationTitle(member.canApprove ? "Remove Approver" : "Add Approver")
+            .navigationBarTitleDisplayMode(.inline)
+            .interactiveDismissDisabled(isSaving)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { password = ""; dismiss() }.disabled(isSaving)
+                }
+            }
+        }
+    }
+
+    @MainActor private func save() async {
+        guard !isSaving else { return }
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false; password = "" }
+        do {
+            try await APIClient.shared.setRecoveryApprover(userId: member.id, enabled: !member.canApprove, password: password)
+            dismiss()
+        } catch { errorMessage = error.localizedDescription }
     }
 }

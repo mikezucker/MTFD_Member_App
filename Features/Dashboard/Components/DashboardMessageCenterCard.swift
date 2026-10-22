@@ -58,6 +58,8 @@ struct DashboardMessageCenterCard: View {
                         .font(.caption.bold())
                         .foregroundStyle(AppTheme.gold.opacity(0.9))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -66,7 +68,11 @@ struct DashboardMessageCenterCard: View {
 
                 VStack(spacing: 10) {
                     ForEach(filteredMessages.prefix(4)) { message in
-                        messageRow(message)
+                        Button(action: onTap) {
+                            messageRow(message)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     if filteredMessages.isEmpty {
@@ -80,11 +86,20 @@ struct DashboardMessageCenterCard: View {
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.09))
+        .background {
+            Button(action: onTap) {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(0.09))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open messages")
+        }
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .allowsHitTesting(false)
         }
     }
 

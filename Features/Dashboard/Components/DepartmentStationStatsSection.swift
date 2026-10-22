@@ -61,6 +61,7 @@ struct DepartmentStationStatsSection: View {
     }
 }
 
+#if targetEnvironment(simulator)
 #Preview {
     ZStack {
         LinearGradient(
@@ -85,3 +86,4 @@ struct DepartmentStationStatsSection: View {
         .padding()
     }
 }
+#endif

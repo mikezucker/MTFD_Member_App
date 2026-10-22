@@ -89,10 +89,13 @@ struct VolunteerOfficerDashboardView: View {
                     Spacer(minLength: 0)
                 }
 
-                HStack(spacing: 8) {
-                    officerContextPill("Assigned Station")
-                    officerContextPill("Volunteer Officer")
-                    officerContextPill("Station View")
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        stationLeadershipActions
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        stationLeadershipActions
+                    }
                 }
             }
             .padding(16)
@@ -106,14 +109,27 @@ struct VolunteerOfficerDashboardView: View {
         }
     }
 
-    private func officerContextPill(_ text: String) -> some View {
-        Text(text)
-            .font(.caption.bold())
-            .foregroundStyle(AppTheme.navy)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(AppTheme.gold)
-            .clipShape(Capsule())
+    @ViewBuilder
+    private var stationLeadershipActions: some View {
+        officerAction("Work Orders", action: onOpenWorkOrders)
+        officerAction("Messages", action: onOpenMessages)
+        officerAction("Recent Calls", action: onOpenPastDispatches)
+    }
+
+    private func officerAction(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.bold())
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .foregroundStyle(AppTheme.navy)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 44)
+                .background(AppTheme.gold)
+                .clipShape(Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -126,47 +142,33 @@ struct VolunteerOfficerDashboardView: View {
             messagesSection
 
         case .scheduleEvents:
-            if isLoading || upcomingSchedule?.isWorkingNow == true || upcomingSchedule?.nextShift != nil {
-                scheduleSection
-            }
+            scheduleSection
 
         case .apparatusWorkOrders:
-            if isLoading || !workOrders.isEmpty {
-                workOrdersSection
-            }
+            workOrdersSection
 
         case .assignedTraining:
-            if isLoading || !assignedTraining.isEmpty {
-                trainingSection
-            }
+            trainingSection
 
         case .documents:
-            if isLoading || pendingDocuments > 0 {
-                documentsSection
-            }
+            documentsSection
 
         case .departmentUpdates:
-            if isLoading || !departmentUpdates.isEmpty {
-                updatesGroup(
-                    title: "Department Updates",
-                    emptyMessage: "No department updates posted.",
-                    updates: departmentUpdates
-                )
-            }
+            updatesGroup(
+                title: "Department Updates",
+                emptyMessage: "No department updates posted.",
+                updates: departmentUpdates
+            )
 
         case .stationUpdates:
-            if isLoading || !stationUpdates.isEmpty {
-                updatesGroup(
-                    title: "Station Updates",
-                    emptyMessage: "No station updates posted.",
-                    updates: stationUpdates
-                )
-            }
+            updatesGroup(
+                title: "Station Updates",
+                emptyMessage: "No station updates posted.",
+                updates: stationUpdates
+            )
 
         case .recentCalls:
-            if isLoading || !recentCalls.isEmpty {
-                pastDispatchesSection
-            }
+            pastDispatchesSection
 
         case .needsAttention:
             EmptyView()

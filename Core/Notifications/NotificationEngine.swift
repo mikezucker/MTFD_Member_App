@@ -30,6 +30,14 @@ struct NotificationEngine {
                 isCurrentlyWorking: isCurrentlyWorking
             )
 
+        case .dispatchClosed:
+            guard preferences.dispatchClosedAlertsEnabled else { return false }
+            return shouldNotifyDispatch(
+                payload: payload, preferences: preferences,
+                canUseScheduleBasedNotifications: canUseScheduleBasedNotifications,
+                isCurrentlyWorking: isCurrentlyWorking
+            )
+
         case .departmentMessage:
             guard preferences.departmentMessagesEnabled else {
                 print("🔕 Suppressed: department messages disabled")
@@ -71,6 +79,15 @@ struct NotificationEngine {
         }
     }
 
+    static func usesCriticalAlert(payload: AppNotificationPayload, preferences: NotificationPreferences) -> Bool {
+        guard payload.type == .dispatch || payload.type == .dispatchCritical,
+              preferences.criticalDispatchAlerts else { return false }
+        let callType = (payload.callType ?? "").uppercased()
+        let serious = ["WORKING FIRE", "STRUCTURE FIRE", "BUILDING FIRE", "CONFIRMED FIRE", "CARDIAC ARREST", "CHOKING"]
+            .contains { callType.contains($0) }
+        return payload.type == .dispatchCritical || serious || preferences.criticalDispatchAlertMode == .allDispatches
+    }
+
     private static func shouldNotifyDispatch(
         payload: AppNotificationPayload,
         preferences: NotificationPreferences,
@@ -78,21 +95,9 @@ struct NotificationEngine {
         isCurrentlyWorking: Bool
     ) -> Bool {
 
-        let isCriticalDispatch =
-            payload.type == .dispatchCritical ||
-            (
-                payload.type == .dispatch &&
-                preferences.criticalDispatchAlerts &&
-                preferences.criticalDispatchAlertMode == .allDispatches
-            )
+        let isCriticalDispatch = usesCriticalAlert(payload: payload, preferences: preferences)
 
         guard preferences.dispatchAlertsEnabled else {
-            print("🔕 Suppressed: dispatch alerts disabled")
-            return false
-        }
-
-        if isCriticalDispatch && !preferences.criticalDispatchAlerts {
-            print("🔕 Suppressed: critical dispatch alerts disabled")
             return false
         }
 
@@ -140,7 +145,8 @@ struct NotificationEngine {
                 payload.isWorkingFire ||
                 incomingType.contains("WORKING") ||
                 incomingType.contains("STRUCTURE FIRE") ||
-                incomingType.contains("BUILDING FIRE")
+                incomingType.contains("BUILDING FIRE") ||
+                incomingType.contains("CONFIRMED FIRE")
 
             if !isWorkingFire {
                 print("🔕 Suppressed: working fires only enabled")

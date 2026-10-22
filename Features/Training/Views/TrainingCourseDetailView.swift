@@ -1,4 +1,5 @@
 import AVKit
+import WebKit
 import SwiftUI
 
 struct TrainingCourseDetailView: View {
@@ -144,7 +145,9 @@ struct TrainingCourseDetailView: View {
                 emptyCard
             } else if let current = currentItem(in: detail) {
                 moduleProgressStrip(detail: detail, items: items, current: current)
-                TrainingPlayerContentCard(item: current)
+                TrainingPlayerContentCard(item: current, courseId: item.courseId,
+                    selfPaced: !["PRACTICAL_HANDS_ON", "PRACTICAL", "JPR_SKILL", "DRILL", "EMS_COMPETENCY", "CLASSROOM"].contains(detail.trainingType ?? ""),
+                    onLessonComplete: { await loadDetail(preserveSelection: true) })
 
                 if let completionMessage {
                     Label(completionMessage, systemImage: "checkmark.circle.fill")
@@ -440,9 +443,9 @@ struct TrainingCourseDetailView: View {
                         progressStatus: lesson.progressStatus,
                         completedAt: lesson.completedAt,
                         contentMd: lesson.contentMd,
-                        videoURL: APIClient.shared.absoluteURL(from: lesson.videoUrl),
-                        videoFileURL: nil,
-                        contentURL: APIClient.shared.absoluteURL(from: lesson.filePath),
+                        videoURL: lesson.videoUrl != nil && lesson.videoUrl?.lowercased().hasPrefix("http") != true ? APIClient.shared.absoluteURL(from: "/api/training/media?source=lesson&sourceId=\(lesson.id)&kind=video") : APIClient.shared.absoluteURL(from: lesson.videoUrl),
+                        videoFileURL: lesson.type?.uppercased() == "VIDEO" && lesson.filePath != nil ? APIClient.shared.absoluteURL(from: "/api/training/media?source=lesson&sourceId=\(lesson.id)") : nil,
+                        contentURL: lesson.type?.uppercased() != "VIDEO" && lesson.filePath != nil ? APIClient.shared.absoluteURL(from: "/api/training/media?source=lesson&sourceId=\(lesson.id)") : nil,
                         contentFileName: lesson.fileName,
                         skills: lesson.skills,
                         quizPrompt: lesson.quiz?.firstQuestionPrompt,
@@ -456,8 +459,8 @@ struct TrainingCourseDetailView: View {
             let objectives = module.objectives
                 .sorted(by: { $0.order < $1.order })
                 .map { objective in
-                    let requiresSignoff = (objective.objectiveType.uppercased() == "PRACTICAL" || objective.jprEnabled) &&
-                        detail.allowMemberObjectiveSelfCheckoff != true
+                    let requiresSignoff = (objective.objectiveType.uppercased() == "PRACTICAL" || objective.jprEnabled) ||
+                        detail.allowMemberObjectiveSelfCheckoff != true || ["PRACTICAL_HANDS_ON", "PRACTICAL", "JPR_SKILL", "DRILL", "EMS_COMPETENCY", "CLASSROOM"].contains(detail.trainingType ?? "")
                     let item = TrainingPlayerItem(
                         id: "objective-\(objective.id)",
                         sourceID: objective.id,
@@ -471,8 +474,8 @@ struct TrainingCourseDetailView: View {
                         completedAt: objective.completedAt,
                         contentMd: objective.contentMd ?? objective.instructions,
                         videoURL: APIClient.shared.absoluteURL(from: objective.videoUrl),
-                        videoFileURL: APIClient.shared.absoluteURL(from: objective.videoFilePath),
-                        contentURL: APIClient.shared.absoluteURL(from: objective.contentFilePath),
+                        videoFileURL: objective.videoFilePath != nil ? APIClient.shared.absoluteURL(from: "/api/training/media?source=objective&sourceId=\(objective.id)&kind=video") : nil,
+                        contentURL: objective.contentFilePath != nil ? APIClient.shared.absoluteURL(from: "/api/training/media?source=objective&sourceId=\(objective.id)&kind=content") : nil,
                         contentFileName: objective.contentFileName,
                         skills: [],
                         quizPrompt: nil,
@@ -487,7 +490,7 @@ struct TrainingCourseDetailView: View {
             items.append(contentsOf: objectives)
         }
 
-        return items
+        return items.filter { $0.subtitle != "Knowledge Check" } + items.filter { $0.subtitle == "Knowledge Check" }
     }
 
     private func currentItem(in detail: MobileTrainingCourseDetail) -> TrainingPlayerItem? {
@@ -590,6 +593,9 @@ struct TrainingCourseDetailView: View {
 
 private struct TrainingPlayerContentCard: View {
     let item: TrainingPlayerItem
+    let courseId: String
+    let selfPaced: Bool
+    let onLessonComplete: () async -> Void
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -628,8 +634,12 @@ private struct TrainingPlayerContentCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if let videoURL = item.videoURL ?? item.videoFileURL {
-                mediaPreview(url: videoURL, kind: .video)
+            if item.itemType == .lesson && selfPaced {
+                TrainingLessonActivityView(courseId: courseId, lessonId: item.sourceID, videoURL: item.videoURL ?? item.videoFileURL, onComplete: onLessonComplete)
+                    .id(item.id)
+            } else if let videoURL = item.videoURL ?? item.videoFileURL {
+                TrainingLessonVideoView(url: videoURL, resumeSeconds: 0, onPosition: { _ in })
+                    .id(item.id)
             }
 
             if let contentURL = item.contentURL {
@@ -782,9 +792,7 @@ private struct TrainingPlayerContentCard: View {
                 }
             }
         case .video:
-            VideoPlayer(player: AVPlayer(url: url))
-                .frame(minHeight: 220)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            TrainingLessonVideoView(url: url, resumeSeconds: 0, onPosition: { _ in })
         case .document:
             openButton(url: url, title: item.contentFileName ?? "Open Document", systemImage: "doc.text.fill")
         case .link:
@@ -794,7 +802,9 @@ private struct TrainingPlayerContentCard: View {
 
     private func openButton(url: URL, title: String, systemImage: String) -> some View {
         Button {
-            openURL(url)
+            Task {
+                if let resolved = try? await APIClient.shared.trainingMediaURL(url) { openURL(resolved) }
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
@@ -850,7 +860,7 @@ private struct TrainingPlayerItem: Identifiable {
     }
 
     var canMarkComplete: Bool {
-        !isComplete && !requiresInstructorSignoff
+        !isComplete && !requiresInstructorSignoff && itemType == .objective
     }
 
     var shortTypeLabel: String {
@@ -895,6 +905,7 @@ private struct TrainingPlayerItem: Identifiable {
 
     var completeButtonTitle: String {
         if isComplete { return "Completed" }
+        if itemType == .lesson { return subtitle == "Knowledge Check" ? "Take Test Above" : "Complete Above" }
         if requiresInstructorSignoff { return "Needs Sign-Off" }
         return "Mark Complete"
     }
@@ -980,5 +991,240 @@ private struct DetailMetric: View {
         .padding(12)
         .background(Color.white.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+// One persistent player per lesson; bookmarks use the same server record as the website.
+private struct TrainingLessonVideoView: View {
+    let url: URL
+    let resumeSeconds: Int
+    let onPosition: (Int) -> Void
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var player: AVPlayer?
+    @State private var observer: Any?
+    @State private var error: String?
+
+    private var isHostedPage: Bool {
+        !["mp4", "mov", "m4v", "webm", "m3u8"].contains(url.pathExtension.lowercased()) && !url.path.hasPrefix("/api/")
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let videoID = TrainingYouTubeVideoView.videoID(url) {
+                TrainingYouTubeVideoView(videoID: videoID, resumeSeconds: resumeSeconds, onPosition: onPosition)
+                    .frame(minHeight: 240)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Text("Video supplied by its YouTube publisher. Use the player controls for captions and full screen.").font(.caption).foregroundStyle(.secondary)
+            } else if isHostedPage {
+                Link("Watch on video provider website", destination: url)
+            } else if let player {
+                VideoPlayer(player: player)
+                    .frame(minHeight: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Text("Playback position saves while you watch. Use the player controls for available captions.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if let error {
+                Text(error).font(.caption).foregroundStyle(.orange)
+            } else {
+                ProgressView("Opening video…")
+            }
+        }
+        .task(id: url) {
+            guard TrainingYouTubeVideoView.videoID(url) == nil, !isHostedPage else { return }
+            do {
+                let mediaURL = try await APIClient.shared.trainingMediaURL(url)
+                guard !Task.isCancelled else { return }
+                let newPlayer = AVPlayer(url: mediaURL)
+                await newPlayer.seek(to: CMTime(seconds: Double(resumeSeconds), preferredTimescale: 600))
+                player = newPlayer
+                observer = newPlayer.addPeriodicTimeObserver(forInterval: CMTime(seconds: 10, preferredTimescale: 600), queue: .main) { time in
+                    if time.seconds.isFinite { onPosition(max(0, Int(time.seconds))) }
+                }
+            } catch { self.error = error.localizedDescription }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { savePosition(); player?.pause() }
+        }
+        .onDisappear {
+            savePosition()
+            player?.pause()
+            if let observer { player?.removeTimeObserver(observer) }
+            observer = nil
+            player = nil
+        }
+    }
+    private func savePosition() {
+        if let seconds = player?.currentTime().seconds, seconds.isFinite { onPosition(max(0, Int(seconds))) }
+    }
+}
+
+private struct TrainingLessonActivityView: View {
+    let courseId: String
+    let lessonId: String
+    let videoURL: URL?
+    let onComplete: () async -> Void
+    @State private var snapshot: TrainingLessonSnapshot?
+    @State private var attemptID: String?
+    @State private var expiresAt: Date?
+    @State private var answers: [String: Set<String>] = [:]
+    @State private var result: TrainingLessonActionResponse?
+    @State private var error: String?
+    @State private var busy = false
+    @State private var savingPosition = false
+    @State private var position = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let error { Text(error).font(.subheadline).foregroundStyle(.orange) }
+            if let snapshot {
+                if let videoURL {
+                    TrainingLessonVideoView(url: videoURL, resumeSeconds: snapshot.lastPositionSeconds) { seconds in
+                        position = seconds
+                        Task { await savePosition(seconds) }
+                    }
+                }
+                if let quiz = snapshot.quiz {
+                    Text("Course Test").font(.title3.bold())
+                    Text("Pass mark: \(quiz.passingScorePercent)%" + (quiz.timeLimitSeconds.map { " · \(($0 + 59) / 60) minute limit" } ?? ""))
+                        .font(.subheadline)
+                    if let limit = quiz.attemptLimit { Text("Attempts used: \(quiz.attemptsUsed ?? 0) of \(limit). Contact your instructor if all attempts are used.").font(.caption) }
+                    if quiz.passed { Label("Test passed · \(quiz.scorePercent ?? 0)%", systemImage: "checkmark.seal.fill").foregroundStyle(AppTheme.gold) }
+                    if let result {
+                        Text("\(result.expired == true ? "Time expired" : result.passed == true ? "Passed" : "Not passed") · \(result.scorePercent ?? 0)%\(result.passed == true ? " — result saved" : " — review the lessons and try again")")
+                            .font(.subheadline.bold()).foregroundStyle(result.passed == true ? AppTheme.gold : .orange)
+                    }
+                    if attemptID == nil {
+                        Button(quiz.passed ? "Retake Test" : "Start Test") { Task { await startTest() } }
+                            .buttonStyle(.borderedProminent).tint(AppTheme.gold).disabled(busy)
+                        Text("Complete the learning material before starting.").font(.caption)
+                    } else {
+                        if let expiresAt { Text("Submit by \(expiresAt.formatted(date: .omitted, time: .shortened)). Leaving does not stop the timer.").font(.caption) }
+                        ForEach(Array(quiz.questions.enumerated()), id: \.element.id) { index, question in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("\(index + 1). \(question.prompt)").font(.headline)
+                                if question.type == "MULTI_CHOICE" { Text("Select all that apply.").font(.caption) }
+                                ForEach(question.options) { option in
+                                    Button {
+                                        if question.type == "MULTI_CHOICE" {
+                                            var selected = answers[question.id] ?? []
+                                            if selected.contains(option.id) { selected.remove(option.id) } else { selected.insert(option.id) }
+                                            answers[question.id] = selected
+                                        } else { answers[question.id] = [option.id] }
+                                    } label: {
+                                        HStack(alignment: .top, spacing: 10) {
+                                            Image(systemName: answers[question.id]?.contains(option.id) == true ? "checkmark.circle.fill" : "circle")
+                                            Text(option.text).multilineTextAlignment(.leading)
+                                            Spacer(minLength: 0)
+                                        }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                                    }.buttonStyle(.bordered).tint(AppTheme.gold)
+                                }
+                            }
+                        }
+                        Button(busy ? "Submitting…" : "Submit Test") { Task { await submitTest(quiz) } }
+                            .buttonStyle(.borderedProminent).tint(AppTheme.gold)
+                            .disabled(busy || quiz.questions.contains { answers[$0.id]?.isEmpty != false })
+                    }
+                } else if snapshot.status == "COMPLETED" {
+                    Label("Lesson complete", systemImage: "checkmark.circle.fill").foregroundStyle(AppTheme.gold)
+                } else {
+                    Button(busy ? "Saving…" : "Mark Lesson Complete") { Task { await completeLesson() } }
+                        .buttonStyle(.borderedProminent).tint(AppTheme.gold).disabled(busy)
+                }
+            } else {
+                Button("Load Lesson") { Task { await load() } }.disabled(busy)
+            }
+        }
+        .task { await load() }
+    }
+    @MainActor private func load() async {
+        do {
+            let response = try await APIClient.shared.fetchTrainingLesson(courseId: courseId, lessonId: lessonId)
+            guard response.success, let lesson = response.lesson else { throw APIClient.APIError.serverError(statusCode: 400, message: response.error ?? "Unable to load lesson.") }
+            snapshot = lesson; position = lesson.lastPositionSeconds; error = nil
+        } catch { self.error = error.localizedDescription }
+    }
+    @MainActor private func savePosition(_ seconds: Int) async {
+        guard !savingPosition else { return }
+        savingPosition = true
+        defer { savingPosition = false }
+        do {
+            _ = try await APIClient.shared.trainingLessonAction(courseId: courseId, lessonId: lessonId, action: TrainingLessonAction(action: "progress", positionSeconds: seconds))
+        } catch { self.error = "Playback position was not saved. \(error.localizedDescription)" }
+    }
+    @MainActor private func completeLesson() async {
+        busy = true; defer { busy = false }
+        do {
+            let response = try await APIClient.shared.trainingLessonAction(courseId: courseId, lessonId: lessonId, action: TrainingLessonAction(action: "progress", positionSeconds: position, complete: true))
+            guard response.success else { throw APIClient.APIError.serverError(statusCode: 400, message: response.error ?? "Unable to save lesson.") }
+            await load(); await onComplete()
+        } catch { self.error = error.localizedDescription }
+    }
+    @MainActor private func startTest() async {
+        busy = true; defer { busy = false }
+        do {
+            let response = try await APIClient.shared.trainingLessonAction(courseId: courseId, lessonId: lessonId, action: TrainingLessonAction(action: "startQuiz"))
+            guard response.success, let id = response.attemptId else { throw APIClient.APIError.serverError(statusCode: 400, message: response.error ?? "Unable to start test.") }
+            attemptID = id; expiresAt = response.expiresAt; answers = [:]; result = nil; error = nil
+            await load()
+        } catch { self.error = error.localizedDescription }
+    }
+    @MainActor private func submitTest(_ quiz: TrainingLearnerQuiz) async {
+        guard let attemptID else { return }
+        busy = true; defer { busy = false }
+        do {
+            let response = try await APIClient.shared.trainingLessonAction(courseId: courseId, lessonId: lessonId, action: TrainingLessonAction(action: "submitQuiz", attemptId: attemptID, answers: quiz.questions.map { TrainingLessonAnswer(questionId: $0.id, selectedOptionIds: Array(answers[$0.id] ?? [])) }))
+            guard response.success else { throw APIClient.APIError.serverError(statusCode: 400, message: response.error ?? "Unable to submit test.") }
+            self.attemptID = nil; result = response; error = nil
+            await load()
+            if response.passed == true { await onComplete() }
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct TrainingYouTubeVideoView: UIViewRepresentable {
+    let videoID: String
+    let resumeSeconds: Int
+    let onPosition: (Int) -> Void
+
+    static func videoID(_ url: URL) -> String? {
+        let host = url.host?.lowercased() ?? ""
+        let value: String?
+        if host == "youtu.be" { value = url.pathComponents.dropFirst().first }
+        else if ["youtube.com", "www.youtube.com", "m.youtube.com", "youtube-nocookie.com", "www.youtube-nocookie.com"].contains(host) {
+            value = url.path == "/watch" ? URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "v" })?.value : ["embed", "shorts"].contains(url.pathComponents.dropFirst().first ?? "") ? url.pathComponents.dropFirst(2).first : nil
+        } else { value = nil }
+        guard let value, value.range(of: "^[A-Za-z0-9_-]{11}$", options: .regularExpression) != nil else { return nil }
+        return value
+    }
+    func makeCoordinator() -> Coordinator { Coordinator(onPosition: onPosition) }
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlineMediaPlayback = true
+        configuration.mediaTypesRequiringUserActionForPlayback = [.audio, .video]
+        configuration.userContentController.add(context.coordinator, name: "trainingPosition")
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        view.scrollView.isScrollEnabled = false
+        let html = """
+        <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="strict-origin-when-cross-origin"><style>html,body,#player{margin:0;width:100%;height:100%;background:#000;color:#fff;font:16px sans-serif}a{color:#ffc107}</style></head><body><div id="player"></div><script>
+        var player;function save(){if(player&&[0,1,2].includes(player.getPlayerState())){var t=player.getCurrentTime();if(Number.isFinite(t))window.webkit.messageHandlers.trainingPosition.postMessage(Math.floor(t));}}
+        function onYouTubeIframeAPIReady(){player=new YT.Player('player',{host:'https://www.youtube-nocookie.com',videoId:'\(videoID)',playerVars:{playsinline:1,start:\(max(0,resumeSeconds)),cc_load_policy:1,rel:0},events:{onStateChange:save,onReady:function(){setInterval(function(){if(player.getPlayerState()===1)save();},10000)},onError:function(){document.getElementById('player').innerHTML='<p>Embedded playback unavailable.</p><a href="https://www.youtube.com/watch?v=\(videoID)">Open publisher video</a>';}}});}document.addEventListener('visibilitychange',save);
+        </script><script src="https://www.youtube.com/iframe_api"></script></body></html>
+        """
+        // YouTube requires client identification for WebView embeds. No member tokens enter this document.
+        let bundleID = (Bundle.main.bundleIdentifier ?? "org.mtfd.members").lowercased()
+        view.loadHTMLString(html, baseURL: URL(string: "https://\(bundleID)"))
+        return view
+    }
+    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: "trainingPosition")
+        uiView.loadHTMLString("", baseURL: nil)
+    }
+    final class Coordinator: NSObject, WKScriptMessageHandler {
+        let onPosition: (Int) -> Void
+        init(onPosition: @escaping (Int) -> Void) { self.onPosition = onPosition }
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.frameInfo.isMainFrame, let number = message.body as? NSNumber, number.doubleValue.isFinite, number.doubleValue >= 0, number.doubleValue <= 86400 else { return }
+            onPosition(number.intValue)
+        }
     }
 }
