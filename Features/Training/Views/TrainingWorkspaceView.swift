@@ -10,6 +10,7 @@ struct TrainingView: View {
     @State private var creating = false
     @State private var refreshing = false
     @State private var showingMyTraining = false
+    @State private var navigationID = UUID()
 
     var body: some View {
         Group {
@@ -27,7 +28,7 @@ struct TrainingView: View {
                                             GuidedInstructorHome(workspace: home)
                                             Button("My Training") { showingMyTraining = true }.buttonStyle(WorkspaceActionStyle())
                                         } else {
-                                        if home.guidedEnabled == true && home.canManage { Button("Instructor Training") { showingMyTraining = false }.buttonStyle(WorkspaceActionStyle()) }
+                                        if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
                                         trainingTabs
                                         if tab == "My JPR Results" { GuidedMemberResults() } else {
                                         if home.guidedEnabled == true { NavigationLink("My Skills Progress & Upcoming Training") { GuidedSkillsView() }.buttonStyle(WorkspaceActionStyle()) }
@@ -47,7 +48,7 @@ struct TrainingView: View {
                                         }
                                         ForEach(shownCourses) { course in
                                             NavigationLink {
-                                                if course.delivery == "LEGACY" && course.archived != true { TrainingCourseDetailView(item: course.legacyItem) }
+                                                if course.delivery == "LEGACY" && course.archived != true { TrainingCourseDetailView(item: course.legacyItem).trainingDestinationNavigation() }
                                                 else { WorkspaceCourseView(course: course, members: home.members, manage: false) }
                                             } label: { WorkspaceCourseCard(course: course) }.buttonStyle(.plain)
                                         }
@@ -77,8 +78,16 @@ struct TrainingView: View {
                     .task { await load() }
                     .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: home?.members ?? []) } }
                 }
+                .id(navigationID)
+                .environment(\.trainingHomeAction, { returnToTrainingHome() })
             }
         }
+    }
+    private func returnToTrainingHome() {
+        showingMyTraining = false
+        tab = home?.guidedEnabled == true ? "Required Training" : "To Do"
+        search = ""
+        navigationID = UUID()
     }
     private var headerStats: [TrainingHeaderStat] {
         guard let home else { return [] }
@@ -129,6 +138,40 @@ struct TrainingView: View {
         catch let failure where APIClient.isRequestCancellation(failure) { }
         catch APIClient.APIError.serverError(let code, _) where code == 404 { useLegacy = true }
         catch { self.error = error.localizedDescription }
+    }
+}
+
+
+// Pushed training screens opt back into navigation; only the tab root hides its bar.
+private struct TrainingHomeActionKey: EnvironmentKey {
+    static let defaultValue: (() -> Void)? = nil
+}
+private extension EnvironmentValues {
+    var trainingHomeAction: (() -> Void)? {
+        get { self[TrainingHomeActionKey.self] }
+        set { self[TrainingHomeActionKey.self] = newValue }
+    }
+}
+private struct TrainingDestinationNavigation: ViewModifier {
+    @Environment(\.trainingHomeAction) private var goHome
+    let blocked: Bool
+    func body(content: Content) -> some View {
+        content
+            .toolbar(.visible, for: .navigationBar)
+            .toolbar {
+                if let goHome {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(action: goHome) { Label("Training Home", systemImage: "house.fill") }
+                            .disabled(blocked)
+                            .accessibilityIdentifier("training-home")
+                    }
+                }
+            }
+    }
+}
+private extension View {
+    func trainingDestinationNavigation(blocked: Bool = false) -> some View {
+        modifier(TrainingDestinationNavigation(blocked: blocked))
     }
 }
 
@@ -203,6 +246,7 @@ private struct WorkspaceInstructorCourses: View {
                 }.padding(16)
             }
         }
+        .trainingDestinationNavigation()
     }
     private func workspaceSummary(_ c: TrainingWorkspaceManagedCourse) -> TrainingWorkspaceCourse {
         TrainingWorkspaceCourse(id: c.id, title: c.title, description: nil, delivery: c.delivery, archived: false, assigned: false, progressStatus: "NOT_STARTED", completedAt: nil, dueAt: nil, durationMinutes: nil, creditedMinutes: 0, pendingForm: false)
@@ -248,6 +292,7 @@ private struct WorkspaceCourseView: View {
                 }.padding(16).padding(.bottom, 20)
             }.refreshable { await load() }
         }
+        .trainingDestinationNavigation(blocked: busy)
         .tint(AppTheme.gold).environment(\.colorScheme, .dark)
         .sheet(isPresented: $editing, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: members, courseId: course.id) } }
         .disabled(busy)
@@ -315,7 +360,7 @@ private struct WorkspaceCourseView: View {
             } else if c.delivery == "CBT" {
                 WorkspacePanel(c.progressStatus == "COMPLETED" ? "Course material" : "Your next step") {
                     Text("Work through the course material, then take the required quiz. Your progress saves as you go.").font(.subheadline).foregroundStyle(.white.opacity(0.75))
-                    NavigationLink { TrainingCourseDetailView(item: course.legacyItem) } label: { Label(c.progressStatus == "COMPLETED" ? "Review course" : "Start / resume course", systemImage: "play.circle.fill").frame(maxWidth: .infinity) }.buttonStyle(WorkspaceActionStyle(primary: true))
+                    NavigationLink { TrainingCourseDetailView(item: course.legacyItem).trainingDestinationNavigation() } label: { Label(c.progressStatus == "COMPLETED" ? "Review course" : "Start / resume course", systemImage: "play.circle.fill").frame(maxWidth: .infinity) }.buttonStyle(WorkspaceActionStyle(primary: true))
                 }
             } else {
                 WorkspacePanel("Practical training") {
@@ -709,6 +754,11 @@ private struct GuidedInstructorHome: View {
             if let error { WorkspaceNotice(message: error, warning: true); if home == nil { Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) } }
             if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
             if let home {
+                if mode != "catalog" {
+                    Button { mode = "catalog" } label: { Label("Training Home", systemImage: "house.fill") }
+                        .buttonStyle(WorkspaceActionStyle())
+                        .accessibilityIdentifier("training-home")
+                }
                 if mode == "catalog" { catalog(home) }
                 else if mode == "home" {
                     Text("My Shift’s Training").font(.title2.bold())
@@ -771,7 +821,6 @@ private struct GuidedInstructorHome: View {
                     }
                     if mode == "schedule" { Button("+ Schedule Training") { begin(); scheduled = true }.buttonStyle(WorkspaceActionStyle()) }
                 }
-                if mode != "catalog" { Button("Back to Course Catalog") { mode = "catalog" }.buttonStyle(WorkspaceActionStyle()) }
             } else if error == nil { ProgressView("Loading training…") }
             Text("Online connection required. Confirmed saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary)
         }.disabled(busy).task { await load() }
@@ -867,7 +916,8 @@ private struct GuidedSessionView: View {
                     } else if error == nil { ProgressView("Loading saved session…") }
                 }.padding(16)
             }
-        }.navigationBarBackButtonHidden(busy || pending != nil || commentDraft != nil || durationDirty)
+        }.trainingDestinationNavigation(blocked: busy || pending != nil || commentDraft != nil || durationDirty)
+        .navigationBarBackButtonHidden(busy || pending != nil || commentDraft != nil || durationDirty)
         .interactiveDismissDisabled(busy || pending != nil || commentDraft != nil || durationDirty)
         .task { await load() }
         .alert("Reload last saved session?", isPresented: $confirmReload) { Button("Cancel",role:.cancel) {}; Button("Discard unconfirmed change",role:.destructive) { pending = nil; Task { await load() } } } message: { Text("Only confirmed saved work will be restored.") }
@@ -1049,7 +1099,7 @@ private struct GuidedLibraryView:View {
             if let library {ForEach(library.versions.filter{courseId.isEmpty || $0.courseId==courseId}){version in
                 Button{selected=version}label:{WorkspaceToolRow(title:version.content.title,subtitle:"Revision \(version.revision) · \(version.status=="APPROVED" ? "Approved" : "Draft — review required")",icon:"doc.text")}.buttonStyle(.plain)
             }}else if error==nil{ProgressView()}
-        }.padding(16)}.navigationTitle("JPR management").disabled(busy).task{await load()}
+        }.padding(16)}.navigationTitle("JPR management").trainingDestinationNavigation(blocked: busy).disabled(busy).task{await load()}
         .fileImporter(isPresented:$importing,allowedContentTypes:[UTType(filenameExtension:"docx") ?? .data],allowsMultipleSelection:true){result in
             switch result{case .success(let urls):Task{for url in urls {await upload(url)}};case .failure(let error):self.error=error.localizedDescription}
         }
@@ -1174,7 +1224,7 @@ private struct GuidedSkillsView: View {
             }.padding(16)
         }.refreshable { await load() }
         }.foregroundStyle(.white)
-        }.navigationTitle(home == nil ? "My Skills" : "Crew Skills").navigationBarTitleDisplayMode(.inline).tint(AppTheme.gold).environment(\.colorScheme, .dark).disabled(busy).task { await load() }
+        }.navigationTitle(home == nil ? "My Skills" : "Crew Skills").trainingDestinationNavigation(blocked: busy).navigationBarTitleDisplayMode(.inline).tint(AppTheme.gold).environment(\.colorScheme, .dark).disabled(busy).task { await load() }
     }
     private func assignmentForm(_ home: GuidedHome) -> some View {
         VStack(alignment: .leading, spacing: 14) {
