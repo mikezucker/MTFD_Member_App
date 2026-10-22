@@ -996,6 +996,7 @@ struct TrainingHeaderStat: Identifiable {
     let label: String
     let value: String
     var isWarning = false
+    var accent: Color? = nil
 }
 
 // A shared visual language for the native training screens.
@@ -1003,6 +1004,9 @@ enum TrainingVisualStyle {
     static let blue = Color(red: 42/255, green: 131/255, blue: 198/255)
     static let surface = Color(red: 12/255, green: 38/255, blue: 72/255)
     static let raised = Color(red: 18/255, green: 52/255, blue: 91/255)
+    static let cyan = Color(red: 114/255, green: 217/255, blue: 255/255)
+    static let orange = Color(red: 255/255, green: 183/255, blue: 128/255)
+    static let lavender = Color(red: 181/255, green: 171/255, blue: 255/255)
     static let mint = Color(red: 102/255, green: 221/255, blue: 178/255)
     static func symbol(for title: String) -> String {
         let text = title.lowercased()
@@ -1012,6 +1016,28 @@ enum TrainingVisualStyle {
         if text.contains("driver") || text.contains("apparatus") { return "steeringwheel" }
         if text.contains("fire") { return "flame.fill" }
         return "checkmark.shield.fill"
+    }
+}
+
+// Use the same full-color emoji icon language as AppIcon elsewhere in the app.
+struct TrainingColorIcon: View {
+    let symbol: String
+    var size: CGFloat = 30
+    var body: some View {
+        Group {
+            switch symbol {
+            case "figure.climbing": Text("🪜").font(.system(size: size))
+            case "water.waves": Text("💧").font(.system(size: size))
+            case "steeringwheel": AppIcon(.dispatch, size: size, frameSize: size + 8)
+            case "books.vertical.fill": Text("📚").font(.system(size: size))
+            case "person.2.badge.gearshape.fill": AppIcon(.officer, size: size, frameSize: size + 8)
+            case "checkmark.seal.fill": Text("✅").font(.system(size: size))
+            case "checkmark.shield.fill": Text("🛡️").font(.system(size: size))
+            case "play.rectangle.fill": Text("🎬").font(.system(size: size))
+            case "clock", "chevron.right": Text("⏱️").font(.system(size: size))
+            default: AppIcon(systemImage: symbol, size: size, frameSize: size + 8)
+            }
+        }.frame(width: size + 8, height: size + 8).accessibilityHidden(true)
     }
 }
 
@@ -1027,32 +1053,30 @@ struct TrainingScreenHeader: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center, spacing: 14) {
                 if !dynamicTypeSize.isAccessibilitySize {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 25, weight: .semibold))
-                        .foregroundStyle(AppTheme.gold)
+                    TrainingColorIcon(symbol: systemImage, size: 32)
                         .frame(width: 54, height: 60)
-                        .background(AppTheme.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: 17))
-                        .overlay { RoundedRectangle(cornerRadius: 17).stroke(AppTheme.gold.opacity(0.3), lineWidth: 1) }
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 17))
+                        .overlay { RoundedRectangle(cornerRadius: 17).stroke(Color.white.opacity(0.1), lineWidth: 1) }
                         .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 5) {
                     Text("MTFD · TRAINING DIVISION")
                         .font(.caption2.weight(.bold)).tracking(1.5)
-                        .foregroundStyle(AppTheme.gold).fixedSize(horizontal: false, vertical: true)
+                        .foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
                     Text(title).font(.system(.title, design: .rounded, weight: .bold))
                         .foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     Text(subtitle).font(.subheadline)
                         .foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                if isRefreshing { ProgressView().tint(AppTheme.gold).accessibilityLabel("Refreshing training") }
+                if isRefreshing { ProgressView().tint(TrainingVisualStyle.cyan).accessibilityLabel("Refreshing training") }
             }
             if !stats.isEmpty {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: dynamicTypeSize.isAccessibilitySize ? 1 : min(stats.count, 3)), spacing: 8) {
                     ForEach(stats) { stat in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(stat.value).font(.system(.title3, design: .rounded, weight: .bold)).monospacedDigit()
-                                .foregroundStyle(stat.isWarning ? .orange : AppTheme.gold)
+                                .foregroundStyle(stat.isWarning ? .orange : (stat.accent ?? TrainingVisualStyle.cyan))
                             Text(stat.label).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.75))
                         }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
                             .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13))
@@ -1062,8 +1086,8 @@ struct TrainingScreenHeader: View {
             }
         }
         .padding(.horizontal, 18).padding(.vertical, 18)
-        .background(LinearGradient(colors: [TrainingVisualStyle.raised, AppTheme.navy], startPoint: .topLeading, endPoint: .bottomTrailing))
-        .overlay(alignment: .bottom) { Rectangle().fill(LinearGradient(colors: [AppTheme.gold, TrainingVisualStyle.blue.opacity(0.3), .clear], startPoint: .leading, endPoint: .trailing)).frame(height: 2) }
+        .background(AppTheme.navy)
+        .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
     }
 }
 
