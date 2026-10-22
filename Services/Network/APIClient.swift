@@ -331,6 +331,25 @@ final class APIClient {
         return try decode(WorkspaceUploadResponse.self, from: await performRequest(request))
     }
 
+    func uploadGuidedJPR(data: Data, fileName: String, courseId: String) async throws -> GuidedImport {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let name = fileName.replacingOccurrences(of: "\"", with: "_").replacingOccurrences(of: "\r", with: "_").replacingOccurrences(of: "\n", with: "_")
+        var body = Data()
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"courseId\"\r\n\r\n\(courseId)\r\n")
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\nContent-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document\r\n\r\n")
+        body.append(data); body.append("\r\n--\(boundary)--\r\n")
+        var request = try makeRequest(path: "/api/training/workspace/jprs", method: "POST", body: body, requiresAuth: true)
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        return try decode(GuidedImport.self, from: await performRequest(request))
+    }
+
+    func guidedJPRPrint(_ versionId: String) async throws -> String {
+        let request = try makeRequest(path: "/api/training/workspace/jprs/\(versionId)/print", method: "GET", requiresAuth: true)
+        let data = try await performRequest(request)
+        guard let html = String(data: data, encoding: .utf8) else { throw APIError.invalidResponse }
+        return html
+    }
+
     // MARK: - Training
 
     func fetchTraining() async throws -> MobileTrainingResponse {

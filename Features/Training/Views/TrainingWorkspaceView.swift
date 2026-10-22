@@ -9,6 +9,7 @@ struct TrainingView: View {
     @State private var search = ""
     @State private var creating = false
     @State private var refreshing = false
+    @State private var showingMyTraining = false
 
     var body: some View {
         Group {
@@ -17,12 +18,18 @@ struct TrainingView: View {
                 NavigationStack {
                     AppScreen(title: "") {
                         VStack(spacing: 0) {
-                            TrainingScreenHeader(title: "Training", subtitle: "Courses, practical training, and earned hours.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats)
+                            TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training", subtitle: "Courses, practical training, and earned hours.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats)
                             ScrollView {
                                 VStack(alignment: .leading, spacing: 18) {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
+                                        if home.guidedEnabled == true && home.canManage && !showingMyTraining {
+                                            GuidedInstructorHome(workspace: home)
+                                            Button("My Training") { showingMyTraining = true }.buttonStyle(WorkspaceActionStyle())
+                                        } else {
+                                        if home.guidedEnabled == true && home.canManage { Button("Instructor Training") { showingMyTraining = false }.buttonStyle(WorkspaceActionStyle()) }
                                         trainingTabs
+                                        if tab == "My JPR Results" { GuidedMemberResults() } else {
                                         HStack(spacing: 10) {
                                             Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.55))
                                             TextField("Search courses", text: $search).foregroundStyle(.white).autocorrectionDisabled()
@@ -55,7 +62,9 @@ struct TrainingView: View {
                                                 }.buttonStyle(.plain)
                                             }
                                         }
-                                        if home.canManage { instructorTools(home) }
+                                        }
+                                        if home.canManage && home.guidedEnabled != true { instructorTools(home) }
+                                        }
                                     } else if error == nil { ProgressView("Loading training…").tint(AppTheme.gold).frame(maxWidth: .infinity).padding(32) }
                                 }.padding(.horizontal, 16).padding(.vertical, 16).padding(.bottom, 20)
                             }.refreshable { await load() }
@@ -76,19 +85,19 @@ struct TrainingView: View {
     }
     private var shownCourses: [TrainingWorkspaceCourse] {
         (home?.courses ?? []).filter { course in
-            (search.isEmpty || course.title.localizedCaseInsensitiveContains(search)) && (tab == "Catalog" ? !course.assigned : course.assigned && (tab == "Completed" ? course.progressStatus == "COMPLETED" : course.progressStatus != "COMPLETED"))
+            (search.isEmpty || course.title.localizedCaseInsensitiveContains(search)) && (tab == "Catalog" ? !course.assigned : course.assigned && (tab == "Completed" ? course.progressStatus == "COMPLETED" : course.progressStatus != "COMPLETED" && (tab != "In Progress" || course.progressStatus == "IN_PROGRESS")))
         }.sorted { left, right in
             if tab == "Completed" { return (left.completedAt ?? .distantPast) > (right.completedAt ?? .distantPast) }
             return (left.dueAt ?? .distantFuture) < (right.dueAt ?? .distantFuture)
         }
     }
     private var trainingTabs: some View {
-        HStack(spacing: 4) {
-            ForEach(["To Do", "Completed", "Catalog"], id: \.self) { value in
+        ScrollView(.horizontal, showsIndicators: false) { HStack(spacing: 4) {
+            ForEach(home?.guidedEnabled == true ? ["Required Training", "In Progress", "Completed", "My JPR Results", "Catalog"] : ["To Do", "Completed", "Catalog"], id: \.self) { value in
                 Button { tab = value } label: { Text(value).font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12).foregroundStyle(tab == value ? AppTheme.navy : .white.opacity(0.78)).background(tab == value ? AppTheme.gold : Color.clear, in: RoundedRectangle(cornerRadius: 12)) }
                     .buttonStyle(.plain).accessibilityAddTraits(tab == value ? .isSelected : [])
             }
-        }.padding(4).background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+        }.padding(4).background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16)) }
     }
     private func sectionHeading(_ title: String, subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 4) { Text(title).font(.title3.bold()).foregroundStyle(.white); Text(subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.65)) }
@@ -108,7 +117,7 @@ struct TrainingView: View {
         guard !refreshing else { return }
         refreshing = true
         defer { refreshing = false }
-        do { let result: TrainingWorkspaceHome = try await APIClient.shared.trainingWorkspace(); home = result; error = nil }
+        do { let result: TrainingWorkspaceHome = try await APIClient.shared.trainingWorkspace(); home = result; if result.guidedEnabled == true && tab == "To Do" { tab = "Required Training" }; error = nil }
         catch is CancellationError { }
         catch let failure as URLError where failure.code == .cancelled { }
         catch APIClient.APIError.serverError(let code, _) where code == 404 { useLegacy = true }
@@ -607,5 +616,337 @@ private extension View {
         self.textFieldStyle(.plain).foregroundStyle(.white).padding(12)
             .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
             .overlay { RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.12), lineWidth: 1) }
+    }
+}
+
+// Guided training is online-only. Each observation is confirmed by the server
+// before navigation is enabled; failed requests remain available for retry.
+private struct GuidedInstructorHome: View {
+    let workspace: TrainingWorkspaceHome
+    @State private var home: GuidedHome?
+    @State private var mode = "home"
+    @State private var search = ""
+    @State private var topic: GuidedTopic?
+    @State private var selected = Set<String>()
+    @State private var activeSession: String?
+    @State private var requestId = UUID().uuidString
+    @State private var error: String?
+    @State private var busy = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } } }
+            if let home {
+                if mode == "home" {
+                    ForEach([("start","Start Training","Choose a topic and participants"),("continue","Continue Training","Resume saved work"),("history","Training History","Review completed training")], id: \.0) { item in
+                        Button { mode = item.0; search = "" } label: { WorkspaceToolRow(title: item.1, subtitle: item.2, icon: item.0 == "start" ? "play.fill" : item.0 == "continue" ? "arrow.clockwise" : "clock.fill") }.buttonStyle(.plain)
+                    }
+                    NavigationLink("Training management") { WorkspaceInstructorCourses(home: workspace) }
+                    if home.canCreate { NavigationLink("JPR management · Import Word") { GuidedLibraryView(workspace: workspace) } }
+                } else if mode == "start" {
+                    Text("What are we training on?").font(.title2.bold())
+                    TextField("Search training topics", text: $search).textFieldStyle(.roundedBorder)
+                    ForEach(home.topics.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { item in
+                        Button { topic = item; mode = "participants"; search = "" } label: { WorkspaceToolRow(title: item.title, subtitle: "\(item.jprs.count) approved JPRs · \(item.durationMinutes) minutes", icon: "chevron.right") }.buttonStyle(.plain)
+                    }
+                    if home.topics.isEmpty { Text("No approved training topics yet. Add and approve department JPRs in Training management.") }
+                } else if mode == "participants" {
+                    Text("Who is participating?").font(.title2.bold())
+                    Button("Select all eligible members") { selected.formUnion(home.members.map(\.id)) }.buttonStyle(WorkspaceActionStyle())
+                    Button("Select on-duty shift") { Task { await onDuty() } }.buttonStyle(WorkspaceActionStyle())
+                    Menu("Select a predefined group") { ForEach(home.groups, id: \.name) { group in Button(group.name) { selected.formUnion(group.userIds) } } }.frame(minHeight: 44)
+                    TextField("Search by name", text: $search).textFieldStyle(.roundedBorder)
+                    ForEach(home.members.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }) { member in
+                        Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })).padding(12).workspaceCard()
+                    }
+                    Button("Start Training · \(selected.count) participants") { Task { await start() } }.buttonStyle(WorkspaceActionStyle()).disabled(selected.isEmpty || busy)
+                } else {
+                    Text(mode == "continue" ? "Continue Training" : "Training History").font(.title2.bold())
+                    ForEach(home.sessions.filter { ($0.status == "FINALIZED") == (mode == "history") }) { session in
+                        Button { activeSession = session.id } label: { WorkspaceToolRow(title: session.title, subtitle: "\(session.participantCount) participants · \(session.updatedAt.formatted(date: .abbreviated,time: .shortened)) · \(mode == "continue" ? "Resume Training" : "View results")", icon: "chevron.right") }.buttonStyle(.plain)
+                    }
+                }
+                if mode != "home" { Button("Training home") { mode = "home" }.buttonStyle(WorkspaceActionStyle()) }
+            } else if error == nil { ProgressView("Loading training…") }
+            Text("Online connection required. Saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary)
+        }.disabled(busy).task { await load() }
+        .navigationDestination(isPresented: Binding(get: { activeSession != nil }, set: { if !$0 { activeSession = nil; Task { await load() } } })) { if let activeSession { GuidedSessionView(id: activeSession) } }
+    }
+    @MainActor private func load() async { do { home = try await APIClient.shared.trainingWorkspace("/guided"); error = nil } catch { self.error = error.localizedDescription } }
+    @MainActor private func onDuty() async {
+        busy = true; defer { busy = false }
+        do { let result: GuidedDuty = try await APIClient.shared.trainingWorkspace("/guided?onDuty=1"); selected.formUnion(result.userIds.filter { id in home?.members.contains { $0.id == id } == true }); if result.userIds.isEmpty { error = "No current shift was returned. Select participants by name." } } catch { self.error = error.localizedDescription }
+    }
+    @MainActor private func start() async {
+        guard let topic else { return }; busy = true; defer { busy = false }
+        do { let body = try JSONSerialization.data(withJSONObject: ["requestId":requestId,"courseId":topic.id,"participantIds":Array(selected),"versionIds":topic.jprs.map(\.id)])
+            let result: GuidedMutation = try await APIClient.shared.trainingWorkspace("/guided", body: body); activeSession = result.sessionId; requestId = UUID().uuidString
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct GuidedSessionView: View {
+    let id: String
+    @State private var session: GuidedSession?
+    @State private var error: String?
+    @State private var saved = ""
+    @State private var busy = false
+    @State private var pending: Data?
+    @State private var commentDraft: String?
+    @State private var commenting: GuidedMember?
+    @State private var individual = ""
+    @State private var duration = ""
+    @State private var confirmReload = false
+    @State private var printHTML: String?
+    var body: some View {
+        AppScreen(title: session?.title ?? "Training", subtitle: "Approved JPR guidance", systemImage: "graduationcap.fill") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let error { WorkspaceNotice(message: error, warning: true) }
+                    if pending != nil { Button("Retry saving") { Task { await retry() } }.buttonStyle(WorkspaceActionStyle()); Button("Reload last saved session") { confirmReload = true } }
+                    Text(busy ? "Saving…" : saved).font(.caption).foregroundStyle(AppTheme.gold).accessibilityLabel(busy ? "Saving" : saved)
+                    if let s = session, s.jprs.indices.contains(s.jprIndex), s.jprs[s.jprIndex].content.steps.indices.contains(s.stepIndex) {
+                        if s.locked || s.stage == "SUMMARY" { summary(s) }
+                        else { guide(s, version: s.jprs[s.jprIndex], step: s.jprs[s.jprIndex].content.steps[s.stepIndex]) }
+                        Text("Online connection required. Changes are saved only after confirmation. Final evaluations are locked; use Start Training for reevaluation.").font(.caption).foregroundStyle(.secondary)
+                    } else if error == nil { ProgressView("Loading saved session…") }
+                }.padding(16)
+            }
+        }.navigationBarBackButtonHidden(busy || pending != nil || commentDraft != nil || durationDirty)
+        .interactiveDismissDisabled(busy || pending != nil || commentDraft != nil || durationDirty)
+        .task { await load() }
+        .alert("Reload last saved session?", isPresented: $confirmReload) { Button("Cancel",role:.cancel) {}; Button("Discard unconfirmed change",role:.destructive) { pending = nil; Task { await load() } } } message: { Text("Only confirmed saved work will be restored.") }
+        .sheet(item: $commenting) { member in
+            NavigationStack { Form {
+                Text(member.name)
+                if let error {Text(error).foregroundStyle(.red)}
+                TextField("Comment or reason", text: Binding(get:{commentDraft ?? ""},set:{commentDraft=$0}),axis:.vertical).lineLimit(3...8)
+                if let s=session { let v=s.jprs[s.jprIndex]; let step=v.content.steps[s.stepIndex]
+                    ForEach(["PASS","NEEDS_WORK","NOT_EVALUATED"],id:\.self) { rating in
+                        Button(rating == "PASS" ? "Pass" : rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated") {
+                            let text=commentDraft ?? ""
+                            if step.critical && rating == "NEEDS_WORK" && text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty { error="A reason is required for a critical safety failure."; return }
+                            commenting=nil; commentDraft=nil
+                            Task { await save(["observation":["versionId":v.id,"stepId":step.id,"userId":member.id,"rating":rating,"comment":text]]) }
+                        }.frame(minHeight:44)
+                    }
+                }
+            }.navigationTitle("Observed performance").toolbar { Button("Cancel") { commenting=nil;commentDraft=nil } }.interactiveDismissDisabled()
+            }
+        }
+        .sheet(isPresented: Binding(get:{printHTML != nil},set:{if !$0 {printHTML=nil}})) { if let printHTML { NavigationStack { GuidedPrintSheet(html:printHTML).toolbar { Button("Done") { self.printHTML=nil } } } } }
+    }
+    private var durationDirty: Bool { guard let s=session else{return false}; return !duration.isEmpty && duration != String(s.durationMinutes) }
+    private var blocked: Bool { busy || pending != nil || durationDirty }
+    private func stages(_ s: GuidedSession) -> some View {
+        ScrollView(.horizontal,showsIndicators:false) { HStack {
+            ForEach(["TEACH","PRACTICE","EVALUATE","SUMMARY"],id:\.self) { stage in Button(stage == "SUMMARY" ? "Review & save" : stage) { Task { await save(["stage":stage]) } }.buttonStyle(WorkspaceActionStyle()).disabled(blocked || s.locked).opacity(s.stage == stage ? 1 : 0.65) }
+        } }
+    }
+    private func guide(_ s: GuidedSession, version: GuidedVersion, step: GuidedStep) -> some View {
+        VStack(alignment:.leading,spacing:18) {
+            stages(s)
+            Text("\(version.content.number) · Approved revision \(version.revision) · JPR \(s.jprIndex+1) of \(s.jprs.count)").font(.subheadline).foregroundStyle(AppTheme.gold)
+            Text("STEP \(s.stepIndex+1) OF \(version.content.steps.count)").font(.headline)
+            ProgressView(value:Double(s.stepIndex+1),total:Double(version.content.steps.count)).tint(AppTheme.gold)
+            Text(step.title).font(.title2.bold())
+            if s.stage == "PRACTICE" { Text("Supervised practice. Practice does not record a passing evaluation.") }
+            guidance("TEACH",step.teach);guidance("SHOW",step.show);guidance("CHECK",step.check)
+            if !step.safety.isEmpty { WorkspacePanel { Text(step.critical ? "CRITICAL SAFETY" : "SAFETY").bold().foregroundStyle(AppTheme.gold);Text(step.safety) } }
+            if s.stage == "EVALUATE" {
+                Picker("Evaluation view",selection:$individual) { Text("All participants").tag("");ForEach(s.participants) { Text($0.name).tag($0.id) } }
+                ForEach(s.participants.filter { $0.attended != false && (individual.isEmpty || individual == $0.id) }) { member in
+                    observation(s,version:version,step:step,member:member)
+                }
+            }
+            HStack {
+                Button("Back") { let ji=s.stepIndex > 0 ? s.jprIndex : s.jprIndex-1;Task { await save(["jprIndex":ji,"stepIndex":s.stepIndex > 0 ? s.stepIndex-1 : s.jprs[ji].content.steps.count-1]) } }.disabled(blocked || (s.stepIndex == 0 && s.jprIndex == 0))
+                Spacer()
+                Button("Next step") { Task { await next(s) } }.disabled(blocked)
+            }.buttonStyle(WorkspaceActionStyle())
+            Button("Print approved JPR") { Task { await printVersion(version.id) } }.disabled(blocked)
+        }
+    }
+    private func guidance(_ title:String,_ text:String) -> some View { VStack(alignment:.leading,spacing:8){Text(title).font(.headline).foregroundStyle(AppTheme.gold);Text(text).font(.body).fixedSize(horizontal:false,vertical:true)} }
+    private func observation(_ s:GuidedSession,version:GuidedVersion,step:GuidedStep,member:GuidedMember) -> some View {
+        let current=s.observations[s.key(version,step,member)]
+        return WorkspacePanel {
+            Text(member.name).font(.headline)
+            Text(current?.rating == "PASS" ? "Pass" : current?.rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated").foregroundStyle(AppTheme.gold)
+            ViewThatFits(in:.horizontal) { ratings(s,version:version,step:step,member:member,current:current,horizontal:true);ratings(s,version:version,step:step,member:member,current:current,horizontal:false) }
+            Button("Comment / reason") { commentDraft=current?.comment ?? "";commenting=member }.frame(minHeight:44).disabled(blocked)
+            if let comment=current?.comment,!comment.isEmpty { Text(comment).font(.subheadline) }
+        }
+    }
+    @ViewBuilder private func ratings(_ s:GuidedSession,version:GuidedVersion,step:GuidedStep,member:GuidedMember,current:GuidedObservation?,horizontal:Bool) -> some View {
+        let layout=horizontal ? AnyLayout(HStackLayout(spacing:8)) : AnyLayout(VStackLayout(alignment:.leading,spacing:8))
+        layout { ForEach(["PASS","NEEDS_WORK","NOT_EVALUATED"],id:\.self) { rating in
+            Button(rating == "PASS" ? "Pass" : rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated") {
+                if step.critical && rating == "NEEDS_WORK" { commentDraft=current?.comment ?? "";commenting=member }
+                else { Task { await save(["observation":["versionId":version.id,"stepId":step.id,"userId":member.id,"rating":rating,"comment":current?.comment ?? ""]]) } }
+            }.buttonStyle(WorkspaceActionStyle()).disabled(blocked)
+        } }
+    }
+    private func summary(_ s:GuidedSession) -> some View {
+        let attended=s.participants.filter{$0.attended != false}
+        let passed=attended.filter{m in s.jprs.allSatisfy{s.outcome($0,m)=="Passed"}}.count
+        return VStack(alignment:.leading,spacing:18) {
+            Text("Training summary").font(.title2.bold())
+            Text("\(attended.count) attended · \(passed) passed required JPRs · \(attended.count-passed) need additional training or evaluation")
+            if !s.locked {
+                HStack { TextField("Training minutes",text:$duration).keyboardType(.numberPad).textFieldStyle(.roundedBorder).disabled(busy || pending != nil);Button("Save duration") { Task { await save(["durationMinutes":Int(duration) ?? 0]) } }.disabled(busy || pending != nil || !durationDirty) }
+            } else { Text("\(s.durationMinutes) minutes of training") }
+            ForEach(s.participants) { member in
+                WorkspacePanel {
+                    Toggle(member.name,isOn:Binding(get:{member.attended != false},set:{value in Task {await save(["attendance":[member.id:value]])}})).disabled(blocked || s.locked)
+                    ForEach(s.jprs) { v in
+                        DisclosureGroup("\(v.content.number): \(member.attended == false ? "Absent" : s.outcome(v,member))") {
+                            ForEach(v.content.steps) { step in
+                                let observation=s.observations[s.key(v,step,member)]
+                                Text("\(step.title): \(observation?.rating == "PASS" ? "Pass" : observation?.rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated")")
+                                if let comment=observation?.comment,!comment.isEmpty {Text(comment).font(.caption)}
+                            }
+                        }
+                    }
+                }
+            }
+            if !s.locked { Button("Save Training") {Task {await save(["finalize":true])}}.buttonStyle(WorkspaceActionStyle()).disabled(blocked);stages(s) }
+            else { Text("Training saved. Available for FirstDue CSV export; import has not been confirmed.").foregroundStyle(AppTheme.gold) }
+            Text("Attendance records training hours. Unobserved performance stays incomplete.").font(.caption)
+        }
+    }
+    @MainActor private func load() async { busy=true;defer{busy=false};do {let result:GuidedSessionResponse=try await APIClient.shared.trainingWorkspace("/guided/\(id)");session=result.session;duration=String(result.session.durationMinutes);error=nil;saved="Saved session loaded"}catch{self.error=error.localizedDescription} }
+    @MainActor private func save(_ change:[String:Any]) async {
+        guard let s=session,!busy,pending==nil else{return}
+        do { var body=change;body["revision"]=s.revision;pending=try JSONSerialization.data(withJSONObject:body);await retry() }catch{self.error=error.localizedDescription}
+    }
+    @MainActor private func retry() async {
+        guard let body=pending,!busy else{return};busy=true;saved="";error=nil;defer{busy=false}
+        do { let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/guided/\(id)",body:body);let result:GuidedSessionResponse=try await APIClient.shared.trainingWorkspace("/guided/\(id)");session=result.session;duration=String(result.session.durationMinutes);pending=nil;saved=result.session.locked ? "Training saved" : "Saved" }
+        catch { self.error=error.localizedDescription+" Changes are not confirmed saved. Stay here and retry. Offline training is not supported." }
+    }
+    @MainActor private func next(_ s:GuidedSession) async {
+        if s.stepIndex+1 < s.jprs[s.jprIndex].content.steps.count {await save(["stepIndex":s.stepIndex+1])}
+        else if s.jprIndex+1 < s.jprs.count {await save(["jprIndex":s.jprIndex+1,"stepIndex":0])}
+        else {await save(["stage":s.stage=="TEACH" ? "PRACTICE" : s.stage=="PRACTICE" ? "EVALUATE" : "SUMMARY","jprIndex":0,"stepIndex":0])}
+    }
+    @MainActor private func printVersion(_ version:String) async {do{printHTML=try await APIClient.shared.guidedJPRPrint(version)}catch{self.error=error.localizedDescription}}
+}
+
+private struct GuidedPrintSheet:UIViewControllerRepresentable {
+    let html:String
+    func makeUIViewController(context:Context)->GuidedPrintController {GuidedPrintController(html:html)}
+    func updateUIViewController(_ uiViewController:GuidedPrintController,context:Context){}
+}
+private final class GuidedPrintController:UIViewController {
+    private let html:String
+    private var presentedPrint=false
+    init(html:String){self.html=html;super.init(nibName:nil,bundle:nil)}
+    required init?(coder:NSCoder){fatalError("init(coder:) has not been implemented")}
+    override func viewDidAppear(_ animated:Bool){
+        super.viewDidAppear(animated)
+        guard !presentedPrint else{return};presentedPrint=true
+        let controller=UIPrintInteractionController.shared
+        controller.printFormatter=UIMarkupTextPrintFormatter(markupText:html)
+        controller.present(from:view.bounds,in:view,animated:true,completionHandler:nil)
+    }
+}
+
+private struct GuidedMemberResults:View {
+    @State private var results:GuidedResults?
+    @State private var error:String?
+    var body:some View {VStack(alignment:.leading,spacing:16){
+        if let error {WorkspaceNotice(message:error,warning:true)}
+        if let results {if results.results.isEmpty{Text("No JPR evaluations yet.")};ForEach(results.results){result in WorkspacePanel {
+            Text("\(result.number) · \(result.title)").font(.headline)
+            Text(result.outcome=="PASS" ? "Passed" : result.outcome=="FAIL" ? "Needs additional training" : "Incomplete").foregroundStyle(AppTheme.gold)
+            Text("Revision \(result.revision) · \(result.evaluator)").font(.caption)
+            if let date=result.completedAt {Text(date.formatted(date:.abbreviated,time:.shortened)).font(.caption)}
+            ForEach(result.steps?.steps ?? [],id:\.stepId){step in Text("\(step.title ?? step.stepId): \(step.rating=="PASS" ? "Pass" : step.rating=="NEEDS_WORK" ? "Needs work" : "Not evaluated")");if !step.comment.isEmpty{Text(step.comment).font(.caption)}}
+        }}}else if error==nil {ProgressView("Loading JPR results…")}
+    }.task{do{results=try await APIClient.shared.trainingWorkspace("/jpr-results")}catch{self.error=error.localizedDescription}}}
+}
+
+private struct GuidedLibraryView:View {
+    let workspace:TrainingWorkspaceHome
+    @State private var library:GuidedLibrary?
+    @State private var courseId=""
+    @State private var importing=false
+    @State private var selected:GuidedVersion?
+    @State private var busy=false
+    @State private var error:String?
+    var body:some View {
+        ScrollView {VStack(alignment:.leading,spacing:18){
+            Text("JPR library").font(.title.bold())
+            Text("Import Word documents, review each requirement, then approve the department JPR. Approved revisions are locked.")
+            if let error{WorkspaceNotice(message:error,warning:true)}
+            Picker("Training topic",selection:$courseId){Text("Choose a topic").tag("");ForEach(workspace.manageCourses){Text($0.title).tag($0.id)}}
+            Button("Import Word JPR (.docx)"){importing=true}.buttonStyle(WorkspaceActionStyle()).disabled(courseId.isEmpty || busy)
+            Text("Word documents up to 4 MB. Imports always start as drafts. Older .doc files must first be saved as .docx.").font(.caption)
+            if let library {ForEach(library.versions.filter{courseId.isEmpty || $0.courseId==courseId}){version in
+                Button{selected=version}label:{WorkspaceToolRow(title:version.content.title,subtitle:"Revision \(version.revision) · \(version.status=="APPROVED" ? "Approved" : "Draft — review required")",icon:"doc.text")}.buttonStyle(.plain)
+            }}else if error==nil{ProgressView()}
+        }.padding(16)}.navigationTitle("JPR management").disabled(busy).task{await load()}
+        .fileImporter(isPresented:$importing,allowedContentTypes:[UTType(filenameExtension:"docx") ?? .data]){result in
+            switch result{case .success(let url):Task{await upload(url)};case .failure(let error):self.error=error.localizedDescription}
+        }
+        .sheet(item:$selected,onDismiss:{Task{await load()}}){version in NavigationStack{GuidedJPREditor(version:version)}}
+    }
+    @MainActor private func load()async{do{library=try await APIClient.shared.trainingWorkspace("/jprs");error=nil}catch{self.error=error.localizedDescription}}
+    @MainActor private func upload(_ url:URL)async{
+        busy=true;defer{busy=false};let scoped=url.startAccessingSecurityScopedResource();defer{if scoped{url.stopAccessingSecurityScopedResource()}}
+        do{let size=try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0;guard size>0,size<=4*1024*1024 else{throw NSError(domain:"JPR",code:1,userInfo:[NSLocalizedDescriptionKey:"Choose a Word document up to 4 MB."])}
+            let result=try await APIClient.shared.uploadGuidedJPR(data:Data(contentsOf:url),fileName:url.lastPathComponent,courseId:courseId);selected=result.version;await load()
+        }catch{self.error=error.localizedDescription}
+    }
+}
+private struct GuidedJPREditor:View {
+    let version:GuidedVersion
+    @Environment(\.dismiss)private var dismiss
+    @State private var content:GuidedContent
+    @State private var busy=false
+    @State private var error:String?
+    @State private var status=""
+    @State private var confirmApproval=false
+    @State private var confirmDiscard=false
+    @State private var dirty=false
+    init(version:GuidedVersion){self.version=version;_content=State(initialValue:version.content)}
+    var body:some View {
+        Form{
+            if let error{Text(error).foregroundStyle(.red)}
+            if !status.isEmpty{Text(status)}
+            if let original=content.importedText,!original.isEmpty {DisclosureGroup("Original Word text for review"){Text(original).font(.caption)}}
+            Section("Department JPR · Revision \(version.revision)"){
+                TextField("JPR number",text:$content.number);TextField("Title",text:$content.title);TextField("Category",text:$content.category)
+                TextField("Performance objective",text:$content.objective,axis:.vertical)
+                TextField("Conditions",text:$content.conditions,axis:.vertical);TextField("Required equipment",text:$content.equipment,axis:.vertical)
+                TextField("Instructor guidance",text:$content.guidance,axis:.vertical);TextField("SOPs and standards",text:$content.standards,axis:.vertical)
+                TextField("Revision notes",text:$content.revisionNotes,axis:.vertical)
+                Stepper("Passing score: \(content.passingScore)%",value:$content.passingScore,in:1...100)
+            }.disabled(version.status=="APPROVED" || busy)
+            ForEach($content.steps){$step in Section(step.title.isEmpty ? "Performance step" : step.title){
+                TextField("Step title",text:$step.title);TextField("TEACH",text:$step.teach,axis:.vertical);TextField("SHOW",text:$step.show,axis:.vertical);TextField("CHECK",text:$step.check,axis:.vertical);TextField("SAFETY",text:$step.safety,axis:.vertical)
+                Toggle("Required",isOn:$step.required);Toggle("Critical safety requirement",isOn:$step.critical)
+            }.disabled(version.status=="APPROVED" || busy)}
+            if version.status != "APPROVED"{
+                Button("Add step"){content.steps.append(GuidedStep(id:UUID().uuidString,title:"New step",teach:"",show:"",check:"",safety:"",required:true,critical:false));dirty=true}
+                Button("Save draft"){Task{await save(approve:false)}}
+                Button("Approve reviewed JPR"){confirmApproval=true}
+            }else{Button("Create a new revision"){Task{await revise()}};Text("This approved revision cannot be edited. Historical evaluations retain these requirements.")}
+        }.disabled(busy).navigationTitle("Review JPR").toolbar{Button("Done"){if dirty{confirmDiscard=true}else{dismiss()}}.disabled(busy)}
+        .interactiveDismissDisabled(busy || dirty)
+        .onChange(of:contentJSON){_ in dirty=true;status="Unsaved draft changes"}
+        .confirmationDialog("Discard unsaved draft changes?",isPresented:$confirmDiscard){Button("Discard changes",role:.destructive){dismiss()}}
+        .confirmationDialog("Approve this department JPR?",isPresented:$confirmApproval){Button("Approve reviewed requirements"){Task{await save(approve:true)}}}message:{Text("Approval locks this revision for guided training and evaluation.")}
+    }
+    private var contentJSON:Data?{let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys];return try? encoder.encode(content)}
+    @MainActor private func save(approve:Bool)async{
+        busy=true;defer{busy=false}
+        do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let body=try JSONSerialization.data(withJSONObject:["action":"update","id":version.id,"content":object]);let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:body);dirty=false;status="Draft saved"
+            if approve{let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"approve","id":version.id]));dismiss()}
+        }catch{self.error=error.localizedDescription}
+    }
+    @MainActor private func revise()async{
+        busy=true;defer{busy=false}
+        do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let _:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["courseId":version.courseId ?? "","jprId":version.jprId ?? "","content":object]));dismiss()}catch{self.error=error.localizedDescription}
     }
 }
