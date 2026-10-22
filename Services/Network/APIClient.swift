@@ -225,6 +225,8 @@ final class APIClient {
             }
 
             return data
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as APIError {
             throw error
         } catch let error as URLError {
@@ -1251,6 +1253,15 @@ final class APIClient {
 // MARK: - Errors
 
 extension APIClient {
+    static func isRequestCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        if let urlError = error as? URLError { return urlError.code == .cancelled }
+        if let apiError = error as? APIError, case .networkError(let urlError) = apiError {
+            return urlError.code == .cancelled
+        }
+        return false
+    }
+
     enum APIError: LocalizedError {
         case invalidURL
         case invalidResponse
