@@ -141,13 +141,17 @@ struct GuidedTopic: Decodable, Identifiable {
 }
 struct GuidedMember: Decodable, Identifiable { let id: String; let name: String; let attended: Bool? }
 struct GuidedGroup: Decodable { let name: String; let userIds: [String] }
-struct GuidedHistory: Decodable, Identifiable { let id: String; let title: String; let status: String; let stage: String; let updatedAt: Date; let participantCount: Int }
+struct GuidedHistory: Decodable, Identifiable { let startAt: Date?; let location: String?; let oneOff: Bool?; let id: String; let title: String; let status: String; let stage: String; let updatedAt: Date; let participantCount: Int }
 struct GuidedHome: Decodable { let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
 struct GuidedObservation: Decodable { let rating: String; let comment: String; let observedAt: String? }
 struct GuidedSessionResponse: Decodable { let session: GuidedSession }
 struct GuidedSession: Decodable, Identifiable {
     let id: String; let title: String; let courseId: String; let status: String; let stage: String; let jprIndex: Int; let stepIndex: Int; let durationMinutes: Int; let revision: Int
     let participants: [GuidedMember]; let jprs: [GuidedVersion]; let observations: [String: GuidedObservation]
+    var oneOff: Bool? = nil
+    var notes: String? = nil
+    var startAt: Date? = nil
+    var location: String? = nil
     var locked: Bool { status == "FINALIZED" }
     func key(_ version: GuidedVersion, _ step: GuidedStep, _ member: GuidedMember) -> String { "\(version.id):\(step.id):\(member.id)" }
     func outcome(_ version: GuidedVersion, _ member: GuidedMember) -> String {
@@ -169,4 +173,19 @@ struct GuidedResults: Decodable {
     }
     struct Details: Decodable { let steps: [StepResult] }
     struct StepResult: Decodable { let stepId: String; let title: String?; let rating: String; let comment: String }
+}
+
+struct GuidedSkillsResponse: Decodable {
+ let requirements: [GuidedSkillRequirement]
+ let sessions: [GuidedUpcomingSession]?
+}
+struct GuidedUpcomingSession: Decodable, Identifiable {
+ let id: String; let title: String; let startAt: Date?; let location: String?; let durationMinutes: Int
+}
+struct GuidedSkillRequirement: Decodable, Identifiable {
+ let id: String; let userId: String; let member: String; let versionId: String; let courseId: String; let number: String; let title: String; let revision: Int
+ let required: Int; let completed: Int; let percent: Int; let dueAt: Date?; let history: [GuidedSkillHistory]
+}
+struct GuidedSkillHistory: Decodable, Identifiable {
+ let id: String; let outcome: String; let completedAt: Date?; let evaluator: String
 }

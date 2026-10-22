@@ -34,11 +34,15 @@ import Foundation
         assert(guided.session.session.participants.count == 15)
         assert(guided.session.session.jprs.count == 2)
         assert(guided.session.session.locked)
-        assert(guided.home.topics.contains{$0.jprs.count == 2})
+        assert(guided.home.topics.contains{Set($0.jprs.compactMap(\.jprId)).count == 2})
         assert(guided.library.versions.contains{$0.status == "DRAFT"})
         assert(guided.results.results.count == 2 && guided.results.results.allSatisfy{$0.outcome == "INCOMPLETE"})
         let member = guided.session.session.participants.first!
         assert(guided.session.session.outcome(guided.session.session.jprs[0],member) == "Passed")
+        let skills = try JSONDecoder.mtfdTrainingDecoder.decode(GuidedSkillsResponse.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]+".skills")))
+        assert(skills.requirements.count == 1)
+        assert(skills.requirements[0].completed == 3 && skills.requirements[0].required == 2)
+        assert(skills.requirements[0].percent == 100 && skills.requirements[0].history.count == 3)
         print("PASS: real guided session, Word draft library, 15 participants, revision and incomplete-result contracts")
         print("PASS: iPhone decodes real backend learner/instructor/draft/legacy contracts and preserves quiz/credit fields")
     }
