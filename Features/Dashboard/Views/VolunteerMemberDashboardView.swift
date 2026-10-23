@@ -220,8 +220,7 @@ struct VolunteerMemberDashboardView: View {
                             ForEach(Array(assignedTrainingPreview.enumerated()), id: \.element.id) { index, item in
                                 VStack(alignment: .leading, spacing: 5) {
                                     HStack(alignment: .top, spacing: 8) {
-                                        AppIcon(systemImage: item.isScheduled ? "calendar" : item.isOverdue ? "exclamationmark.triangle.fill" : "play.circle.fill")
-                                            .foregroundStyle(item.isOverdue ? .orange : AppTheme.gold)
+                                        DashboardColorIcon(systemImage: item.isScheduled ? "calendar" : item.isOverdue ? "exclamationmark.triangle.fill" : item.progressPercent >= 100 ? "checkmark.seal.fill" : item.progressPercent > 0 ? "clock.fill" : "play.circle.fill", size: 25, frameSize: 34)
 
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(item.title)
