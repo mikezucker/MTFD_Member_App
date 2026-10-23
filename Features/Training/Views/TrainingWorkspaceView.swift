@@ -25,8 +25,7 @@ struct TrainingView: View {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
                                         if home.guidedEnabled == true && home.canManage && !showingMyTraining {
-                                            GuidedInstructorHome(workspace: home)
-                                            Button { showingMyTraining = true } label: { WorkspaceToolRow(title: "My Training", subtitle: "Your courses, earned hours, and personal progress", icon: "person.crop.circle.fill") }.buttonStyle(.plain)
+                                            GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" })
                                         } else {
                                         if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
                                         trainingTabs
@@ -200,7 +199,7 @@ private struct WorkspaceTrainingNavigation: View {
             if guided {
                 LazyVGrid(columns: columns(count: 2), spacing: 10) {
                     navigationButton("JPR Results", value: "My JPR Results", icon: "checklist")
-                    navigationButton("Browse Catalog", value: "Catalog", icon: "magnifyingglass")
+                    navigationButton("Course Catalog", value: "Catalog", icon: "magnifyingglass")
                 }
             }
         }
@@ -257,6 +256,7 @@ private struct WorkspaceCourseView: View {
     let course: TrainingWorkspaceCourse
     let members: [TrainingWorkspaceMember]
     let manage: Bool
+    var allowJprReview = false
     @State private var detail: TrainingWorkspaceDetail?
     @State private var error: String?
     @State private var saved: String?
@@ -306,12 +306,14 @@ private struct WorkspaceCourseView: View {
             WorkspacePanel("Prepare your course") {
                 Text("Review material, quiz questions, and the audience before publishing.").foregroundStyle(.white.opacity(0.7))
                 Button("Edit draft") { editing = true }.buttonStyle(WorkspaceActionStyle())
-                Button("Publish course") { perform(["action": "publish"]) }.buttonStyle(WorkspaceActionStyle(primary: true))
+
             }
         }
-        WorkspacePanel("Assignments") {
+        if allowJprReview && c.delivery == "PRACTICAL" { NavigationLink("Content & JPRs") { GuidedLibraryView(initialCourseId: course.id, keepCourseDraft: c.status == "DRAFT") }.buttonStyle(WorkspaceActionStyle()) }
+        WorkspacePanel("Assign course (optional)") {
+            Text("You can leave this course unassigned and return here later. This grants course access; it does not schedule a session or assign a skill requirement.").font(.caption)
             Text("\(detail.roster?.count ?? 0) \((detail.roster?.count ?? 0) == 1 ? "member" : "members") assigned").font(.subheadline).foregroundStyle(.white.opacity(0.7))
-            DisclosureGroup("Assign more members") {
+            DisclosureGroup("Assign members") {
                 WorkspaceMemberSelection(members: members, selected: $selected)
                 Button("Assign selected members") { perform(["action": "assign", "userIds": Array(selected)]) }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(selected.isEmpty)
             }
@@ -418,6 +420,9 @@ private struct WorkspaceCourseBuilder: View {
     var courseId: String? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var draft = WorkspaceCourseDraft()
+    @State private var savedCourseId: String?
+    @State private var assignNow = false
+    init(members: [TrainingWorkspaceMember], courseId: String? = nil) { self.members = members; self.courseId = courseId; _savedCourseId = State(initialValue: courseId) }
     @State private var step = 0
     @State private var link = ""
     @State private var materialTitle = ""
@@ -429,7 +434,7 @@ private struct WorkspaceCourseBuilder: View {
     var body: some View {
         AppScreen(title: "") {
             VStack(spacing: 0) {
-                TrainingScreenHeader(title: courseId == nil ? "Create a Course" : "Edit Draft", subtitle: "Online CBT or practical training.", systemImage: "graduationcap.fill")
+                TrainingScreenHeader(title: courseId == nil ? "Create a Course" : "Edit Draft", subtitle: "Save a draft or publish. Assignments are optional.", systemImage: "graduationcap.fill")
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         WorkspaceBuilderSteps(step: step)
@@ -466,6 +471,10 @@ private struct WorkspaceCourseBuilder: View {
                         Button("Add Question") { draft.questions.append(WorkspaceDraftQuestion()) }
                     }
                 } else {
+                    WorkspacePanel("Content & JPRs") {
+                        if let savedCourseId { NavigationLink("Upload & review this course’s JPRs") { GuidedLibraryView(initialCourseId: savedCourseId, keepCourseDraft: true) }.buttonStyle(WorkspaceActionStyle()) }
+                        Text("Review the approved teaching and evaluation checklist here. Approval does not publish this draft.").font(.caption)
+                    }
                     WorkspacePanel("Who Records Completion?") {
                         Picker("Completion", selection: $draft.completionMethod) { Text("Instructor records attendance & completion").tag("INSTRUCTOR"); Text("Member records completion").tag("MEMBER") }
                     }
@@ -484,18 +493,19 @@ private struct WorkspaceCourseBuilder: View {
                     }
                     Text("Only selected member types see the course in the catalog. Named assignments grant access directly.").font(.caption)
                 }
-                WorkspacePanel("Assign Specific Members") { WorkspaceMemberSelection(members: members, selected: $selected) }
+                WorkspacePanel("Assignments (optional)") { Toggle("Assign members now", isOn: $assignNow); if assignNow { WorkspaceMemberSelection(members: members, selected: $selected) } else { Text("No members will be assigned. You can assign them later from the saved course.").font(.subheadline) } }
                 WorkspacePanel("Member Preview") {
                     Text(draft.title.isEmpty ? "Course name" : draft.title).font(.headline)
                     Text("\(draft.durationMinutes) training minutes")
                     Text(draft.delivery == "CBT" ? "View the material, then pass the quiz at 80%. Up to \(draft.quizAttemptLimit) attempts." : draft.completionMethod == "INSTRUCTOR" ? "Your instructor records attendance and completion." : "Record your completion after training.")
                     if !draft.followUpPrompt.isEmpty { Text("Separate follow-up form").font(.caption) }
                 }
-                WorkspacePanel { Button("Save draft") { save(publish: false) }.buttonStyle(WorkspaceActionStyle()); Button("Publish course") { save(publish: true) }.buttonStyle(WorkspaceActionStyle(primary: true)) }
+                WorkspacePanel { Button("Save draft") { save(publish: false) }.buttonStyle(WorkspaceActionStyle()); Button("Publish to library") { save(publish: true) }.buttonStyle(WorkspaceActionStyle(primary: !assignNow)); if assignNow { Button("Publish & assign") { save(publish: true, assign: true) }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(selected.isEmpty) } }
             }
             WorkspacePanel {
-                HStack { if step > 0 { Button("Back") { step -= 1 }.buttonStyle(WorkspaceActionStyle()) }; if step < 2 { Button("Next step") { step += 1 }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(step == 0 && draft.title.trimmingCharacters(in: .whitespacesAndNewlines).count < 3) } }
+                HStack { if step > 0 { Button("Back") { step -= 1 }.buttonStyle(WorkspaceActionStyle()) }; if step < 2 { Button("Next step") { nextStep() }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(step == 0 && draft.title.trimmingCharacters(in: .whitespacesAndNewlines).count < 3) } }
             }
+            if step < 2 { Button("Save draft") { save(publish: false) }.buttonStyle(WorkspaceActionStyle()) }
             if busy { ProgressView("Saving…").tint(TrainingVisualStyle.cyan) }
                     }.padding(16).padding(.bottom, 20)
                 }
@@ -551,10 +561,22 @@ private struct WorkspaceCourseBuilder: View {
         draft.content.append(WorkspaceCourseMaterial(title: materialTitle.isEmpty ? "Course material" : materialTitle, kind: materialKind, url: url.absoluteString))
         materialTitle = ""; link = ""; error = nil
     }
-    private func save(publish: Bool) {
+    private func nextStep() {
+        guard draft.delivery == "PRACTICAL" && step == 0 else { step += 1; return }
         Task { @MainActor in
             busy = true; error = nil; defer { busy = false }
-            draft.publish = publish; draft.assignedUserIds = Array(selected); draft.editCourseId = courseId
+            do {
+                draft.publish = false; draft.assignedUserIds = []; draft.editCourseId = savedCourseId
+                let result: TrainingWorkspaceMutation = try await APIClient.shared.trainingWorkspace("/courses", body: JSONEncoder().encode(draft))
+                guard result.success, let id = result.courseId else { error = result.error ?? "Unable to save draft."; return }
+                savedCourseId = id; step = 1
+            } catch { self.error = error.localizedDescription }
+        }
+    }
+    private func save(publish: Bool, assign: Bool = false) {
+        Task { @MainActor in
+            busy = true; error = nil; defer { busy = false }
+            draft.publish = publish; draft.assignedUserIds = publish && assign ? Array(selected) : []; draft.editCourseId = savedCourseId
             do {
                 let result: TrainingWorkspaceMutation = try await APIClient.shared.trainingWorkspace("/courses", body: JSONEncoder().encode(draft))
                 if result.success { dismiss() } else { error = result.error ?? "Unable to save course." }
@@ -612,11 +634,12 @@ private struct WorkspaceActionStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var primary = false
+    var danger = false
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.subheadline.weight(.semibold))
             .frame(maxWidth: .infinity).padding(.horizontal, 12).padding(.vertical, 14)
-            .foregroundStyle(primary ? AppTheme.navy : .white)
-            .background(LinearGradient(colors: primary ? [TrainingVisualStyle.cyan, Color(red: 100/255, green: 184/255, blue: 242/255)] : [TrainingVisualStyle.raised, TrainingVisualStyle.surface], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14))
+            .foregroundStyle(primary && !danger ? AppTheme.navy : .white)
+            .background(LinearGradient(colors: danger ? [Color(red:185/255,green:28/255,blue:28/255), Color(red:153/255,green:27/255,blue:27/255)] : primary ? [TrainingVisualStyle.cyan, Color(red: 100/255, green: 184/255, blue: 242/255)] : [TrainingVisualStyle.raised, TrainingVisualStyle.surface], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 14))
             .overlay { RoundedRectangle(cornerRadius: 13).stroke(.white.opacity(primary ? 0 : 0.1), lineWidth: 1) }
             .opacity(!enabled ? 0.4 : configuration.isPressed ? 0.8 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
@@ -714,6 +737,9 @@ private struct TrainingProgressDial: View {
 
 private struct GuidedCatalogCourseCard: View {
     let course: GuidedTopic
+    var members: [TrainingWorkspaceMember] = []
+    var canManage = false
+    var canReview = false
     let choose: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -732,6 +758,7 @@ private struct GuidedCatalogCourseCard: View {
             Button(action: choose) { HStack { Text("Select course"); Spacer(); Image(systemName: "arrow.right") } }
                 .buttonStyle(WorkspaceActionStyle(primary: true))
                 .accessibilityLabel("Select course: " + course.title)
+            if canManage { NavigationLink("Course details & assignments") { WorkspaceCourseView(course: TrainingWorkspaceCourse(id: course.id, title: course.title, description: course.description, delivery: "PRACTICAL", archived: false, assigned: false, progressStatus: "NOT_STARTED", completedAt: nil, dueAt: nil, durationMinutes: course.durationMinutes, creditedMinutes: 0, pendingForm: false), members: members, manage: true, allowJprReview: canReview) }.buttonStyle(WorkspaceActionStyle()) }
         }.workspaceCard()
             .overlay(alignment: .top) { Capsule().fill(TrainingVisualStyle.cyan.opacity(0.75)).frame(width: 44, height: 3).padding(.top, 1).accessibilityHidden(true) }
     }
@@ -784,7 +811,7 @@ private struct WorkspaceCreditRow: View {
 
 private struct WorkspaceBuilderSteps: View {
     let step: Int
-    private let labels = ["Details", "Training", "Audience"]
+    private let labels = ["Details", "Content & JPRs", "Review & save"]
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("STEP \(step + 1) OF 3").font(.caption.bold()).foregroundStyle(TrainingVisualStyle.cyan)
@@ -820,9 +847,15 @@ private extension View {
 // before navigation is enabled; failed requests remain available for retry.
 private struct GuidedInstructorHome: View {
     let workspace: TrainingWorkspaceHome
+    var onMyTraining: () -> Void = {}
+    var onCatalog: () -> Void = {}
+    @State private var creating = false
+    @State private var refreshedWorkspace: TrainingWorkspaceHome?
+    private var libraryWorkspace: TrainingWorkspaceHome { refreshedWorkspace ?? workspace }
+    @State private var evaluating = false
     @State private var home: GuidedHome?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var mode = "catalog"
+    @State private var mode = "home"
     @State private var courseSearch = ""
     @State private var categoryId = ""
     @State private var assignmentOnly = false
@@ -848,31 +881,40 @@ private struct GuidedInstructorHome: View {
             if let error { WorkspaceNotice(message: error, warning: true); if home == nil { Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) } }
             if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
             if let home {
-                if mode != "catalog" {
-                    Button { mode = "catalog" } label: { Label("Training Home", systemImage: "house.fill") }
-                        .buttonStyle(WorkspaceActionStyle())
-                        .accessibilityIdentifier("training-home")
-                }
+                Menu {
+                    Button("Overview") { mode = "home" }
+                    Button("Training Library") { mode = "catalog" }
+                    Button("Schedule & Sessions") { mode = "schedule" }
+                    NavigationLink("Skills & Evaluations") { GuidedSkillsView(home: home, onEvaluate: prepareEvaluation) }
+                    Button("My Training", action: onMyTraining)
+                    Button("Course Catalog", action: onCatalog)
+                    Button("Training Records") { mode = "history" }
+                } label: { Label("Training sections", systemImage: "line.3.horizontal") }.buttonStyle(WorkspaceActionStyle())
                 if mode == "catalog" { catalog(home) }
                 else if mode == "home" {
-                    Text("My Shift’s Training").font(.title2.bold())
-                    Button("Browse Course Catalog") { mode = "catalog" }.buttonStyle(WorkspaceActionStyle())
-                    NavigationLink("Skill assignments & progress") { GuidedSkillsView(home: home) }
-                    ForEach([("continue","Continue Training"),("schedule","Shift Schedule"),("history","Training History")], id: \.0) { item in
-                        Button { mode = item.0 } label: { WorkspaceToolRow(title: item.1, subtitle: item.0 == "schedule" ? "Upcoming training for your crew" : item.0 == "history" ? "Attendance and individual JPR results" : "Resume saved teaching and observations", icon: item.0 == "schedule" ? "calendar" : "clock") }.buttonStyle(.plain)
+                    Text("Overview").font(.title2.bold())
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
+                        Button { mode = "catalog" } label: { TrainingQuickAction(title: "Training Library", subtitle: "Find or create courses", symbol: "books.vertical.fill") }.buttonStyle(.plain)
+                        Button { mode = "schedule" } label: { TrainingQuickAction(title: "Schedule & Sessions", subtitle: "Plan, run, or resume", symbol: "calendar", accent: TrainingVisualStyle.orange) }.buttonStyle(.plain)
+                        NavigationLink { GuidedSkillsView(home: home, onEvaluate: prepareEvaluation) } label: { TrainingQuickAction(title: "Skills & Evaluations", subtitle: "Find skills and evaluate", symbol: "checkmark.seal.fill", accent: TrainingVisualStyle.mint) }.buttonStyle(.plain)
+                        Button(action: onMyTraining) { TrainingQuickAction(title: "My Training", subtitle: "Personal assignments", symbol: "person.crop.circle.fill") }.buttonStyle(.plain)
+                        Button(action: onCatalog) { TrainingQuickAction(title: "Course Catalog", subtitle: "Courses for your member type", symbol: "books.vertical.fill") }.buttonStyle(.plain)
+                        Button { mode = "history" } label: { TrainingQuickAction(title: "Training Records", subtitle: "Results and hours", symbol: "doc.text.fill", accent: TrainingVisualStyle.lavender) }.buttonStyle(.plain)
                     }
-                    if home.topics.isEmpty { Text("The catalog is ready for your Word JPR uploads. Imported courses remain drafts until reviewed and approved.").font(.subheadline).foregroundStyle(.secondary) }
-                    if home.canCreate { NavigationLink("Training Library · Upload Word JPRs") { GuidedLibraryView(workspace: workspace) } }
+                    Text("Pick up where you left off").font(.headline)
+                    sessionRows(home.sessions.filter { $0.status == "IN_PROGRESS" })
+                    Text("Upcoming sessions").font(.headline)
+                    sessionRows(home.sessions.filter { $0.status == "SCHEDULED" })
                 } else if mode == "start" {
-                    Text("Assign & Run Training").font(.title2.bold())
-                    Picker("Training source", selection: $oneOff) { Text("Course catalog").tag(false); Text("One-off topic").tag(true) }.pickerStyle(.segmented).onChange(of: oneOff) { _, value in if value { assignmentOnly = false } }
+                    Text(evaluating ? "Start a skills evaluation" : "Plan a training session").font(.title2.bold())
+                    Picker("Training source", selection: $oneOff) { Text("Course catalog").tag(false); Text("One-off topic").tag(true) }.pickerStyle(.segmented).disabled(evaluating).onChange(of: oneOff) { _, value in if value { assignmentOnly = false } }
                     if oneOff {
                         TextField("Training topic", text: $title).workspaceInput()
                         TextField("Session notes", text: $notes, axis: .vertical).workspaceInput()
                         Text("Attendance and hours only. Practical competency requires an approved JPR.").font(.caption).foregroundStyle(.secondary)
                     } else {
-                        Picker("Training course", selection: $topicId) { Text("Choose a course").tag(""); ForEach(home.topics) { Text($0.title).tag($0.id) } }
-                            .onChange(of: topicId) { _, _ in versions = Set(topic?.jprs.filter { v in topic?.jprs.first(where: { $0.jprId == v.jprId })?.id == v.id }.map(\.id) ?? []); minutes = topic?.durationMinutes ?? 60 }
+                        Picker("Training course", selection: $topicId) { Text("Choose a course").tag(""); ForEach(home.topics) { Text($0.title).tag($0.id) } }.disabled(evaluating)
+                            .onChange(of: topicId) { _, _ in if evaluating { return }; versions = Set(topic?.jprs.filter { v in topic?.jprs.first(where: { $0.jprId == v.jprId })?.id == v.id }.map(\.id) ?? []); minutes = topic?.durationMinutes ?? 60 }
                         if let topic {
                             DisclosureGroup("\(versions.count) JPRs selected · change selection") {
                             ForEach(topic.latestJprs) { version in
@@ -882,10 +924,10 @@ private struct GuidedInstructorHome: View {
                         }
                     }
                     Picker("Next step", selection: Binding(get: { assignmentOnly ? "assign" : scheduled ? "schedule" : "run" }, set: { assignmentOnly = $0 == "assign"; scheduled = $0 == "schedule" })) {
-                        if !oneOff { Text("Assign only").tag("assign") }
+
                         Text("Run now").tag("run"); Text("Schedule").tag("schedule")
-                    }.pickerStyle(.segmented)
-                    Text(oneOff ? "Records attendance and hours." : "Assigns this course and the selected JPRs to your crew.").font(.caption).foregroundStyle(.white.opacity(0.65))
+                    }.pickerStyle(.segmented).disabled(evaluating)
+                    Text(evaluating ? "Opens the selected skill for observed evaluation. No prior skill assignment is required." : oneOff ? "Records attendance and hours." : "Select session participants. Future course assignments and skill requirements are managed separately.").font(.caption).foregroundStyle(.white.opacity(0.65))
                     if scheduled { DatePicker("Session time", selection: $date)
                         .onChange(of: date) { _, _ in status = "Time changed. Reload the roster or check your selected participants." } }
                     if !assignmentOnly { DisclosureGroup("Session details · \(minutes) minutes") {
@@ -905,20 +947,30 @@ private struct GuidedInstructorHome: View {
                         ForEach(home.members.filter { $0.name.localizedCaseInsensitiveContains(search) }) { member in memberRow(member) }
                     }
                     if selected.isEmpty && search.isEmpty { Text("Load the shift roster, choose a group, or search for members above.").font(.caption).foregroundStyle(.white.opacity(0.65)) }
-                    Button(assignmentOnly ? "Assign Course & JPRs" : scheduled ? "Assign & Schedule Training" : oneOff ? "Start Training" : "Assign & Start Training") { Task { await start() } }.buttonStyle(WorkspaceActionStyle()).disabled(selected.isEmpty || busy || (oneOff ? title.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 : topic == nil || versions.isEmpty))
+                    Button(evaluating ? "Start evaluation" : scheduled ? "Schedule session" : "Start session") { Task { await start() } }.buttonStyle(WorkspaceActionStyle()).disabled(selected.isEmpty || busy || (oneOff ? title.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 : topic == nil || versions.isEmpty))
                 } else {
-                    Text(mode == "schedule" ? "Shift Schedule" : mode == "continue" ? "Continue Training" : "Training History").font(.title2.bold())
-                    let sessions = home.sessions.filter { mode == "history" ? $0.status == "FINALIZED" : mode == "schedule" ? $0.status == "SCHEDULED" : $0.status == "IN_PROGRESS" }
+                    Text(mode == "schedule" ? "Schedule & Sessions" : mode == "continue" ? "Continue Training" : "Training Records").font(.title2.bold())
+                    let sessions = home.sessions.filter { mode == "history" ? $0.status == "FINALIZED" : mode == "schedule" ? ($0.status == "SCHEDULED" || $0.status == "IN_PROGRESS") : $0.status == "IN_PROGRESS" }
                     if sessions.isEmpty { Text("No sessions here yet.").foregroundStyle(.secondary) }
                     ForEach(sessions) { session in
                         Button { activeSession = session.id } label: { WorkspaceToolRow(title: session.title, subtitle: "\(session.participantCount) participants · \((session.startAt ?? session.updatedAt).formatted(date: .abbreviated,time: .shortened))", icon: "chevron.right") }.buttonStyle(.plain)
                     }
-                    if mode == "schedule" { Button("+ Schedule Training") { begin(); scheduled = true }.buttonStyle(WorkspaceActionStyle()) }
+                    if mode == "schedule" { Button("Schedule session") { begin(); scheduled = true }.buttonStyle(WorkspaceActionStyle()); Button("Record one-off training") { begin(); oneOff = true }.buttonStyle(WorkspaceActionStyle()) }
                 }
             } else if error == nil { ProgressView("Loading training…") }
             Text("Online connection required. Confirmed saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary)
         }.disabled(busy).task { await load() }
+        .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: libraryWorkspace.members) } }
         .navigationDestination(isPresented: Binding(get: { activeSession != nil }, set: { if !$0 { activeSession = nil; Task { await load() } } })) { if let activeSession { GuidedSessionView(id: activeSession) } }
+    }
+    private func prepareEvaluation(_ course: GuidedTopic, _ version: GuidedVersion, _ members: [String]) {
+        choose(course); evaluating = true; versions = [version.id]; selected = Set(members)
+    }
+    private func sessionRows(_ sessions: [GuidedHistory]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if sessions.isEmpty { Text("No sessions here yet.").font(.subheadline).foregroundStyle(.secondary) }
+            ForEach(sessions) { session in Button { activeSession = session.id } label: { WorkspaceToolRow(title: session.title, subtitle: "\(session.participantCount) participants · \(session.status == "SCHEDULED" ? "Scheduled" : "In progress")", icon: "calendar") }.buttonStyle(.plain) }
+        }
     }
     private func memberRow(_ member: GuidedMember) -> some View {
         Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })).workspaceCard()
@@ -933,9 +985,9 @@ private struct GuidedInstructorHome: View {
                 TrainingHeaderStat(label: "Scheduled", value: "\(home.sessions.filter { $0.status == "SCHEDULED" }.count)", accent: TrainingVisualStyle.orange),
                 TrainingHeaderStat(label: "To resume", value: "\(home.sessions.filter { $0.status == "IN_PROGRESS" }.count)", accent: TrainingVisualStyle.lavender)
             ])
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2), spacing: 10) {
-                Button { mode = "home" } label: { TrainingQuickAction(title: "Sessions", subtitle: "Schedule & history", symbol: "calendar.badge.clock", accent: TrainingVisualStyle.orange) }.buttonStyle(.plain)
-                NavigationLink { GuidedSkillsView(home: home) } label: { TrainingQuickAction(title: "Crew Skills", subtitle: "Assignments & progress", symbol: "person.2.badge.gearshape.fill", accent: TrainingVisualStyle.mint) }.buttonStyle(.plain)
+            if libraryWorkspace.canCreate {
+                Button("Create training") { creating = true }.buttonStyle(WorkspaceActionStyle(primary: true))
+                DisclosureGroup("Library tools") { NavigationLink("Bulk import Word JPRs") { GuidedLibraryView(workspace: libraryWorkspace) } }
             }
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass").foregroundStyle(TrainingVisualStyle.cyan)
@@ -953,18 +1005,19 @@ private struct GuidedInstructorHome: View {
             }
             if !courseSearch.isEmpty || !categoryId.isEmpty { Text("\(courses.count) matching courses").font(.caption).foregroundStyle(.white.opacity(0.7)) }
             LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 300), alignment: .top)], spacing: 16) {
-                ForEach(courses) { course in GuidedCatalogCourseCard(course: course) { choose(course) } }
+                ForEach(courses) { course in GuidedCatalogCourseCard(course: course, members: libraryWorkspace.members, canManage: libraryWorkspace.manageCourses.contains(where: { $0.id == course.id }), canReview: libraryWorkspace.canCreate) { choose(course) } }
             }
             if courses.isEmpty { WorkspacePanel { Text(home.topics.isEmpty ? "No courses ready yet" : "No matching courses").font(.headline); Text(home.topics.isEmpty ? "Published courses with approved JPRs appear here." : "Try a course name, JPR number, or another category.").font(.subheadline).foregroundStyle(.white.opacity(0.65)) } }
             ForEach((home.pendingCourses ?? []).filter { (categoryId.isEmpty || $0.category?.id == categoryId) && (courseSearch.isEmpty || $0.title.localizedCaseInsensitiveContains(courseSearch)) }) { course in
-                WorkspacePanel { Text(course.title).font(.headline); WorkspaceBadge(text: "JPR REVIEW PENDING"); Text("\(course.totalJprs) JPRs awaiting review. Guided training becomes available after approval.").font(.caption).foregroundStyle(.white.opacity(0.65)); if home.canCreate { NavigationLink("Review JPRs") { GuidedLibraryView(workspace: workspace) }.tint(TrainingVisualStyle.cyan) } }
+                WorkspacePanel { Text(course.title).font(.headline); WorkspaceBadge(text: "JPR REVIEW PENDING"); Text("\(course.totalJprs) JPRs awaiting review. Guided training becomes available after approval.").font(.caption).foregroundStyle(.white.opacity(0.65)); if home.canCreate { NavigationLink("Review this course’s JPRs") { GuidedLibraryView(workspace: libraryWorkspace, initialCourseId: course.id) }.tint(TrainingVisualStyle.cyan) } }
             }
-            Button { begin(); oneOff = true } label: { Label("Record one-off training", systemImage: "plus.circle.fill") }.buttonStyle(WorkspaceActionStyle())
-            if home.canCreate { NavigationLink { GuidedLibraryView(workspace: workspace) } label: { WorkspaceToolRow(title: "Build & Manage", subtitle: "Courses, Word JPRs, and approvals", icon: "books.vertical.fill") }.buttonStyle(.plain) }
+            ForEach(libraryWorkspace.manageCourses.filter { course in course.delivery != "LEGACY" && course.status != "ARCHIVED" && !home.topics.contains(where: { $0.id == course.id }) }) { course in
+                NavigationLink { WorkspaceCourseView(course: TrainingWorkspaceCourse(id: course.id, title: course.title, description: nil, delivery: course.delivery, archived: false, assigned: false, progressStatus: "NOT_STARTED", completedAt: nil, dueAt: nil, durationMinutes: nil, creditedMinutes: 0, pendingForm: false), members: libraryWorkspace.members, manage: true, allowJprReview: libraryWorkspace.canCreate) } label: { WorkspaceToolRow(title: course.title, subtitle: course.status == "DRAFT" ? "Continue draft · content & JPRs" : "Course details · assignments & records", icon: "doc.text") }.buttonStyle(.plain)
+            }
         }
     }
     private var catalogHeading: some View {
-        Text("Course Catalog").font(.title3.bold()).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+        Text("Training Library").font(.title3.bold()).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
     }
     private func categoryPicker(_ categories: [String: String]) -> some View {
         Picker("Category", selection: $categoryId) {
@@ -972,8 +1025,8 @@ private struct GuidedInstructorHome: View {
             ForEach(categories.keys.sorted { (categories[$0] ?? "") < (categories[$1] ?? "") }, id: \.self) { id in Text(categories[id] ?? id).tag(id) }
         }.pickerStyle(.menu).tint(TrainingVisualStyle.cyan)
     }
-    private func begin() { assignmentOnly = false; mode = "start"; selected = []; versions = []; topicId = ""; search = ""; title = ""; notes = ""; oneOff = false; scheduled = false; date = Date(); status = ""; requestId = UUID().uuidString }
-    @MainActor private func load() async { do { home = try await APIClient.shared.trainingWorkspace("/guided"); error = nil } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
+    private func begin() { evaluating = false; assignmentOnly = false; mode = "start"; selected = []; versions = []; topicId = ""; search = ""; title = ""; notes = ""; oneOff = false; scheduled = false; date = Date(); status = ""; requestId = UUID().uuidString }
+    @MainActor private func load() async { do { async let guided: GuidedHome = APIClient.shared.trainingWorkspace("/guided"); async let fresh: TrainingWorkspaceHome = APIClient.shared.trainingWorkspace(); let result = try await (guided, fresh); home = result.0; refreshedWorkspace = result.1; error = nil } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
     @MainActor private func onDuty() async {
         busy = true; defer { busy = false }
         let at = ISO8601DateFormatter().string(from: date).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -982,11 +1035,18 @@ private struct GuidedInstructorHome: View {
     @MainActor private func start() async {
         busy = true; defer { busy = false }
         do {
-            var values: [String: Any] = ["assignSkills": !oneOff, "requestId": requestId, "participantIds": Array(selected), "oneOff": oneOff, "scheduled": scheduled, "startAt": ISO8601DateFormatter().string(from: date), "location": location, "durationMinutes": minutes]
+            var values: [String: Any] = ["assignSkills": false, "requestId": requestId, "participantIds": Array(selected), "oneOff": oneOff, "scheduled": scheduled, "startAt": ISO8601DateFormatter().string(from: date), "location": location, "durationMinutes": minutes]
             if oneOff { values["title"] = title; values["notes"] = notes } else { values["courseId"] = topicId; values["versionIds"] = Array(versions) }
-            let result: GuidedMutation = try await APIClient.shared.trainingWorkspace(assignmentOnly ? "/guided/assign" : "/guided", body: JSONSerialization.data(withJSONObject: values))
+            let result: GuidedMutation = try await APIClient.shared.trainingWorkspace("/guided", body: JSONSerialization.data(withJSONObject: values))
+            if scheduled { mode = "schedule"; status = "Scheduled. No credit awarded."; await load() }
+            else if let id = result.sessionId {
+                if evaluating {
+                    let current: GuidedSessionResponse = try await APIClient.shared.trainingWorkspace("/guided/\(id)")
+                    if current.session.stage != "EVALUATE" { let _: GuidedMutation = try await APIClient.shared.trainingWorkspace("/guided/\(id)", body: JSONSerialization.data(withJSONObject: ["revision": current.session.revision, "stage": "EVALUATE"])) }
+                }
+                activeSession = id
+            }
             requestId = UUID().uuidString
-            if assignmentOnly { mode = "catalog"; status = "Course and JPRs assigned to \(selected.count) members."; await load() } else if scheduled { mode = "schedule"; status = "Scheduled. No credit awarded."; await load() } else { activeSession = result.sessionId }
         } catch { self.error = error.localizedDescription }
     }
 }
@@ -1087,7 +1147,7 @@ private struct GuidedSessionView: View {
             Text(step.title).font(.title2.bold())
             if s.stage == "PRACTICE" { Text("Supervised practice. Practice does not record a passing evaluation.") }
             guidance("TEACH",step.teach);guidance("SHOW",step.show);guidance("CHECK",step.check)
-            if !step.safety.isEmpty { WorkspacePanel { Text(step.critical ? "CRITICAL SAFETY" : "SAFETY").bold().foregroundStyle(TrainingVisualStyle.cyan);Text(step.safety) } }
+            if step.critical || !step.safety.isEmpty { TrainingSafetyNotice(text: step.safety, critical: step.critical) }
             if s.stage == "EVALUATE" {
                 Picker("Evaluation view",selection:$individual) { Text("All participants").tag("");ForEach(s.participants) { Text($0.name).tag($0.id) } }
                 ForEach(s.participants.filter { $0.attended != false && (individual.isEmpty || individual == $0.id) }) { member in
@@ -1107,7 +1167,7 @@ private struct GuidedSessionView: View {
         let current=s.observations[s.key(version,step,member)]
         return WorkspacePanel {
             Text(member.name).font(.headline)
-            Text(current?.rating == "PASS" ? "Pass" : current?.rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated").foregroundStyle(TrainingVisualStyle.cyan)
+            Text(current?.rating == "PASS" ? "Pass" : current?.rating == "NEEDS_WORK" ? (step.critical ? "⚠ Critical safety failure" : "⚠ Needs work") : "Not evaluated").foregroundStyle(current?.rating == "NEEDS_WORK" ? Color(red:1,green:0.61,blue:0.61) : TrainingVisualStyle.cyan)
             ViewThatFits(in:.horizontal) { ratings(s,version:version,step:step,member:member,current:current,horizontal:true);ratings(s,version:version,step:step,member:member,current:current,horizontal:false) }
             Button("Comment / reason") { commentDraft=current?.comment ?? "";commenting=member }.frame(minHeight:44).disabled(blocked)
             if let comment=current?.comment,!comment.isEmpty { Text(comment).font(.subheadline) }
@@ -1119,7 +1179,7 @@ private struct GuidedSessionView: View {
             Button(rating == "PASS" ? "Pass" : rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated") {
                 if step.critical && rating == "NEEDS_WORK" { commentDraft=current?.comment ?? "";commenting=member }
                 else { Task { await save(["observation":["versionId":version.id,"stepId":step.id,"userId":member.id,"rating":rating,"comment":current?.comment ?? ""]]) } }
-            }.buttonStyle(WorkspaceActionStyle()).disabled(blocked)
+            }.buttonStyle(WorkspaceActionStyle(danger: rating == "NEEDS_WORK")).disabled(blocked)
         } }
     }
     private func summary(_ s:GuidedSession) -> some View {
@@ -1127,6 +1187,7 @@ private struct GuidedSessionView: View {
         let passed=s.oneOff == true ? 0 : attended.filter{m in s.jprs.allSatisfy{s.outcome($0,m)=="Passed"}}.count
         return VStack(alignment:.leading,spacing:18) {
             Text("Training summary").font(.title2.bold())
+            if s.jprs.contains(where: { v in v.content.steps.contains(where: { step in step.critical && attended.contains(where: { s.observations[s.key(v,step,$0)]?.rating == "NEEDS_WORK" }) }) }) { TrainingSafetyNotice(text: "Critical safety failures were recorded. Review the affected members and instructor feedback. These evaluations do not pass.", critical: true) }
             if s.oneOff == true { Text("\(attended.count) attended · Attendance and hours only"); if let notes = s.notes { Text(notes) } } else { Text("\(attended.count) attended · \(passed) passed required JPRs · \(attended.count-passed) need additional training or evaluation") }
             if !s.locked {
                 HStack { TextField("Training minutes",text:$duration).keyboardType(.numberPad).textFieldStyle(.roundedBorder).disabled(busy || pending != nil);Button("Save duration") { Task { await save(["durationMinutes":Int(duration) ?? 0]) } }.disabled(busy || pending != nil || !durationDirty) }
@@ -1138,7 +1199,7 @@ private struct GuidedSessionView: View {
                         DisclosureGroup("\(v.content.number): \(member.attended == false ? "Absent" : s.outcome(v,member))") {
                             ForEach(v.content.steps) { step in
                                 let observation=s.observations[s.key(v,step,member)]
-                                Text("\(step.title): \(observation?.rating == "PASS" ? "Pass" : observation?.rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated")")
+                                Text("\(step.critical ? "⚠ Critical Safety · " : "")\(step.title): \(observation?.rating == "PASS" ? "Pass" : observation?.rating == "NEEDS_WORK" ? "Needs work" : "Not evaluated")").foregroundStyle(observation?.rating == "NEEDS_WORK" ? Color(red:1,green:0.61,blue:0.61) : .white)
                                 if let comment=observation?.comment,!comment.isEmpty {Text(comment).font(.caption)}
                             }
                         }
@@ -1267,7 +1328,9 @@ private struct GuidedMemberResults:View {
 }
 
 private struct GuidedLibraryView:View {
-    let workspace:TrainingWorkspaceHome
+    var workspace:TrainingWorkspaceHome? = nil
+    var initialCourseId = ""
+    var keepCourseDraft = false
     @State private var library:GuidedLibrary?
     @State private var courseId=""
     @State private var importing=false
@@ -1283,11 +1346,12 @@ private struct GuidedLibraryView:View {
     private var selectedVersions:[GuidedVersion] { (library?.versions ?? []).filter { selectedDrafts.contains($0.id) && ready($0) } }
     var body:some View {
         ScrollView {VStack(alignment:.leading,spacing:18){
-            Text("Training Library").font(.title.bold())
+            Text(initialCourseId.isEmpty ? "Bulk import Word JPRs" : "Content & JPRs").font(.title.bold())
             Text("Review saved drafts, select ready JPRs, and approve them together. Approved revisions are locked.")
             if let error{WorkspaceNotice(message:error,warning:true)}
             if !status.isEmpty { WorkspaceNotice(message:status) }
-            Picker("Training topic",selection:$courseId){Text("All courses / new course per document").tag("");ForEach(workspace.manageCourses){Text($0.title).tag($0.id)}}
+            if initialCourseId.isEmpty { Picker("Training topic",selection:$courseId){Text("All courses / new course per document").tag("");ForEach(workspace?.manageCourses ?? []){Text($0.title).tag($0.id)}} }
+            if keepCourseDraft { Text("JPR approval keeps this course in draft. Return to Review & save when you are ready to publish; assignments are optional.").font(.subheadline) }
             Button("Upload Word JPRs (.docx)"){importing=true}.buttonStyle(WorkspaceActionStyle()).disabled(busy)
             Text("Word documents up to 4 MB. Imports always start as drafts. Older .doc files must first be saved as .docx.").font(.caption)
             TextField("Find a JPR by number or title",text:$reviewSearch).workspaceInput()
@@ -1314,7 +1378,7 @@ private struct GuidedLibraryView:View {
                     }
                 }
             }else if error==nil{ProgressView()}
-        }.padding(16)}.navigationTitle("JPR management").trainingDestinationNavigation(blocked: busy).disabled(busy).task{await load()}
+        }.padding(16)}.navigationTitle("JPR management").trainingDestinationNavigation(blocked: busy).disabled(busy).task{courseId = initialCourseId; await load()}
         .fileImporter(isPresented:$importing,allowedContentTypes:[UTType(filenameExtension:"docx") ?? .data],allowsMultipleSelection:true){result in
             switch result{case .success(let urls):Task{for url in urls {await upload(url)}};case .failure(let error):self.error=error.localizedDescription}
         }
@@ -1322,12 +1386,12 @@ private struct GuidedLibraryView:View {
         .sheet(isPresented:$confirmingBatch) {
             NavigationStack {
                 List {
-                    Section { Text("Confirm you reviewed the instructions, evaluation steps, and safety requirements for every selected JPR. Approval locks these revisions and publishes their draft practical courses.") }
+                    Section { Text(keepCourseDraft ? "Review all instructions and safety requirements. Approval locks the JPRs; the course stays a draft." : "Confirm you reviewed the instructions, evaluation steps, and safety requirements. Approval locks these revisions and publishes their draft practical courses.") }
                     Section("\(selectedVersions.count) JPR revisions") {
                         ForEach(selectedVersions) { version in
                             VStack(alignment:.leading,spacing:5) {
                                 Text("\(version.content.number) · \(version.content.title)").font(.headline)
-                                Text("Revision \(version.revision) · \(workspace.manageCourses.first { $0.id==version.courseId }?.title ?? "Training course")").font(.caption)
+                                Text("Revision \(version.revision) · \(workspace?.manageCourses.first { $0.id==version.courseId }?.title ?? "Training course")").font(.caption)
                             }
                         }
                     }
@@ -1337,7 +1401,7 @@ private struct GuidedLibraryView:View {
                     .disabled(busy).interactiveDismissDisabled(busy)
             }
         }
-        .sheet(item:$selected,onDismiss:{Task{await load()}}){version in NavigationStack{GuidedJPREditor(version:version)}}
+        .sheet(item:$selected,onDismiss:{Task{await load()}}){version in NavigationStack{GuidedJPREditor(version:version, keepCourseDraft:keepCourseDraft)}}
     }
     @MainActor private func load()async{do{library=try await APIClient.shared.trainingWorkspace("/jprs");selectedDrafts=selectedDrafts.filter { id in library?.versions.contains { $0.id==id && ready($0) } == true };error=nil}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}}
     @MainActor private func approveSelected()async {
@@ -1345,7 +1409,7 @@ private struct GuidedLibraryView:View {
         busy=true;defer{busy=false};error=nil;status=""
         let count=selectedVersions.count
         do {
-            let body:[String:Any]=["action":"approveBatch","confirmed":true,"publish":true,"versions":selectedVersions.map { ["id":$0.id,"reviewToken":$0.reviewToken ?? ""] }]
+            let body:[String:Any]=["action":"approveBatch","confirmed":true,"publish":!keepCourseDraft,"versions":selectedVersions.map { ["id":$0.id,"reviewToken":$0.reviewToken ?? ""] }]
             let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:body))
             confirmingBatch=false;selectedDrafts=[];await load();status="\(count) JPR revisions approved and locked."
         }catch{let message=error.localizedDescription;confirmingBatch=false;selectedDrafts=[];await load();self.error=message}
@@ -1359,6 +1423,7 @@ private struct GuidedLibraryView:View {
 }
 private struct GuidedJPREditor:View {
     let version:GuidedVersion
+    let keepCourseDraft:Bool
     @Environment(\.dismiss)private var dismiss
     @State private var content:GuidedContent
     @State private var busy=false
@@ -1367,7 +1432,7 @@ private struct GuidedJPREditor:View {
     @State private var confirmApproval=false
     @State private var confirmDiscard=false
     @State private var dirty=false
-    init(version:GuidedVersion){self.version=version;_content=State(initialValue:version.content)}
+    init(version:GuidedVersion,keepCourseDraft:Bool=false){self.version=version;self.keepCourseDraft=keepCourseDraft;_content=State(initialValue:version.content)}
     var body:some View {
         Form{
             if let error{Text(error).foregroundStyle(.red)}
@@ -1382,6 +1447,7 @@ private struct GuidedJPREditor:View {
                 Stepper("Passing score: \(content.passingScore)%",value:$content.passingScore,in:1...100)
             }.disabled(version.status=="APPROVED" || busy)
             ForEach($content.steps){$step in Section(step.title.isEmpty ? "Performance step" : step.title){
+                if step.critical { TrainingSafetyNotice(text: step.safety, critical: true) }
                 TextField("Step title",text:$step.title);TextField("TEACH",text:$step.teach,axis:.vertical);TextField("SHOW",text:$step.show,axis:.vertical);TextField("CHECK",text:$step.check,axis:.vertical);TextField("SAFETY",text:$step.safety,axis:.vertical)
                 Toggle("Required",isOn:$step.required);Toggle("Critical safety requirement",isOn:$step.critical)
             }.disabled(version.status=="APPROVED" || busy)}
@@ -1400,7 +1466,7 @@ private struct GuidedJPREditor:View {
     @MainActor private func save(approve:Bool)async{
         busy=true;defer{busy=false}
         do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let body=try JSONSerialization.data(withJSONObject:["action":"update","id":version.id,"content":object]);let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:body);dirty=false;status="Draft saved"
-            if approve{let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"approve","id":version.id,"publish":true]));dismiss()}
+            if approve{let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"approve","id":version.id,"publish":!keepCourseDraft]));dismiss()}
         }catch{self.error=error.localizedDescription}
     }
     @MainActor private func revise()async{
@@ -1411,6 +1477,9 @@ private struct GuidedJPREditor:View {
 
 private struct GuidedSkillsView: View {
     var home: GuidedHome? = nil
+    var onEvaluate: ((GuidedTopic, GuidedVersion, [String]) -> Void)? = nil
+    @Environment(\.dismiss) private var dismiss
+    @State private var skillsTab = "directory"
     @State private var data: GuidedSkillsResponse?
     @State private var skillSearch = ""
     @State private var versionId = ""
@@ -1425,17 +1494,31 @@ private struct GuidedSkillsView: View {
         AppScreen(title: "") {
         ScrollView {
         VStack(spacing: 0) {
-            TrainingScreenHeader(title: home == nil ? "My Skills Progress" : "Crew Skills", subtitle: "Assigned JPRs and instructor evaluations.", systemImage: "checkmark.seal.fill", stats: [TrainingHeaderStat(label: "Assigned", value: "\(data?.requirements.count ?? 0)"), TrainingHeaderStat(label: "Completed", value: "\(data?.requirements.filter { $0.percent >= 100 }.count ?? 0)")])
+            TrainingScreenHeader(title: home == nil ? "My Skills Progress" : "Skills & Evaluations", subtitle: "Assigned JPRs and instructor evaluations.", systemImage: "checkmark.seal.fill", stats: [TrainingHeaderStat(label: "Assigned", value: "\(data?.requirements.count ?? 0)"), TrainingHeaderStat(label: "Completed", value: "\(data?.requirements.filter { $0.percent >= 100 }.count ?? 0)")])
             VStack(alignment: .leading, spacing: 18) {
-                Text("Progress reflects instructor sign-offs on your assigned JPRs.").font(.subheadline).foregroundStyle(.secondary)
+                Text(home == nil ? "Progress reflects instructor sign-offs on your assigned JPRs." : "Find a skill, evaluate members, or assign a future requirement. No prior assignment is required to evaluate.").font(.subheadline).foregroundStyle(.secondary)
                 if let error { WorkspaceNotice(message: error, warning: true) }
                 if !status.isEmpty { Text(status).font(.caption) }
                 if let home {
-                    Button(adding ? "Close assignment form" : "+ Assign Skills") { adding.toggle() }.buttonStyle(WorkspaceActionStyle())
+                    Picker("Skills view", selection: $skillsTab) { Text("Skills directory").tag("directory"); Text("Assignments & progress").tag("progress") }.pickerStyle(.menu)
+                    Button(adding ? "Close assignment form" : "Assign skill requirement") { adding.toggle() }.buttonStyle(WorkspaceActionStyle())
                     if adding { assignmentForm(home) }
                 }
                 HStack { Image(systemName: "magnifyingglass"); TextField(home == nil ? "Find a skill" : "Find a member or skill", text: $skillSearch).autocorrectionDisabled() }.workspaceCard()
-                if let data {
+                if let home, skillsTab == "directory" {
+                    ForEach(home.topics) { course in
+                        ForEach(course.latestJprs.filter { skillSearch.isEmpty || "\(course.title) \($0.content.number) \($0.content.title)".localizedCaseInsensitiveContains(skillSearch) }) { version in
+                            WorkspacePanel {
+                                Text(course.title).font(.caption).foregroundStyle(.secondary)
+                                Text("\(version.content.number) · \(version.content.title)").font(.headline)
+                                Text("Approved revision \(version.revision)").font(.caption)
+                                Button("Evaluate members") { onEvaluate?(course,version,[]); dismiss() }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(onEvaluate == nil)
+                                Button("Assign requirement") { versionId = version.id; adding = true }.buttonStyle(WorkspaceActionStyle())
+                            }
+                        }
+                    }
+                    if home.topics.isEmpty { WorkspaceNotice(message: "No approved skills are available yet. Publish a course and approve its JPRs to list them here.") }
+                } else if let data {
                     ForEach(data.sessions ?? []) { session in
                         WorkspacePanel {
                             Text("Upcoming · \(session.title)").font(.headline)
@@ -1456,11 +1539,14 @@ private struct GuidedSkillsView: View {
                             }
                             Text("Revision \(requirement.revision) · \(requirement.completed) / \(requirement.required) successful evaluations").font(.subheadline).foregroundStyle(.white.opacity(0.75))
                             if let date = requirement.dueAt { Text("Due \(date.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
+                            if let home, let course = home.topics.first(where: { $0.id == requirement.courseId }), let version = course.jprs.first(where: { $0.id == requirement.versionId }), onEvaluate != nil {
+                                Button("Evaluate \(requirement.member)") { onEvaluate?(course,version,[requirement.userId]); dismiss() }.buttonStyle(WorkspaceActionStyle())
+                            }
                             DisclosureGroup("Evaluation history") {
                                 if requirement.history.isEmpty { Text("No finalized evaluations since assignment.").font(.caption) }
                                 ForEach(requirement.history) { attempt in
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(attempt.outcome == "PASS" ? "Passed" : attempt.outcome == "FAIL" ? "Needs work" : "Incomplete")
+                                        Text(attempt.outcome == "PASS" ? "Passed" : attempt.outcome == "FAIL" ? "⚠ Needs work" : "Incomplete").foregroundStyle(attempt.outcome == "FAIL" ? Color(red:1,green:0.61,blue:0.61) : .white)
                                         Text(attempt.evaluator).font(.caption)
                                         if let date = attempt.completedAt { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption) }
                                     }.padding(.vertical, 6)
@@ -1472,7 +1558,7 @@ private struct GuidedSkillsView: View {
             }.padding(16)
         }
         }.refreshable { await load() }.foregroundStyle(.white)
-        }.navigationTitle(home == nil ? "My Skills" : "Crew Skills").trainingDestinationNavigation(blocked: busy).navigationBarTitleDisplayMode(.inline).tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark).disabled(busy).task { await load() }
+        }.navigationTitle(home == nil ? "My Skills" : "Skills & Evaluations").trainingDestinationNavigation(blocked: busy).navigationBarTitleDisplayMode(.inline).tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark).disabled(busy).task { await load() }
     }
     private func assignmentForm(_ home: GuidedHome) -> some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -1496,7 +1582,20 @@ private struct GuidedSkillsView: View {
         do {
             let values: [String: Any] = ["versionId": versionId, "memberIds": Array(selected), "requiredCompletions": repetitions, "dueAt": ISO8601DateFormatter().string(from: due)]
             let _: TrainingWorkspaceMutation = try await APIClient.shared.trainingWorkspace("/skills", body: JSONSerialization.data(withJSONObject: values))
-            adding = false; status = "JPR requirement assigned."; await load()
+            adding = false; skillsTab = "progress"; status = "JPR requirement assigned."; await load()
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct TrainingSafetyNotice: View {
+    let text: String
+    var critical = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(critical ? "Critical Safety" : "Safety", systemImage: "exclamationmark.triangle.fill").font(.headline).foregroundStyle(Color(red: 1, green: 0.61, blue: 0.61))
+            if !text.isEmpty { Text(text).font(.subheadline).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true) }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
+        .background(Color.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.red.opacity(0.7), lineWidth: 1))
     }
 }
