@@ -126,12 +126,305 @@ struct WorkspaceDraftQuestion: Codable, Identifiable {
     private enum CodingKeys: String, CodingKey { case prompt, options, correctIndex }
 }
 
+// Preserve unknown JSON fields at every content level for forward-compatible saves.
+indirect enum GuidedJSON: Codable {
+    case object([String:GuidedJSON]), array([GuidedJSON]), string(String), number(Double), bool(Bool), null
+    init(from decoder:Decoder)throws {
+        let c=try decoder.singleValueContainer()
+        if c.decodeNil(){self = .null}
+        else if let v=try? c.decode(Bool.self){self = .bool(v)}
+        else if let v=try? c.decode(String.self){self = .string(v)}
+        else if let v=try? c.decode(Double.self){self = .number(v)}
+        else if let v=try? c.decode([String:GuidedJSON].self){self = .object(v)}
+        else {self = .array(try c.decode([GuidedJSON].self))}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.singleValueContainer()
+        switch self {
+        case .object(let v):try c.encode(v)
+        case .array(let v):try c.encode(v)
+        case .string(let v):try c.encode(v)
+        case .number(let v):try c.encode(v)
+        case .bool(let v):try c.encode(v)
+        case .null:try c.encodeNil()
+        }
+    }
+}
+private struct GuidedContentKey:CodingKey {
+    var stringValue:String
+    var intValue:Int? {nil}
+    init(_ value:String){stringValue=value}
+    init?(stringValue:String){self.stringValue=stringValue}
+    init?(intValue:Int){return nil}
+}
 struct GuidedStep: Codable, Identifiable {
-    var id: String; var title: String; var teach: String; var show: String; var check: String; var safety: String; var required: Bool; var critical: Bool
+    var id: String = ""
+    var title: String = ""
+    var teach: String = ""
+    var show: String = ""
+    var check: String = ""
+    var safety: String = ""
+    var required: Bool = true
+    var critical: Bool = false
+    var extraFields: [String:GuidedJSON] = [:]
+}
+extension GuidedStep {
+    init(from decoder:Decoder)throws {
+        let c=try decoder.container(keyedBy:GuidedContentKey.self)
+        id=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("id")) ?? ""
+        title=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("title")) ?? ""
+        teach=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("teach")) ?? ""
+        show=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("show")) ?? ""
+        check=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("check")) ?? ""
+        safety=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("safety")) ?? ""
+        required=try c.decodeIfPresent(Bool.self,forKey:GuidedContentKey("required")) ?? true
+        critical=try c.decodeIfPresent(Bool.self,forKey:GuidedContentKey("critical")) ?? false
+        let known=Set(["id","title","teach","show","check","safety","required","critical"])
+        for key in c.allKeys where !known.contains(key.stringValue) {extraFields[key.stringValue]=try c.decode(GuidedJSON.self,forKey:key)}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.container(keyedBy:GuidedContentKey.self)
+        for (key,value) in extraFields {try c.encode(value,forKey:GuidedContentKey(key))}
+        try c.encode(id,forKey:GuidedContentKey("id"))
+        try c.encode(title,forKey:GuidedContentKey("title"))
+        try c.encode(teach,forKey:GuidedContentKey("teach"))
+        try c.encode(show,forKey:GuidedContentKey("show"))
+        try c.encode(check,forKey:GuidedContentKey("check"))
+        try c.encode(safety,forKey:GuidedContentKey("safety"))
+        try c.encode(required,forKey:GuidedContentKey("required"))
+        try c.encode(critical,forKey:GuidedContentKey("critical"))
+    }
 }
 struct GuidedContent: Codable {
+    var number: String = ""
+    var title: String = ""
+    var category: String = ""
+    var objective: String = ""
+    var conditions: String = ""
+    var equipment: String = ""
+    var guidance: String = ""
+    var standards: String = ""
+    var revisionNotes: String = ""
+    var passingScore: Int = 100
+    var steps: [GuidedStep] = []
     var importedText: String? = nil
-    var number: String; var title: String; var category: String; var objective: String; var conditions: String; var equipment: String; var guidance: String; var standards: String; var revisionNotes: String; var passingScore: Int; var steps: [GuidedStep]
+    var schemaVersion: Int? = nil
+    var teaching: GuidedTeaching? = nil
+    var scenarios: [GuidedScenario]? = nil
+    var extraFields: [String:GuidedJSON] = [:]
+}
+extension GuidedContent {
+    init(from decoder:Decoder)throws {
+        let c=try decoder.container(keyedBy:GuidedContentKey.self)
+        number=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("number")) ?? ""
+        title=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("title")) ?? ""
+        category=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("category")) ?? ""
+        objective=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("objective")) ?? ""
+        conditions=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("conditions")) ?? ""
+        equipment=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("equipment")) ?? ""
+        guidance=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("guidance")) ?? ""
+        standards=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("standards")) ?? ""
+        revisionNotes=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("revisionNotes")) ?? ""
+        passingScore=try c.decodeIfPresent(Int.self,forKey:GuidedContentKey("passingScore")) ?? 100
+        steps=try c.decodeIfPresent([GuidedStep].self,forKey:GuidedContentKey("steps")) ?? []
+        importedText=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("importedText"))
+        schemaVersion=try c.decodeIfPresent(Int.self,forKey:GuidedContentKey("schemaVersion"))
+        teaching=try c.decodeIfPresent(GuidedTeaching.self,forKey:GuidedContentKey("teaching"))
+        scenarios=try c.decodeIfPresent([GuidedScenario].self,forKey:GuidedContentKey("scenarios"))
+        let known=Set(["number","title","category","objective","conditions","equipment","guidance","standards","revisionNotes","passingScore","steps","importedText","schemaVersion","teaching","scenarios"])
+        for key in c.allKeys where !known.contains(key.stringValue) {extraFields[key.stringValue]=try c.decode(GuidedJSON.self,forKey:key)}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.container(keyedBy:GuidedContentKey.self)
+        for (key,value) in extraFields {try c.encode(value,forKey:GuidedContentKey(key))}
+        try c.encode(number,forKey:GuidedContentKey("number"))
+        try c.encode(title,forKey:GuidedContentKey("title"))
+        try c.encode(category,forKey:GuidedContentKey("category"))
+        try c.encode(objective,forKey:GuidedContentKey("objective"))
+        try c.encode(conditions,forKey:GuidedContentKey("conditions"))
+        try c.encode(equipment,forKey:GuidedContentKey("equipment"))
+        try c.encode(guidance,forKey:GuidedContentKey("guidance"))
+        try c.encode(standards,forKey:GuidedContentKey("standards"))
+        try c.encode(revisionNotes,forKey:GuidedContentKey("revisionNotes"))
+        try c.encode(passingScore,forKey:GuidedContentKey("passingScore"))
+        try c.encode(steps,forKey:GuidedContentKey("steps"))
+        try c.encodeIfPresent(importedText,forKey:GuidedContentKey("importedText"))
+        try c.encodeIfPresent(schemaVersion,forKey:GuidedContentKey("schemaVersion"))
+        try c.encodeIfPresent(teaching,forKey:GuidedContentKey("teaching"))
+        try c.encodeIfPresent(scenarios,forKey:GuidedContentKey("scenarios"))
+    }
+}
+struct GuidedTeaching: Codable {
+    var performanceObjectives: [String] = []
+    var prerequisites: [String] = []
+    var requiredEquipment: [String] = []
+    var instructorPreparation: [String] = []
+    var safetyConsiderations: [String] = []
+    var criticalFailures: [String] = []
+    var instructionalSteps: [GuidedTeachingStep] = []
+    var references: [GuidedReference] = []
+    var extraFields: [String:GuidedJSON] = [:]
+}
+extension GuidedTeaching {
+    init(from decoder:Decoder)throws {
+        let c=try decoder.container(keyedBy:GuidedContentKey.self)
+        performanceObjectives=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("performanceObjectives")) ?? []
+        prerequisites=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("prerequisites")) ?? []
+        requiredEquipment=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("requiredEquipment")) ?? []
+        instructorPreparation=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("instructorPreparation")) ?? []
+        safetyConsiderations=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("safetyConsiderations")) ?? []
+        criticalFailures=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("criticalFailures")) ?? []
+        instructionalSteps=try c.decodeIfPresent([GuidedTeachingStep].self,forKey:GuidedContentKey("instructionalSteps")) ?? []
+        references=try c.decodeIfPresent([GuidedReference].self,forKey:GuidedContentKey("references")) ?? []
+        let known=Set(["performanceObjectives","prerequisites","requiredEquipment","instructorPreparation","safetyConsiderations","criticalFailures","instructionalSteps","references"])
+        for key in c.allKeys where !known.contains(key.stringValue) {extraFields[key.stringValue]=try c.decode(GuidedJSON.self,forKey:key)}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.container(keyedBy:GuidedContentKey.self)
+        for (key,value) in extraFields {try c.encode(value,forKey:GuidedContentKey(key))}
+        try c.encode(performanceObjectives,forKey:GuidedContentKey("performanceObjectives"))
+        try c.encode(prerequisites,forKey:GuidedContentKey("prerequisites"))
+        try c.encode(requiredEquipment,forKey:GuidedContentKey("requiredEquipment"))
+        try c.encode(instructorPreparation,forKey:GuidedContentKey("instructorPreparation"))
+        try c.encode(safetyConsiderations,forKey:GuidedContentKey("safetyConsiderations"))
+        try c.encode(criticalFailures,forKey:GuidedContentKey("criticalFailures"))
+        try c.encode(instructionalSteps,forKey:GuidedContentKey("instructionalSteps"))
+        try c.encode(references,forKey:GuidedContentKey("references"))
+    }
+}
+struct GuidedTeachingStep: Codable, Identifiable {
+    var id: String = ""
+    var title: String = ""
+    var instruction: String = ""
+    var demonstration: String = ""
+    var expectedActions: [String] = []
+    var safetyConsiderations: [String] = []
+    var criticalFailures: [String] = []
+    var commonMistakes: [GuidedMistake] = []
+    var extraFields: [String:GuidedJSON] = [:]
+}
+extension GuidedTeachingStep {
+    init(from decoder:Decoder)throws {
+        let c=try decoder.container(keyedBy:GuidedContentKey.self)
+        id=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("id")) ?? ""
+        title=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("title")) ?? ""
+        instruction=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("instruction")) ?? ""
+        demonstration=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("demonstration")) ?? ""
+        expectedActions=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("expectedActions")) ?? []
+        safetyConsiderations=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("safetyConsiderations")) ?? []
+        criticalFailures=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("criticalFailures")) ?? []
+        commonMistakes=try c.decodeIfPresent([GuidedMistake].self,forKey:GuidedContentKey("commonMistakes")) ?? []
+        let known=Set(["id","title","instruction","demonstration","expectedActions","safetyConsiderations","criticalFailures","commonMistakes"])
+        for key in c.allKeys where !known.contains(key.stringValue) {extraFields[key.stringValue]=try c.decode(GuidedJSON.self,forKey:key)}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.container(keyedBy:GuidedContentKey.self)
+        for (key,value) in extraFields {try c.encode(value,forKey:GuidedContentKey(key))}
+        try c.encode(id,forKey:GuidedContentKey("id"))
+        try c.encode(title,forKey:GuidedContentKey("title"))
+        try c.encode(instruction,forKey:GuidedContentKey("instruction"))
+        try c.encode(demonstration,forKey:GuidedContentKey("demonstration"))
+        try c.encode(expectedActions,forKey:GuidedContentKey("expectedActions"))
+        try c.encode(safetyConsiderations,forKey:GuidedContentKey("safetyConsiderations"))
+        try c.encode(criticalFailures,forKey:GuidedContentKey("criticalFailures"))
+        try c.encode(commonMistakes,forKey:GuidedContentKey("commonMistakes"))
+    }
+}
+struct GuidedMistake: Codable {
+    var mistake: String = ""
+    var correction: String = ""
+    var extraFields: [String:GuidedJSON] = [:]
+}
+extension GuidedMistake {
+    init(from decoder:Decoder)throws {
+        let c=try decoder.container(keyedBy:GuidedContentKey.self)
+        mistake=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("mistake")) ?? ""
+        correction=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("correction")) ?? ""
+        let known=Set(["mistake","correction"])
+        for key in c.allKeys where !known.contains(key.stringValue) {extraFields[key.stringValue]=try c.decode(GuidedJSON.self,forKey:key)}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.container(keyedBy:GuidedContentKey.self)
+        for (key,value) in extraFields {try c.encode(value,forKey:GuidedContentKey(key))}
+        try c.encode(mistake,forKey:GuidedContentKey("mistake"))
+        try c.encode(correction,forKey:GuidedContentKey("correction"))
+    }
+}
+struct GuidedReference: Codable {
+    var title: String = ""
+    var edition: String? = nil
+    var section: String? = nil
+    var url: String? = nil
+    var departmentReference: String? = nil
+    var extraFields: [String:GuidedJSON] = [:]
+}
+extension GuidedReference {
+    init(from decoder:Decoder)throws {
+        let c=try decoder.container(keyedBy:GuidedContentKey.self)
+        title=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("title")) ?? ""
+        edition=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("edition"))
+        section=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("section"))
+        url=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("url"))
+        departmentReference=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("departmentReference"))
+        let known=Set(["title","edition","section","url","departmentReference"])
+        for key in c.allKeys where !known.contains(key.stringValue) {extraFields[key.stringValue]=try c.decode(GuidedJSON.self,forKey:key)}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.container(keyedBy:GuidedContentKey.self)
+        for (key,value) in extraFields {try c.encode(value,forKey:GuidedContentKey(key))}
+        try c.encode(title,forKey:GuidedContentKey("title"))
+        try c.encodeIfPresent(edition,forKey:GuidedContentKey("edition"))
+        try c.encodeIfPresent(section,forKey:GuidedContentKey("section"))
+        try c.encodeIfPresent(url,forKey:GuidedContentKey("url"))
+        try c.encodeIfPresent(departmentReference,forKey:GuidedContentKey("departmentReference"))
+    }
+}
+struct GuidedScenario: Codable, Identifiable {
+    var id: String = ""
+    var title: String = ""
+    var difficulty: String = "BASIC"
+    var trainingObjective: String = ""
+    var briefing: String = ""
+    var requiredEquipment: [String] = []
+    var instructorSetup: [String] = []
+    var expectedActions: [String] = []
+    var complications: [String] = []
+    var safetyStopConditions: [String] = []
+    var debriefQuestions: [String] = []
+    var extraFields: [String:GuidedJSON] = [:]
+}
+extension GuidedScenario {
+    init(from decoder:Decoder)throws {
+        let c=try decoder.container(keyedBy:GuidedContentKey.self)
+        id=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("id")) ?? ""
+        title=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("title")) ?? ""
+        difficulty=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("difficulty")) ?? "BASIC"
+        trainingObjective=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("trainingObjective")) ?? ""
+        briefing=try c.decodeIfPresent(String.self,forKey:GuidedContentKey("briefing")) ?? ""
+        requiredEquipment=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("requiredEquipment")) ?? []
+        instructorSetup=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("instructorSetup")) ?? []
+        expectedActions=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("expectedActions")) ?? []
+        complications=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("complications")) ?? []
+        safetyStopConditions=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("safetyStopConditions")) ?? []
+        debriefQuestions=try c.decodeIfPresent([String].self,forKey:GuidedContentKey("debriefQuestions")) ?? []
+        let known=Set(["id","title","difficulty","trainingObjective","briefing","requiredEquipment","instructorSetup","expectedActions","complications","safetyStopConditions","debriefQuestions"])
+        for key in c.allKeys where !known.contains(key.stringValue) {extraFields[key.stringValue]=try c.decode(GuidedJSON.self,forKey:key)}
+    }
+    func encode(to encoder:Encoder)throws {
+        var c=encoder.container(keyedBy:GuidedContentKey.self)
+        for (key,value) in extraFields {try c.encode(value,forKey:GuidedContentKey(key))}
+        try c.encode(id,forKey:GuidedContentKey("id"))
+        try c.encode(title,forKey:GuidedContentKey("title"))
+        try c.encode(difficulty,forKey:GuidedContentKey("difficulty"))
+        try c.encode(trainingObjective,forKey:GuidedContentKey("trainingObjective"))
+        try c.encode(briefing,forKey:GuidedContentKey("briefing"))
+        try c.encode(requiredEquipment,forKey:GuidedContentKey("requiredEquipment"))
+        try c.encode(instructorSetup,forKey:GuidedContentKey("instructorSetup"))
+        try c.encode(expectedActions,forKey:GuidedContentKey("expectedActions"))
+        try c.encode(complications,forKey:GuidedContentKey("complications"))
+        try c.encode(safetyStopConditions,forKey:GuidedContentKey("safetyStopConditions"))
+        try c.encode(debriefQuestions,forKey:GuidedContentKey("debriefQuestions"))
+    }
 }
 struct GuidedVersion: Codable, Identifiable {
     let id: String; let revision: Int; var content: GuidedContent
@@ -164,6 +457,7 @@ struct GuidedSessionResponse: Decodable { let session: GuidedSession }
 struct GuidedSession: Decodable, Identifiable {
     let id: String; let title: String; let courseId: String; let status: String; let stage: String; let jprIndex: Int; let stepIndex: Int; let durationMinutes: Int; let revision: Int
     let participants: [GuidedMember]; let jprs: [GuidedVersion]; let observations: [String: GuidedObservation]
+    var selectedScenarios: [String:String]? = nil
     var oneOff: Bool? = nil
     var notes: String? = nil
     var startAt: Date? = nil

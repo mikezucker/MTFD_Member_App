@@ -1145,6 +1145,12 @@ private struct GuidedSessionView: View {
                 Text("SOPs & standards: \(version.content.standards)")
             }
             Text("\(version.content.number) · Approved revision \(version.revision) · JPR \(s.jprIndex+1) of \(s.jprs.count)").font(.subheadline).foregroundStyle(TrainingVisualStyle.cyan)
+            if s.stage == "TEACH",let teaching=version.content.teaching { ExpandedTeachingView(teaching:teaching) }
+            if s.stage == "PRACTICE" {
+                ExpandedPracticeView(scenarios:version.content.scenarios ?? [],selected:s.selectedScenarios?[version.id],disabled:blocked) { scenarioId in
+                    Task { await save(["scenarioSelection":["versionId":version.id,"scenarioId":scenarioId]]) }
+                }
+            }
             Text("STEP \(s.stepIndex+1) OF \(version.content.steps.count)").font(.headline)
             ProgressView(value:Double(s.stepIndex+1),total:Double(version.content.steps.count)).tint(TrainingVisualStyle.cyan)
             Text(step.title).font(.title2.bold())
@@ -1375,7 +1381,7 @@ private struct GuidedLibraryView:View {
                                 .disabled(busy || !ready(version) || (!selectedDrafts.contains(version.id) && selectedDrafts.count>=100))
                         }
                         VStack(alignment:.leading,spacing:6) {
-                            Button{selected=version}label:{WorkspaceToolRow(title:"\(version.content.number) · \(version.content.title)",subtitle:"Revision \(version.revision) · \(version.status=="APPROVED" ? "Approved" : "Draft — review required")",icon:"doc.text")}.buttonStyle(.plain)
+                            Button{Task{await openVersion(version.id)}}label:{WorkspaceToolRow(title:"\(version.content.number) · \(version.content.title)",subtitle:"Revision \(version.revision) · \(version.status=="APPROVED" ? "Approved" : "Draft — review required")",icon:"doc.text")}.buttonStyle(.plain)
                             if version.status=="DRAFT",let issue=version.approvalIssue { Text("Needs review: \(issue)").font(.caption).foregroundStyle(.secondary) }
                         }
                     }
@@ -1406,6 +1412,10 @@ private struct GuidedLibraryView:View {
         }
         .sheet(item:$selected,onDismiss:{Task{await load()}}){version in NavigationStack{GuidedJPREditor(version:version, keepCourseDraft:keepCourseDraft)}}
     }
+    @MainActor private func openVersion(_ id:String)async {
+        busy=true;defer{busy=false}
+        do{let detail:GuidedLibrary=try await APIClient.shared.trainingWorkspace("/jprs?versionId="+id);selected=detail.versions.first}catch{self.error=error.localizedDescription}
+    }
     @MainActor private func load()async{do{library=try await APIClient.shared.trainingWorkspace("/jprs");selectedDrafts=selectedDrafts.filter { id in library?.versions.contains { $0.id==id && ready($0) } == true };error=nil}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}}
     @MainActor private func approveSelected()async {
         guard !selectedVersions.isEmpty,!busy else{return}
@@ -1420,7 +1430,7 @@ private struct GuidedLibraryView:View {
     @MainActor private func upload(_ url:URL)async{
         busy=true;defer{busy=false};let scoped=url.startAccessingSecurityScopedResource();defer{if scoped{url.stopAccessingSecurityScopedResource()}}
         do{let size=try url.resourceValues(forKeys:[.fileSizeKey]).fileSize ?? 0;guard size>0,size<=4*1024*1024 else{throw NSError(domain:"JPR",code:1,userInfo:[NSLocalizedDescriptionKey:"Choose a Word document up to 4 MB."])}
-            let result=try await APIClient.shared.uploadGuidedJPR(data:Data(contentsOf:url),fileName:url.lastPathComponent,courseId:courseId);selected=result.version;await load()
+            let result=try await APIClient.shared.uploadGuidedJPR(data:Data(contentsOf:url),fileName:url.lastPathComponent,courseId:courseId);await load();await openVersion(result.version.id)
         }catch{self.error=error.localizedDescription}
     }
 }
@@ -1429,13 +1439,14 @@ private struct GuidedJPREditor:View {
     let keepCourseDraft:Bool
     @Environment(\.dismiss)private var dismiss
     @State private var content:GuidedContent
+    @State private var reviewToken:String?
     @State private var busy=false
     @State private var error:String?
     @State private var status=""
     @State private var confirmApproval=false
     @State private var confirmDiscard=false
     @State private var dirty=false
-    init(version:GuidedVersion,keepCourseDraft:Bool=false){self.version=version;self.keepCourseDraft=keepCourseDraft;_content=State(initialValue:version.content)}
+    init(version:GuidedVersion,keepCourseDraft:Bool=false){self.version=version;self.keepCourseDraft=keepCourseDraft;_content=State(initialValue:version.content);_reviewToken=State(initialValue:version.reviewToken)}
     var body:some View {
         Form{
             if let error{Text(error).foregroundStyle(.red)}
@@ -1449,6 +1460,8 @@ private struct GuidedJPREditor:View {
                 TextField("Revision notes",text:$content.revisionNotes,axis:.vertical)
                 Stepper("Passing score: \(content.passingScore)%",value:$content.passingScore,in:1...100)
             }.disabled(version.status=="APPROVED" || busy)
+            if let teaching=content.teaching { Section("Expanded teaching guide") { ExpandedTeachingView(teaching:teaching) } }
+            if let scenarios=content.scenarios,!scenarios.isEmpty { Section("Practice scenarios") { ForEach(scenarios) { scenario in DisclosureGroup(scenario.title) { ExpandedScenarioView(scenario:scenario) } } } }
             ForEach($content.steps){$step in Section(step.title.isEmpty ? "Performance step" : step.title){
                 if step.critical { TrainingSafetyNotice(text: step.safety, critical: true) }
                 TextField("Step title",text:$step.title);TextField("TEACH",text:$step.teach,axis:.vertical);TextField("SHOW",text:$step.show,axis:.vertical);TextField("CHECK",text:$step.check,axis:.vertical);TextField("SAFETY",text:$step.safety,axis:.vertical)
@@ -1467,14 +1480,19 @@ private struct GuidedJPREditor:View {
     }
     private var contentJSON:Data?{let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys];return try? encoder.encode(content)}
     @MainActor private func save(approve:Bool)async{
-        busy=true;defer{busy=false}
-        do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let body=try JSONSerialization.data(withJSONObject:["action":"update","id":version.id,"content":object]);let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:body);dirty=false;status="Draft saved"
-            if approve{let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"approve","id":version.id,"publish":!keepCourseDraft]));dismiss()}
+        busy=true;defer{busy=false};error=nil
+        do{
+            if reviewToken == nil {let detail:GuidedLibrary=try await APIClient.shared.trainingWorkspace("/jprs?versionId="+version.id);reviewToken=detail.versions.first?.reviewToken}
+            let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content))
+            let body=try JSONSerialization.data(withJSONObject:["action":"update","id":version.id,"content":object,"reviewToken":reviewToken ?? ""])
+            let saved:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:body)
+            reviewToken=saved.version.reviewToken;dirty=false;status="Draft saved"
+            if approve{let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"approve","id":version.id,"reviewToken":reviewToken ?? "","publish":!keepCourseDraft]));dismiss()}
         }catch{self.error=error.localizedDescription}
     }
     @MainActor private func revise()async{
         busy=true;defer{busy=false}
-        do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let _:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["courseId":version.courseId ?? "","jprId":version.jprId ?? "","content":object]));dismiss()}catch{self.error=error.localizedDescription}
+        do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let _:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"newRevision","sourceVersionId":version.id,"reviewToken":reviewToken ?? "","courseId":version.courseId ?? "","jprId":version.jprId ?? "","content":object]));dismiss()}catch{self.error=error.localizedDescription}
     }
 }
 
@@ -1622,5 +1640,77 @@ struct ScheduledTrainingList: View {
                 .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
                 .foregroundStyle(.white)
         }
+    }
+}
+
+private struct ExpandedJprLines:View {
+    let title:String
+    let items:[String]
+    var body:some View {
+        if !items.isEmpty { VStack(alignment:.leading,spacing:8) { Text(title).font(.headline);ForEach(Array(items.enumerated()),id:\.offset) { _,item in Text("• \(item)").fixedSize(horizontal:false,vertical:true) } } }
+    }
+}
+private struct ExpandedTeachingView:View {
+    let teaching:GuidedTeaching
+    var body:some View {
+        VStack(alignment:.leading,spacing:18) {
+            ExpandedJprLines(title:"Performance objectives",items:teaching.performanceObjectives)
+            ExpandedJprLines(title:"Prerequisites",items:teaching.prerequisites)
+            ExpandedJprLines(title:"Required equipment",items:teaching.requiredEquipment)
+            ExpandedJprLines(title:"Instructor preparation",items:teaching.instructorPreparation)
+            ForEach(Array(teaching.instructionalSteps.enumerated()),id:\.element.id) { index,step in
+                DisclosureGroup("\(index+1). \(step.title)") {
+                    VStack(alignment:.leading,spacing:14) {
+                        Text(step.instruction)
+                        if !step.demonstration.isEmpty { Text("Instructor demonstration").font(.headline);Text(step.demonstration) }
+                        ExpandedJprLines(title:"Expected firefighter actions",items:step.expectedActions)
+                        ForEach(Array(step.commonMistakes.enumerated()),id:\.offset) { _,mistake in
+                            Text("Common mistake: \(mistake.mistake)")
+                            Text("Correction: \(mistake.correction)")
+                        }
+                        ExpandedJprLines(title:"Safety considerations",items:step.safetyConsiderations)
+                        ExpandedJprLines(title:"Critical failures",items:step.criticalFailures)
+                    }.padding(.vertical,10)
+                }
+            }
+            ExpandedJprLines(title:"Safety considerations",items:teaching.safetyConsiderations)
+            ExpandedJprLines(title:"Critical failures",items:teaching.criticalFailures)
+            if !teaching.references.isEmpty { Text("Standards & department references").font(.headline) }
+            ForEach(Array(teaching.references.enumerated()),id:\.offset) { _,ref in
+                Text([ref.title,ref.edition,ref.section,ref.departmentReference,ref.url].compactMap{$0}.joined(separator:" · "))
+            }
+        }.fixedSize(horizontal:false,vertical:true)
+    }
+}
+private struct ExpandedScenarioView:View {
+    let scenario:GuidedScenario
+    var body:some View {
+        VStack(alignment:.leading,spacing:16) {
+            Text(scenario.difficulty).font(.caption.bold())
+            Text(scenario.trainingObjective)
+            ExpandedJprLines(title:"Required equipment",items:scenario.requiredEquipment)
+            ExpandedJprLines(title:"Instructor setup",items:scenario.instructorSetup)
+            Text("Situation / dispatch briefing").font(.headline);Text(scenario.briefing)
+            ExpandedJprLines(title:"Expected firefighter actions",items:scenario.expectedActions)
+            ExpandedJprLines(title:"Instructor-controlled complications",items:scenario.complications)
+            ExpandedJprLines(title:"Safety stop conditions",items:scenario.safetyStopConditions)
+            ExpandedJprLines(title:"Debrief questions",items:scenario.debriefQuestions)
+        }.fixedSize(horizontal:false,vertical:true)
+    }
+}
+private struct ExpandedPracticeView:View {
+    let scenarios:[GuidedScenario]
+    let selected:String?
+    let disabled:Bool
+    let onSelect:(String)->Void
+    var body:some View {
+        if let scenario=scenarios.first(where:{$0.id==selected}) ?? scenarios.first {
+            VStack(alignment:.leading,spacing:16) {
+                Picker("Practice scenario",selection:Binding(get:{scenario.id},set:onSelect)) {
+                    ForEach(scenarios) { Text("\($0.title) · \($0.difficulty)").tag($0.id) }
+                }.disabled(disabled)
+                ExpandedScenarioView(scenario:scenario)
+            }
+        } else { Text("No structured scenarios in this revision. Use the approved JPR for supervised practice.") }
     }
 }
