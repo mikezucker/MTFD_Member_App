@@ -25,7 +25,7 @@ struct TrainingView: View {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
                                         if home.guidedEnabled == true && home.canManage && !showingMyTraining {
-                                            GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true })
+                                            GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" })
                                         } else {
                                         if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
                                         trainingTabs
@@ -848,6 +848,7 @@ private extension View {
 private struct GuidedInstructorHome: View {
     let workspace: TrainingWorkspaceHome
     var onMyTraining: () -> Void = {}
+    var onCatalog: () -> Void = {}
     @State private var creating = false
     @State private var refreshedWorkspace: TrainingWorkspaceHome?
     private var libraryWorkspace: TrainingWorkspaceHome { refreshedWorkspace ?? workspace }
@@ -886,6 +887,7 @@ private struct GuidedInstructorHome: View {
                     Button("Schedule & Sessions") { mode = "schedule" }
                     NavigationLink("Skills & Evaluations") { GuidedSkillsView(home: home, onEvaluate: prepareEvaluation) }
                     Button("My Training", action: onMyTraining)
+                    Button("Course Catalog", action: onCatalog)
                     Button("Training Records") { mode = "history" }
                 } label: { Label("Training sections", systemImage: "line.3.horizontal") }.buttonStyle(WorkspaceActionStyle())
                 if mode == "catalog" { catalog(home) }
@@ -896,6 +898,7 @@ private struct GuidedInstructorHome: View {
                         Button { mode = "schedule" } label: { TrainingQuickAction(title: "Schedule & Sessions", subtitle: "Plan, run, or resume", symbol: "calendar", accent: TrainingVisualStyle.orange) }.buttonStyle(.plain)
                         NavigationLink { GuidedSkillsView(home: home, onEvaluate: prepareEvaluation) } label: { TrainingQuickAction(title: "Skills & Evaluations", subtitle: "Find skills and evaluate", symbol: "checkmark.seal.fill", accent: TrainingVisualStyle.mint) }.buttonStyle(.plain)
                         Button(action: onMyTraining) { TrainingQuickAction(title: "My Training", subtitle: "Personal assignments", symbol: "person.crop.circle.fill") }.buttonStyle(.plain)
+                        Button(action: onCatalog) { TrainingQuickAction(title: "Course Catalog", subtitle: "Courses for your member type", symbol: "books.vertical.fill") }.buttonStyle(.plain)
                         Button { mode = "history" } label: { TrainingQuickAction(title: "Training Records", subtitle: "Results and hours", symbol: "doc.text.fill", accent: TrainingVisualStyle.lavender) }.buttonStyle(.plain)
                     }
                     Text("Pick up where you left off").font(.headline)
