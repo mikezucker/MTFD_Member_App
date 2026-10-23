@@ -28,6 +28,7 @@ struct TrainingView: View {
                                             GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" })
                                         } else {
                                         if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
+                                        if isRequiredTab { ScheduledTrainingList(sessions: home.scheduledTraining ?? []) }
                                         trainingTabs
                                         if tab == "My JPR Results" { GuidedMemberResults() } else {
                                         if home.guidedEnabled == true { NavigationLink("My Skills Progress & Upcoming Training") { GuidedSkillsView() }.buttonStyle(WorkspaceActionStyle()) }
@@ -893,6 +894,7 @@ private struct GuidedInstructorHome: View {
                 if mode == "catalog" { catalog(home) }
                 else if mode == "home" {
                     Text("Overview").font(.title2.bold())
+                    ScheduledTrainingList(sessions: (home.scheduledTraining ?? []).filter { $0.conducting != true })
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
                         Button { mode = "catalog" } label: { TrainingQuickAction(title: "Training Library", subtitle: "Find or create courses", symbol: "books.vertical.fill") }.buttonStyle(.plain)
                         Button { mode = "schedule" } label: { TrainingQuickAction(title: "Schedule & Sessions", subtitle: "Plan, run, or resume", symbol: "calendar", accent: TrainingVisualStyle.orange) }.buttonStyle(.plain)
@@ -949,6 +951,7 @@ private struct GuidedInstructorHome: View {
                     if selected.isEmpty && search.isEmpty { Text("Load the shift roster, choose a group, or search for members above.").font(.caption).foregroundStyle(.white.opacity(0.65)) }
                     Button(evaluating ? "Start evaluation" : scheduled ? "Schedule session" : "Start session") { Task { await start() } }.buttonStyle(WorkspaceActionStyle()).disabled(selected.isEmpty || busy || (oneOff ? title.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 : topic == nil || versions.isEmpty))
                 } else {
+                    if mode == "schedule" { ScheduledTrainingList(sessions: (home.scheduledTraining ?? []).filter { $0.conducting != true }) }
                     Text(mode == "schedule" ? "Schedule & Sessions" : mode == "continue" ? "Continue Training" : "Training Records").font(.title2.bold())
                     let sessions = home.sessions.filter { mode == "history" ? $0.status == "FINALIZED" : mode == "schedule" ? ($0.status == "SCHEDULED" || $0.status == "IN_PROGRESS") : $0.status == "IN_PROGRESS" }
                     if sessions.isEmpty { Text("No sessions here yet.").foregroundStyle(.secondary) }
@@ -982,7 +985,7 @@ private struct GuidedInstructorHome: View {
         VStack(alignment: .leading, spacing: 18) {
             TrainingMetricStrip(stats: [
                 TrainingHeaderStat(label: "Ready courses", value: "\(home.topics.count)"),
-                TrainingHeaderStat(label: "Scheduled", value: "\(home.sessions.filter { $0.status == "SCHEDULED" }.count)", accent: TrainingVisualStyle.orange),
+                TrainingHeaderStat(label: "Scheduled", value: "\(home.sessions.filter { $0.status == "SCHEDULED" }.count + (home.scheduledTraining ?? []).filter { $0.conducting != true }.count)", accent: TrainingVisualStyle.orange),
                 TrainingHeaderStat(label: "To resume", value: "\(home.sessions.filter { $0.status == "IN_PROGRESS" }.count)", accent: TrainingVisualStyle.lavender)
             ])
             if libraryWorkspace.canCreate {
@@ -1597,5 +1600,27 @@ private struct TrainingSafetyNotice: View {
         }.frame(maxWidth: .infinity, alignment: .leading).padding(16)
         .background(Color.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.red.opacity(0.7), lineWidth: 1))
+    }
+}
+
+
+struct ScheduledTrainingList: View {
+    let sessions: [ScheduledTrainingItem]
+    var body: some View {
+        if !sessions.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Your scheduled training · \(sessions.count)", systemImage: "calendar").font(.headline)
+                ForEach(sessions) { item in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.title).font(.subheadline.bold())
+                        if let date = item.startAt { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.subheadline) }
+                        if let location = item.location, !location.isEmpty { Text(location).font(.caption) }
+                        Text("\(item.durationMinutes) minutes" + (item.instructor.map { " · Instructor: " + $0 } ?? "")).font(.caption).foregroundStyle(.secondary)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16))
+                .foregroundStyle(.white)
+        }
     }
 }

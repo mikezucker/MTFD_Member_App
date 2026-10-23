@@ -74,7 +74,13 @@ struct DashboardView: View {
                     .zIndex(1)
 
                     VStack(spacing: 0) {
-
+                        if !viewModel.scheduledTraining.isEmpty {
+                            ScrollView {
+                                Button { router.selectedTab = .training } label: {
+                                    ScheduledTrainingList(sessions: viewModel.scheduledTraining)
+                                }.buttonStyle(.plain)
+                            }.frame(maxHeight: viewModel.scheduledTraining.count > 1 ? 200 : 150).padding(.horizontal, 16)
+                        }
                         switch dashboardRole {
 
                         case .admin, .chief:
