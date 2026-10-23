@@ -17,8 +17,14 @@ struct DashboardColorIcon: View {
             return "📄"
         case "wrench.and.screwdriver.fill":
             return "🛠️"
-        case "calendar.badge.clock":
+        case "calendar", "calendar.badge.clock":
             return "🗓️"
+        case "clock.fill":
+            return "⏳"
+        case "circle.dashed", "play.circle.fill":
+            return "📚"
+        case "exclamationmark.triangle.fill":
+            return "⚠️"
         case "person.fill.checkmark":
             return "👤"
         case "clock.arrow.circlepath":

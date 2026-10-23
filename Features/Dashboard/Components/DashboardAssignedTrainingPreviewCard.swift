@@ -75,9 +75,7 @@ struct DashboardAssignedTrainingPreviewCard: View {
                         .fill(color.opacity(0.20))
                         .frame(width: 34, height: 34)
 
-                    Image(systemName: statusIcon(for: item))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(color)
+                    DashboardColorIcon(systemImage: statusIcon(for: item), size: 25, frameSize: 34)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
