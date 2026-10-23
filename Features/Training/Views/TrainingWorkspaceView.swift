@@ -896,7 +896,7 @@ private struct GuidedInstructorHome: View {
                         Button { mode = "schedule" } label: { TrainingQuickAction(title: "Schedule & Sessions", subtitle: "Plan, run, or resume", symbol: "calendar", accent: TrainingVisualStyle.orange) }.buttonStyle(.plain)
                         NavigationLink { GuidedSkillsView(home: home, onEvaluate: prepareEvaluation) } label: { TrainingQuickAction(title: "Skills & Evaluations", subtitle: "Find skills and evaluate", symbol: "checkmark.seal.fill", accent: TrainingVisualStyle.mint) }.buttonStyle(.plain)
                         Button(action: onMyTraining) { TrainingQuickAction(title: "My Training", subtitle: "Personal assignments", symbol: "person.crop.circle.fill") }.buttonStyle(.plain)
-                        Button { mode = "history" } label: { TrainingQuickAction(title: "Training Records", subtitle: "Results and hours", symbol: "list.clipboard.fill", accent: TrainingVisualStyle.lavender) }.buttonStyle(.plain)
+                        Button { mode = "history" } label: { TrainingQuickAction(title: "Training Records", subtitle: "Results and hours", symbol: "doc.text.fill", accent: TrainingVisualStyle.lavender) }.buttonStyle(.plain)
                     }
                     Text("Pick up where you left off").font(.headline)
                     sessionRows(home.sessions.filter { $0.status == "IN_PROGRESS" })
