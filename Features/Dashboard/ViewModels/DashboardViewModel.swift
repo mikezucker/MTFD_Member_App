@@ -3,7 +3,6 @@ import Combine
 
 @MainActor
 final class DashboardViewModel: ObservableObject {
-    @Published var scheduledTraining: [ScheduledTrainingItem] = []
     @Published var state: DashboardState = .empty(for: .member)
     @Published var activeDispatches: [APIClient.ActiveDispatch] = []
 
@@ -210,7 +209,6 @@ final class DashboardViewModel: ObservableObject {
             )
             cachedVolunteerContext = resolvedVolunteerContext
 
-            scheduledTraining = dashboard.scheduledTraining ?? []
             state = DashboardState(
                 greeting: "Welcome",
                 role: role,
@@ -221,7 +219,7 @@ final class DashboardViewModel: ObservableObject {
                 attentionItems: mapAttentionItems(from: dashboard.attentionItems ?? []),
                 quickActions: [],
                 progressItems: buildProgressItems(for: role, summary: dashboard.trainingSummary),
-                assignedTrainingPreview: mapTrainingPreview(from: dashboard.assignedTrainingPreview ?? []),
+                assignedTrainingPreview: (dashboard.scheduledTraining ?? []).map(DashboardTrainingPreviewItem.scheduled) + mapTrainingPreview(from: dashboard.assignedTrainingPreview ?? []),
                 pendingDocumentSignatures: pendingPolicyDocuments.isEmpty
                     ? (dashboard.trainingSummary?.pendingDocumentSignatures ?? 0)
                     : pendingPolicyDocuments.count,

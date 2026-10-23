@@ -220,7 +220,7 @@ struct VolunteerMemberDashboardView: View {
                             ForEach(Array(assignedTrainingPreview.enumerated()), id: \.element.id) { index, item in
                                 VStack(alignment: .leading, spacing: 5) {
                                     HStack(alignment: .top, spacing: 8) {
-                                        AppIcon(systemImage: item.isOverdue ? "exclamationmark.triangle.fill" : "play.circle.fill")
+                                        AppIcon(systemImage: item.isScheduled ? "calendar" : item.isOverdue ? "exclamationmark.triangle.fill" : "play.circle.fill")
                                             .foregroundStyle(item.isOverdue ? .orange : AppTheme.gold)
 
                                         VStack(alignment: .leading, spacing: 3) {
@@ -236,9 +236,11 @@ struct VolunteerMemberDashboardView: View {
 
                                         Spacer()
 
+                                        if !item.isScheduled {
                                         Text("\(item.progressPercent)%")
                                             .font(.caption.bold())
                                             .foregroundStyle(AppTheme.gold)
+                                        }
                                     }
                                 }
 
@@ -645,6 +647,7 @@ struct VolunteerMemberDashboardView: View {
     }
 
     private func trainingSubtitle(for item: DashboardTrainingPreviewItem) -> String {
+        if item.isScheduled { return item.progressText }
         if item.isOverdue {
             return "Needs attention • Overdue"
         }
