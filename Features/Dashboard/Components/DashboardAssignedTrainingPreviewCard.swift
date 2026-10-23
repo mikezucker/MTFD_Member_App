@@ -93,7 +93,7 @@ struct DashboardAssignedTrainingPreviewCard: View {
 
                 Spacer(minLength: 10)
 
-                Text("\(item.progressPercent)%")
+                Text(item.isScheduled ? "Scheduled" : "\(item.progressPercent)%")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(color)
                     .padding(.horizontal, 8)
@@ -102,6 +102,7 @@ struct DashboardAssignedTrainingPreviewCard: View {
                     .clipShape(Capsule())
             }
 
+            if !item.isScheduled {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule()
@@ -117,6 +118,7 @@ struct DashboardAssignedTrainingPreviewCard: View {
                 }
             }
             .frame(height: 6)
+            }
         }
         .padding(12)
         .background(
@@ -145,6 +147,7 @@ struct DashboardAssignedTrainingPreviewCard: View {
     }
 
     private func statusIcon(for item: DashboardTrainingPreviewItem) -> String {
+        if item.isScheduled { return "calendar" }
         if item.isOverdue {
             return "exclamationmark.triangle.fill"
         }

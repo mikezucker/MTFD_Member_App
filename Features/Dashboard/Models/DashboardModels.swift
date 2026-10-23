@@ -24,11 +24,24 @@ struct DashboardProgressItem: Identifiable, Hashable {
 
 struct DashboardTrainingPreviewItem: Identifiable, Hashable {
     let id: String
-    let courseId: String
+    let courseId: String?
     let title: String
     let progressText: String
     let progressPercent: Int
     let isOverdue: Bool
+    var isScheduled: Bool = false
+
+    static func scheduled(_ session: ScheduledTrainingItem) -> Self {
+        let details = [
+            session.startAt.map { $0.formatted(date: .abbreviated, time: .shortened) },
+            session.location?.isEmpty == false ? session.location : nil,
+            "\(session.durationMinutes) minutes",
+            session.instructor.map { "Instructor: " + $0 }
+        ].compactMap { $0 }.joined(separator: " · ")
+        return Self(id: "scheduled-" + session.id, courseId: nil, title: session.title,
+                    progressText: "Scheduled · " + details, progressPercent: 0,
+                    isOverdue: false, isScheduled: true)
+    }
 }
 
 struct DashboardAttentionItem: Identifiable, Hashable {
