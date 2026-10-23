@@ -3,6 +3,7 @@ import Combine
 
 @MainActor
 final class DashboardViewModel: ObservableObject {
+    @Published var scheduledTraining: [ScheduledTrainingItem] = []
     @Published var state: DashboardState = .empty(for: .member)
     @Published var activeDispatches: [APIClient.ActiveDispatch] = []
 
@@ -209,6 +210,7 @@ final class DashboardViewModel: ObservableObject {
             )
             cachedVolunteerContext = resolvedVolunteerContext
 
+            scheduledTraining = dashboard.scheduledTraining ?? []
             state = DashboardState(
                 greeting: "Welcome",
                 role: role,

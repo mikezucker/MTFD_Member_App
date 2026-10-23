@@ -2,6 +2,7 @@ import Foundation
 
 // Shared replacement workflow. Optional fields keep legacy course records readable.
 struct TrainingWorkspaceHome: Decodable {
+    var scheduledTraining: [ScheduledTrainingItem]? = nil
     let success: Bool
     let canCreate: Bool
     var guidedEnabled: Bool? = nil
@@ -157,7 +158,7 @@ extension GuidedTopic {
 struct GuidedMember: Decodable, Identifiable { let id: String; let name: String; let attended: Bool? }
 struct GuidedGroup: Decodable { let name: String; let userIds: [String] }
 struct GuidedHistory: Decodable, Identifiable { let startAt: Date?; let location: String?; let oneOff: Bool?; let id: String; let title: String; let status: String; let stage: String; let updatedAt: Date; let participantCount: Int }
-struct GuidedHome: Decodable { var pendingCourses: [GuidedPendingCourse]? = nil; let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
+struct GuidedHome: Decodable { var scheduledTraining: [ScheduledTrainingItem]? = nil; var pendingCourses: [GuidedPendingCourse]? = nil; let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
 struct GuidedObservation: Decodable { let rating: String; let comment: String; let observedAt: String? }
 struct GuidedSessionResponse: Decodable { let session: GuidedSession }
 struct GuidedSession: Decodable, Identifiable {
@@ -203,4 +204,14 @@ struct GuidedSkillRequirement: Decodable, Identifiable {
 }
 struct GuidedSkillHistory: Decodable, Identifiable {
  let id: String; let outcome: String; let completedAt: Date?; let evaluator: String
+}
+
+struct ScheduledTrainingItem: Decodable, Identifiable {
+    let id: String
+    let title: String
+    let startAt: Date?
+    let location: String?
+    let durationMinutes: Int
+    let instructor: String?
+    let conducting: Bool?
 }

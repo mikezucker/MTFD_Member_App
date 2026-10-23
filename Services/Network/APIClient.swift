@@ -1636,6 +1636,7 @@ extension APIClient {
     }
 
     struct DashboardResponse: Decodable {
+        var scheduledTraining: [ScheduledTrainingItem]? = nil
         let success: Bool?
         let member: Member?
         let attentionItems: [AttentionItem]?
