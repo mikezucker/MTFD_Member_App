@@ -2027,9 +2027,10 @@ private struct JPRMemberPaper:View {
     var body:some View {
         DisclosureGroup("\(document.content.number) · \(document.content.title) · Revision \(document.revision)"){
             VStack(alignment:.leading,spacing:16){
-                Text(document.content.objective).font(.system(.body,design:.serif));Text(document.content.equipment).font(.subheadline)
+                Text(document.content.objective).font(.system(.body,design:.serif));if let conditions=document.content.conditions,!conditions.isEmpty{Text(conditions).font(.subheadline)};Text(document.content.equipment).font(.subheadline)
+                ForEach((document.content.performanceObjectives ?? [])+(document.content.prerequisites ?? [])+(document.content.requiredEquipment ?? [])+(document.content.safetyConsiderations ?? []),id:\.self){Text($0).font(.subheadline)}
                 ForEach(document.content.steps){step in
-                    Text(step.title).font(.headline);Text(step.instruction).font(.system(.body,design:.serif));Text(step.demonstration).font(.system(.body,design:.serif));JPRMediaGallery(media:step.media)
+                    Text(step.title).font(.headline);Text(step.instruction).font(.system(.body,design:.serif));Text(step.demonstration).font(.system(.body,design:.serif));ForEach(step.expectedActions,id:\.self){Text($0).font(.subheadline)};ForEach(step.safetyConsiderations,id:\.self){Text("Safety: "+$0).font(.subheadline)};JPRMediaGallery(media:step.media)
                 }
             }.padding(18).background(JPRPaperStyle.page).foregroundStyle(JPRPaperStyle.ink).environment(\.jprMediaVersion,document.id)
         }.padding(16).background(Color.white.opacity(0.07),in:RoundedRectangle(cornerRadius:16))

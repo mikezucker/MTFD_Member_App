@@ -536,4 +536,4 @@ struct JPRMediaLibrary:Decodable {let assets:[JPRMediaAsset];var nextCursor:Stri
 struct JPRMediaTicket:Decodable {let assetId:String;let uploadUrl:URL}
 struct JPRMediaLocation:Decodable {let url:URL;let expiresIn:Int}
 struct JPRMemberDocument:Decodable,Identifiable {let id:String;let revision:Int;let content:JPRMemberContent}
-struct JPRMemberContent:Decodable {let number:String;let title:String;let objective:String;let equipment:String;let steps:[GuidedTeachingStep]}
+struct JPRMemberContent:Decodable {let number:String;let title:String;let objective:String;let equipment:String;let conditions:String?;let performanceObjectives:[String]?;let prerequisites:[String]?;let requiredEquipment:[String]?;let safetyConsiderations:[String]?;let steps:[GuidedTeachingStep]}
