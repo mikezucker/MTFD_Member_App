@@ -1137,46 +1137,31 @@ private struct GuidedSessionView: View {
     private func guide(_ s: GuidedSession, version: GuidedVersion, step: GuidedStep) -> some View {
         VStack(alignment:.leading,spacing:18) {
             stages(s)
-            DisclosureGroup("JPR objective, equipment & instructor guidance") {
-                Text(version.content.objective)
-                Text("Conditions: \(version.content.conditions)")
-                Text("Equipment: \(version.content.equipment)")
-                Text(version.content.guidance)
-                Text("SOPs & standards: \(version.content.standards)")
-            }
-            Text("\(version.content.number) · Approved revision \(version.revision) · JPR \(s.jprIndex+1) of \(s.jprs.count)").font(.subheadline).foregroundStyle(TrainingVisualStyle.cyan)
-            if s.stage == "TEACH",let teaching=version.content.teaching { ExpandedTeachingView(teaching:teaching) }
-            if s.stage == "PRACTICE" {
-                ExpandedPracticeView(scenarios:version.content.scenarios ?? [],selected:s.selectedScenarios?[version.id],disabled:blocked) { scenarioId in
-                    Task { await save(["scenarioSelection":["versionId":version.id,"scenarioId":scenarioId]]) }
-                }
-            }
-            Text("STEP \(s.stepIndex+1) OF \(version.content.steps.count)").font(.headline)
-            ProgressView(value:Double(s.stepIndex+1),total:Double(version.content.steps.count)).tint(TrainingVisualStyle.cyan)
-            Text(step.title).font(.title2.bold())
-            if s.stage == "PRACTICE" { Text("Supervised practice. Practice does not record a passing evaluation.") }
-            guidance("TEACH",step.teach);guidance("SHOW",step.show);guidance("CHECK",step.check)
-            if step.critical || !step.safety.isEmpty { TrainingSafetyNotice(text: step.safety, critical: step.critical) }
-            if s.stage == "EVALUATE" {
-                Picker("Evaluation view",selection:$individual) { Text("All participants").tag("");ForEach(s.participants) { Text($0.name).tag($0.id) } }
-                ForEach(s.participants.filter { $0.attended != false && (individual.isEmpty || individual == $0.id) }) { member in
-                    observation(s,version:version,step:step,member:member)
-                }
-            }
-            HStack {
-                Button("Back") { let ji=s.stepIndex > 0 ? s.jprIndex : s.jprIndex-1;Task { await save(["jprIndex":ji,"stepIndex":s.stepIndex > 0 ? s.stepIndex-1 : s.jprs[ji].content.steps.count-1]) } }.disabled(blocked || (s.stepIndex == 0 && s.jprIndex == 0))
-                Spacer()
-                Button("Next step") { Task { await next(s) } }.disabled(blocked)
-            }.buttonStyle(WorkspaceActionStyle())
-            Button("Print approved JPR") { Task { await printVersion(version.id) } }.disabled(blocked)
+            if s.jprs.count>1 {Picker("Approved JPR",selection:Binding(get:{s.jprIndex},set:{index in Task{await save(["jprIndex":index,"stepIndex":0])}})){ForEach(s.jprs.indices,id:\.self){index in Text(s.jprs[index].content.title).tag(index)}}.disabled(blocked)}
+            JPRPaperDocument(content:.constant(version.content),revision:version.revision,status:"APPROVED",stage:s.stage,editing:false,selectedScenario:Binding(get:{s.selectedScenarios?[version.id] ?? version.content.scenarios?.first?.id ?? ""},set:{scenarioId in Task{await save(["scenarioSelection":["versionId":version.id,"scenarioId":scenarioId]])}}),evaluation:s.stage=="EVALUATE" ? AnyView(paperEvaluation(s,version:version,step:step)) : nil).disabled(blocked)
+            Button("Print approved JPR") {Task{await printVersion(version.id)}}.buttonStyle(WorkspaceActionStyle()).disabled(blocked)
         }
     }
-    private func guidance(_ title:String,_ text:String) -> some View { VStack(alignment:.leading,spacing:8){Text(title).font(.headline).foregroundStyle(TrainingVisualStyle.cyan);Text(text).font(.body).fixedSize(horizontal:false,vertical:true)} }
+    private func paperEvaluation(_ s:GuidedSession,version:GuidedVersion,step:GuidedStep)->some View {
+        VStack(alignment:.leading,spacing:16) {
+            JPRPaperHeading(title:"Requirement \(s.stepIndex+1) of \(version.content.steps.count)")
+            Text(step.title).font(.system(.title3,design:.serif))
+            Text(step.check).font(.system(.body,design:.serif))
+            if step.critical || !step.safety.isEmpty {Text("\(step.critical ? "Critical safety requirement: " : "Safety: ")\(step.safety)").font(.caption).padding(.leading,12).overlay(alignment:.leading){Rectangle().fill(Color(red:0.6,green:0.27,blue:0.2)).frame(width:2)}}
+            Picker("Evaluation view",selection:$individual) {Text("All participants").tag("");ForEach(s.participants){Text($0.name).tag($0.id)}}
+            ForEach(s.participants.filter{$0.attended != false && (individual.isEmpty || individual==$0.id)}) {member in observation(s,version:version,step:step,member:member)}
+            HStack {
+                Button("Back") {let ji=s.stepIndex>0 ? s.jprIndex : s.jprIndex-1;Task{await save(["jprIndex":ji,"stepIndex":s.stepIndex>0 ? s.stepIndex-1 : s.jprs[ji].content.steps.count-1])}}.disabled(blocked || (s.stepIndex==0 && s.jprIndex==0))
+                Spacer()
+                Button("Next step") {Task{await next(s)}}.disabled(blocked)
+            }.frame(minHeight:44)
+        }
+    }
     private func observation(_ s:GuidedSession,version:GuidedVersion,step:GuidedStep,member:GuidedMember) -> some View {
         let current=s.observations[s.key(version,step,member)]
-        return WorkspacePanel {
+        return VStack(alignment:.leading,spacing:12) {
             Text(member.name).font(.headline)
-            Text(current?.rating == "PASS" ? "Pass" : current?.rating == "NEEDS_WORK" ? (step.critical ? "⚠ Critical safety failure" : "⚠ Needs work") : "Not evaluated").foregroundStyle(current?.rating == "NEEDS_WORK" ? Color(red:1,green:0.61,blue:0.61) : TrainingVisualStyle.cyan)
+            Text(current?.rating == "PASS" ? "Pass" : current?.rating == "NEEDS_WORK" ? (step.critical ? "⚠ Critical safety failure" : "⚠ Needs work") : "Not evaluated").foregroundStyle(current?.rating == "NEEDS_WORK" ? Color(red:0.65,green:0.22,blue:0.18) : JPRPaperStyle.ink)
             ViewThatFits(in:.horizontal) { ratings(s,version:version,step:step,member:member,current:current,horizontal:true);ratings(s,version:version,step:step,member:member,current:current,horizontal:false) }
             Button("Comment / reason") { commentDraft=current?.comment ?? "";commenting=member }.frame(minHeight:44).disabled(blocked)
             if let comment=current?.comment,!comment.isEmpty { Text(comment).font(.subheadline) }
@@ -1446,35 +1431,29 @@ private struct GuidedJPREditor:View {
     @State private var confirmApproval=false
     @State private var confirmDiscard=false
     @State private var dirty=false
+    @State private var editing=false
+    @State private var paperStage="TEACH"
+    @State private var paperScenario=""
     init(version:GuidedVersion,keepCourseDraft:Bool=false){self.version=version;self.keepCourseDraft=keepCourseDraft;_content=State(initialValue:version.content);_reviewToken=State(initialValue:version.reviewToken)}
     var body:some View {
-        Form{
-            if let error{Text(error).foregroundStyle(.red)}
-            if !status.isEmpty{Text(status)}
-            if let original=content.importedText,!original.isEmpty {DisclosureGroup("Original Word text for review"){Text(original).font(.caption)}}
-            Section("Department JPR · Revision \(version.revision)"){
-                TextField("JPR number",text:$content.number);TextField("Title",text:$content.title);TextField("Category",text:$content.category)
-                TextField("Performance objective",text:$content.objective,axis:.vertical)
-                TextField("Conditions",text:$content.conditions,axis:.vertical);TextField("Required equipment",text:$content.equipment,axis:.vertical)
-                TextField("Instructor guidance",text:$content.guidance,axis:.vertical);TextField("SOPs and standards",text:$content.standards,axis:.vertical)
-                TextField("Revision notes",text:$content.revisionNotes,axis:.vertical)
-                Stepper("Passing score: \(content.passingScore)%",value:$content.passingScore,in:1...100)
-            }.disabled(version.status=="APPROVED" || busy)
-            if let teaching=content.teaching { Section("Expanded teaching guide") { ExpandedTeachingView(teaching:teaching) } }
-            if let scenarios=content.scenarios,!scenarios.isEmpty { Section("Practice scenarios") { ForEach(scenarios) { scenario in DisclosureGroup(scenario.title) { ExpandedScenarioView(scenario:scenario) } } } }
-            ForEach($content.steps){$step in Section(step.title.isEmpty ? "Performance step" : step.title){
-                if step.critical { TrainingSafetyNotice(text: step.safety, critical: true) }
-                TextField("Step title",text:$step.title);TextField("TEACH",text:$step.teach,axis:.vertical);TextField("SHOW",text:$step.show,axis:.vertical);TextField("CHECK",text:$step.check,axis:.vertical);TextField("SAFETY",text:$step.safety,axis:.vertical)
-                Toggle("Required",isOn:$step.required);Toggle("Critical safety requirement",isOn:$step.critical)
-            }.disabled(version.status=="APPROVED" || busy)}
-            if version.status != "APPROVED"{
-                Button("Add step"){content.steps.append(GuidedStep(id:UUID().uuidString,title:"New step",teach:"",show:"",check:"",safety:"",required:true,critical:false));dirty=true}
-                Button("Save draft"){Task{await save(approve:false)}}
-                Button("Approve reviewed JPR"){confirmApproval=true}
-            }else{Button("Create a new revision"){Task{await revise()}};Text("This approved revision cannot be edited. Historical evaluations retain these requirements.")}
-        }.disabled(busy).navigationTitle("Review JPR").toolbar{Button("Done"){if dirty{confirmDiscard=true}else{dismiss()}}.disabled(busy)}
+        ScrollView {
+            VStack(alignment:.leading,spacing:16) {
+                if let error {WorkspaceNotice(message:error,warning:true)}
+                if !status.isEmpty {Text(status).font(.caption).accessibilityLabel(status)}
+                if version.status != "APPROVED" {
+                    HStack {Button(editing ? "Read document" : "Edit draft"){editing.toggle()};Spacer();Button(busy ? "Saving…" : "Save draft"){Task{await save(approve:false)}}}.buttonStyle(WorkspaceActionStyle())
+                }
+                Picker("JPR stage",selection:$paperStage){Text("Teach").tag("TEACH");Text("Practice").tag("PRACTICE");Text("Evaluate").tag("EVALUATE")}.pickerStyle(.segmented)
+                JPRPaperDocument(content:$content,revision:version.revision,status:version.status ?? "DRAFT",stage:paperStage,editing:editing && version.status != "APPROVED",selectedScenario:$paperScenario)
+                if let original=content.importedText,!original.isEmpty {DisclosureGroup("Original Word text for review"){Text(original).font(.caption)}}
+                if version.status != "APPROVED" {
+                    DisclosureGroup("Review & approval") {Text("Verify equipment-specific procedures and department references before approving. Approval locks this revision.").font(.caption);Button("Approve reviewed JPR"){confirmApproval=true}.frame(minHeight:44)}
+                }else {Button("Create a new revision"){Task{await revise()}}.buttonStyle(WorkspaceActionStyle())}
+            }.padding(16)
+        }.background(Color(red:0.05,green:0.13,blue:0.25)).disabled(busy).navigationTitle("JPR document")
+        .toolbar{Button("Done"){if dirty{confirmDiscard=true}else{dismiss()}}.disabled(busy)}
         .interactiveDismissDisabled(busy || dirty)
-        .onChange(of:contentJSON){_ in dirty=true;status="Unsaved draft changes"}
+        .onChange(of:contentJSON){dirty=true;status="Unsaved draft changes"}
         .confirmationDialog("Discard unsaved draft changes?",isPresented:$confirmDiscard){Button("Discard changes",role:.destructive){dismiss()}}
         .confirmationDialog("Approve this department JPR?",isPresented:$confirmApproval){Button("Approve reviewed requirements"){Task{await save(approve:true)}}}message:{Text("Approval locks this revision for guided training and evaluation.")}
     }
@@ -1486,7 +1465,7 @@ private struct GuidedJPREditor:View {
             let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content))
             let body=try JSONSerialization.data(withJSONObject:["action":"update","id":version.id,"content":object,"reviewToken":reviewToken ?? ""])
             let saved:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:body)
-            reviewToken=saved.version.reviewToken;dirty=false;status="Draft saved"
+            reviewToken=saved.version.reviewToken;dirty=false;editing=false;status="Draft saved"
             if approve{let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"approve","id":version.id,"reviewToken":reviewToken ?? "","publish":!keepCourseDraft]));dismiss()}
         }catch{self.error=error.localizedDescription}
     }
@@ -1643,74 +1622,221 @@ struct ScheduledTrainingList: View {
     }
 }
 
-private struct ExpandedJprLines:View {
+// A document is a presentation of the existing versioned model, never a second
+// text store. Bindings edit individual values while Codable retains extra fields.
+private enum JPRPaperStyle {
+    static let page=Color(red:1,green:0.996,blue:0.98)
+    static let ink=Color(red:0.125,green:0.173,blue:0.239)
+    static let muted=Color(red:0.36,green:0.40,blue:0.45)
+    static let rule=Color(red:0.82,green:0.83,blue:0.80)
+}
+private struct JPRPaperHeading:View {
     let title:String
-    let items:[String]
+    var body:some View {Text(title.uppercased()).font(.caption.weight(.semibold)).tracking(1).foregroundStyle(JPRPaperStyle.muted).padding(.top,12)}
+}
+private struct JPRPaperParagraph:View {
+    var title:String? = nil
+    @Binding var text:String
+    let editing:Bool
     var body:some View {
-        if !items.isEmpty { VStack(alignment:.leading,spacing:8) { Text(title).font(.headline);ForEach(Array(items.enumerated()),id:\.offset) { _,item in Text("• \(item)").fixedSize(horizontal:false,vertical:true) } } }
+        if !text.isEmpty || editing {
+            VStack(alignment:.leading,spacing:7) {
+                if let title {JPRPaperHeading(title:title)}
+                if editing {TextField(title ?? "Text",text:$text,axis:.vertical).textFieldStyle(.plain).font(.system(.body,design:.serif)).accessibilityLabel(title ?? "Document text")}
+                else {Text(text).font(.system(.body,design:.serif)).fixedSize(horizontal:false,vertical:true)}
+            }
+        }
     }
 }
-private struct ExpandedTeachingView:View {
-    let teaching:GuidedTeaching
+private struct JPRPaperStrings:View {
+    let title:String
+    @Binding var items:[String]
+    let editing:Bool
     var body:some View {
-        VStack(alignment:.leading,spacing:18) {
-            ExpandedJprLines(title:"Performance objectives",items:teaching.performanceObjectives)
-            ExpandedJprLines(title:"Prerequisites",items:teaching.prerequisites)
-            ExpandedJprLines(title:"Required equipment",items:teaching.requiredEquipment)
-            ExpandedJprLines(title:"Instructor preparation",items:teaching.instructorPreparation)
-            ForEach(Array(teaching.instructionalSteps.enumerated()),id:\.element.id) { index,step in
-                DisclosureGroup("\(index+1). \(step.title)") {
-                    VStack(alignment:.leading,spacing:14) {
-                        Text(step.instruction)
-                        if !step.demonstration.isEmpty { Text("Instructor demonstration").font(.headline);Text(step.demonstration) }
-                        ExpandedJprLines(title:"Expected firefighter actions",items:step.expectedActions)
-                        ForEach(Array(step.commonMistakes.enumerated()),id:\.offset) { _,mistake in
-                            Text("Common mistake: \(mistake.mistake)")
-                            Text("Correction: \(mistake.correction)")
-                        }
-                        ExpandedJprLines(title:"Safety considerations",items:step.safetyConsiderations)
-                        ExpandedJprLines(title:"Critical failures",items:step.criticalFailures)
-                    }.padding(.vertical,10)
+        if !items.isEmpty || editing {
+            VStack(alignment:.leading,spacing:8) {
+                JPRPaperHeading(title:title)
+                ForEach(items.indices,id:\.self) { index in
+                    HStack(alignment:.top,spacing:8) {
+                        Text("•").font(.system(.body,design:.serif))
+                        JPRPaperParagraph(text:$items[index],editing:editing)
+                        if editing {Button {items.remove(at:index)} label:{Image(systemName:"minus.circle")}.accessibilityLabel("Remove \(title) item \(index+1)").frame(minWidth:32,minHeight:44)}
+                    }
                 }
+                if editing {Button("+ Add \(title.lowercased()) item"){items.append("")}.font(.caption).frame(minHeight:44)}
             }
-            ExpandedJprLines(title:"Safety considerations",items:teaching.safetyConsiderations)
-            ExpandedJprLines(title:"Critical failures",items:teaching.criticalFailures)
-            if !teaching.references.isEmpty { Text("Standards & department references").font(.headline) }
-            ForEach(Array(teaching.references.enumerated()),id:\.offset) { _,ref in
-                Text([ref.title,ref.edition,ref.section,ref.departmentReference,ref.url].compactMap{$0}.joined(separator:" · "))
-            }
-        }.fixedSize(horizontal:false,vertical:true)
+        }
     }
 }
-private struct ExpandedScenarioView:View {
-    let scenario:GuidedScenario
+private struct JPRPaperTeachingStep:View {
+    @Binding var step:GuidedTeachingStep
+    let number:Int
+    let editing:Bool
+    var body:some View {
+        VStack(alignment:.leading,spacing:12) {
+            Divider().overlay(JPRPaperStyle.rule)
+            JPRPaperHeading(title:"Teaching step \(number)")
+            if editing {TextField("Teaching step title",text:$step.title,axis:.vertical).textFieldStyle(.plain).font(.system(.title3,design:.serif))}
+            else {Text(step.title).font(.system(.title3,design:.serif))}
+            JPRPaperParagraph(text:$step.instruction,editing:editing)
+            JPRPaperParagraph(title:"Demonstrate",text:$step.demonstration,editing:editing)
+            JPRPaperStrings(title:"Expected firefighter actions",items:$step.expectedActions,editing:editing)
+            if !step.commonMistakes.isEmpty || editing {JPRPaperHeading(title:"Watch for & coach")}
+            ForEach(step.commonMistakes.indices,id:\.self) { index in
+                VStack(alignment:.leading,spacing:8) {
+                    JPRPaperParagraph(title:"Common mistake",text:$step.commonMistakes[index].mistake,editing:editing)
+                    JPRPaperParagraph(title:"Correction",text:$step.commonMistakes[index].correction,editing:editing)
+                    if editing {Button("Remove mistake",role:.destructive){step.commonMistakes.remove(at:index)}.font(.caption).frame(minHeight:44)}
+                }.padding(.leading,12).overlay(alignment:.leading){Rectangle().fill(JPRPaperStyle.rule).frame(width:2)}
+            }
+            if editing {Button("+ Add mistake & correction"){step.commonMistakes.append(GuidedMistake())}.font(.caption).frame(minHeight:44)}
+            JPRPaperStrings(title:"Safety considerations",items:$step.safetyConsiderations,editing:editing)
+            JPRPaperStrings(title:"Critical failures",items:$step.criticalFailures,editing:editing)
+        }
+    }
+}
+private struct JPRPaperTeaching:View {
+    @Binding var teaching:GuidedTeaching
+    let editing:Bool
     var body:some View {
         VStack(alignment:.leading,spacing:16) {
-            Text(scenario.difficulty).font(.caption.bold())
-            Text(scenario.trainingObjective)
-            ExpandedJprLines(title:"Required equipment",items:scenario.requiredEquipment)
-            ExpandedJprLines(title:"Instructor setup",items:scenario.instructorSetup)
-            Text("Situation / dispatch briefing").font(.headline);Text(scenario.briefing)
-            ExpandedJprLines(title:"Expected firefighter actions",items:scenario.expectedActions)
-            ExpandedJprLines(title:"Instructor-controlled complications",items:scenario.complications)
-            ExpandedJprLines(title:"Safety stop conditions",items:scenario.safetyStopConditions)
-            ExpandedJprLines(title:"Debrief questions",items:scenario.debriefQuestions)
-        }.fixedSize(horizontal:false,vertical:true)
+            JPRPaperStrings(title:"Performance objectives",items:$teaching.performanceObjectives,editing:editing)
+            JPRPaperStrings(title:"Prerequisites",items:$teaching.prerequisites,editing:editing)
+            JPRPaperStrings(title:"Required equipment",items:$teaching.requiredEquipment,editing:editing)
+            JPRPaperStrings(title:"Instructor preparation",items:$teaching.instructorPreparation,editing:editing)
+            ForEach(teaching.instructionalSteps.indices,id:\.self) { index in
+                JPRPaperTeachingStep(step:$teaching.instructionalSteps[index],number:index+1,editing:editing)
+            }
+            if editing {Button("+ Add teaching step"){teaching.instructionalSteps.append(GuidedTeachingStep(id:UUID().uuidString,title:"New teaching step"))}.frame(minHeight:44)}
+            JPRPaperStrings(title:"Overall safety considerations",items:$teaching.safetyConsiderations,editing:editing)
+            JPRPaperStrings(title:"Overall critical failures",items:$teaching.criticalFailures,editing:editing)
+            if !teaching.references.isEmpty || editing {JPRPaperHeading(title:"Standards & department references")}
+            ForEach(teaching.references.indices,id:\.self) { index in
+                JPRPaperReference(reference:$teaching.references[index],editing:editing)
+            }
+            if editing {Button("+ Add reference"){teaching.references.append(GuidedReference(title:"New reference"))}.font(.caption).frame(minHeight:44)}
+        }
     }
 }
-private struct ExpandedPracticeView:View {
-    let scenarios:[GuidedScenario]
-    let selected:String?
-    let disabled:Bool
-    let onSelect:(String)->Void
+private struct JPRPaperReference:View {
+    @Binding var reference:GuidedReference
+    let editing:Bool
+    private func optional(_ key:WritableKeyPath<GuidedReference,String?>)->Binding<String> {Binding(get:{reference[keyPath:key] ?? ""},set:{reference[keyPath:key]=$0.isEmpty ? nil : $0})}
     var body:some View {
-        if let scenario=scenarios.first(where:{$0.id==selected}) ?? scenarios.first {
-            VStack(alignment:.leading,spacing:16) {
-                Picker("Practice scenario",selection:Binding(get:{scenario.id},set:onSelect)) {
-                    ForEach(scenarios) { Text("\($0.title) · \($0.difficulty)").tag($0.id) }
-                }.disabled(disabled)
-                ExpandedScenarioView(scenario:scenario)
+        VStack(alignment:.leading,spacing:8) {
+            JPRPaperParagraph(title:"Reference",text:$reference.title,editing:editing)
+            JPRPaperParagraph(title:editing ? "Edition" : nil,text:optional(\.edition),editing:editing)
+            JPRPaperParagraph(title:editing ? "Section" : nil,text:optional(\.section),editing:editing)
+            JPRPaperParagraph(title:editing ? "Department reference" : nil,text:optional(\.departmentReference),editing:editing)
+            JPRPaperParagraph(title:editing ? "Source URL" : nil,text:optional(\.url),editing:editing)
+        }
+    }
+}
+private struct JPRPaperScenario:View {
+    @Binding var scenario:GuidedScenario
+    let editing:Bool
+    var body:some View {
+        VStack(alignment:.leading,spacing:16) {
+            JPRPaperParagraph(title:"Scenario",text:$scenario.title,editing:editing)
+            if editing {Picker("Difficulty",selection:$scenario.difficulty){ForEach(["BASIC","OPERATIONAL","ADVANCED"],id:\.self){Text($0).tag($0)}}.font(.caption)}
+            JPRPaperParagraph(title:"Training objective",text:$scenario.trainingObjective,editing:editing)
+            JPRPaperStrings(title:"Required equipment",items:$scenario.requiredEquipment,editing:editing)
+            JPRPaperStrings(title:"Instructor setup",items:$scenario.instructorSetup,editing:editing)
+            JPRPaperParagraph(title:"Read to the crew",text:$scenario.briefing,editing:editing)
+            JPRPaperStrings(title:"Expected firefighter actions",items:$scenario.expectedActions,editing:editing)
+            JPRPaperStrings(title:"Instructor-controlled complications",items:$scenario.complications,editing:editing)
+            JPRPaperStrings(title:"Safety stop conditions",items:$scenario.safetyStopConditions,editing:editing)
+            JPRPaperStrings(title:"Debrief together",items:$scenario.debriefQuestions,editing:editing)
+        }
+    }
+}
+private struct JPRPaperEvaluationStep:View {
+    @Binding var step:GuidedStep
+    let number:Int
+    let editing:Bool
+    var body:some View {
+        VStack(alignment:.leading,spacing:12) {
+            Divider().overlay(JPRPaperStyle.rule)
+            JPRPaperHeading(title:"Requirement \(number) · \(step.required ? "Required" : "Optional")\(step.critical ? " · Critical safety" : "")")
+            JPRPaperParagraph(title:"Performance requirement",text:$step.title,editing:editing)
+            JPRPaperParagraph(title:"Observe",text:$step.check,editing:editing)
+            JPRPaperParagraph(title:"Teach",text:$step.teach,editing:editing)
+            JPRPaperParagraph(title:"Demonstrate",text:$step.show,editing:editing)
+            JPRPaperParagraph(title:"Safety",text:$step.safety,editing:editing)
+            if editing {Toggle("Required",isOn:$step.required);Toggle("Critical safety",isOn:$step.critical)}
+        }
+    }
+}
+private struct JPRPaperDocument:View {
+    @Binding var content:GuidedContent
+    let revision:Int
+    let status:String
+    let stage:String
+    let editing:Bool
+    @Binding var selectedScenario:String
+    var evaluation:AnyView? = nil
+    private var scenarios:Binding<[GuidedScenario]> {Binding(get:{content.scenarios ?? []},set:{content.scenarios=$0})}
+    private var scenarioIndex:Int? {(content.scenarios ?? []).firstIndex{$0.id==selectedScenario} ?? (content.scenarios?.isEmpty == false ? 0 : nil)}
+    var body:some View {
+        VStack(alignment:.leading,spacing:18) {
+            HStack(alignment:.top) {
+                VStack(alignment:.leading,spacing:3) {Text("MORRIS TOWNSHIP FIRE DEPARTMENT").font(.caption.weight(.semibold));Text("INSTRUCTOR TRAINING GUIDE").font(.caption2)}
+                Spacer(minLength:8)
+                VStack(alignment:.trailing,spacing:3) {
+                    if editing {TextField("JPR number",text:$content.number).textFieldStyle(.plain).multilineTextAlignment(.trailing)}else{Text(content.number)}
+                    Text("\(status=="APPROVED" ? "Approved" : "Draft") · Revision \(revision)")
+                }.font(.caption2)
             }
-        } else { Text("No structured scenarios in this revision. Use the approved JPR for supervised practice.") }
+            Rectangle().fill(JPRPaperStyle.ink).frame(height:2)
+            JPRPaperHeading(title:stage=="TEACH" ? "Instructor guide" : stage=="PRACTICE" ? "Supervised practice" : "Performance evaluation")
+            if editing {TextField("JPR title",text:$content.title,axis:.vertical).textFieldStyle(.plain).font(.system(.title,design:.serif))}
+            else {Text(content.title).font(.system(.title,design:.serif)).fixedSize(horizontal:false,vertical:true)}
+            if editing {TextField("Category",text:$content.category).textFieldStyle(.plain).font(.caption)}else{Text(content.category).font(.caption).foregroundStyle(JPRPaperStyle.muted)}
+            if status != "APPROVED" {
+                Text("Draft — not approved for training. Verify equipment-specific procedures and department references before approval.").font(.caption).padding(12).frame(maxWidth:.infinity,alignment:.leading).background(Color(red:0.98,green:0.94,blue:0.83))
+            }
+            if stage=="TEACH" {teach}
+            else if stage=="PRACTICE" {practice}
+            else if let evaluation {evaluation}
+            else {rubric}
+            Divider().overlay(JPRPaperStyle.rule)
+            HStack {Text(content.number);Spacer();Text(editing ? "Editing draft" : status=="APPROVED" ? "Approved content · locked" : "Draft preview")}.font(.caption2).foregroundStyle(JPRPaperStyle.muted)
+        }.padding(24).frame(maxWidth:820,alignment:.leading).background(JPRPaperStyle.page).foregroundStyle(JPRPaperStyle.ink).tint(JPRPaperStyle.ink).environment(\.colorScheme,.light)
+    }
+    private var teach:some View {
+        VStack(alignment:.leading,spacing:16) {
+            JPRPaperParagraph(title:"Performance objective",text:$content.objective,editing:editing)
+            JPRPaperParagraph(title:"Conditions of performance",text:$content.conditions,editing:editing)
+            JPRPaperParagraph(title:"Equipment",text:$content.equipment,editing:editing)
+            JPRPaperParagraph(title:"Instructor guidance",text:$content.guidance,editing:editing)
+            if let teaching=Binding($content.teaching) {JPRPaperTeaching(teaching:teaching,editing:editing)}
+            else {
+                ForEach(content.steps.indices,id:\.self) { index in JPRPaperEvaluationStep(step:$content.steps[index],number:index+1,editing:editing) }
+                if editing {Button("+ Add expanded teaching guide"){content.schemaVersion=2;content.teaching=GuidedTeaching()}.frame(minHeight:44)}
+            }
+            JPRPaperParagraph(title:"Applicable SOPs & standards",text:$content.standards,editing:editing)
+            JPRPaperParagraph(title:"Revision information",text:$content.revisionNotes,editing:editing)
+        }
+    }
+    private var practice:some View {
+        VStack(alignment:.leading,spacing:16) {
+            if let index=scenarioIndex {
+                Picker("Practice scenario",selection:Binding(get:{content.scenarios![index].id},set:{selectedScenario=$0})) {
+                    ForEach(content.scenarios ?? []) {Text("\($0.title) · \($0.difficulty)").tag($0.id)}
+                }.font(.subheadline)
+                JPRPaperScenario(scenario:scenarios[index],editing:editing)
+            }else {Text("No structured scenarios in this revision. Use the approved JPR for supervised practice.").font(.system(.body,design:.serif))}
+            if editing {Button("+ Add scenario"){var next=GuidedScenario();next.id=UUID().uuidString;next.title="New scenario";content.schemaVersion=2;content.scenarios=(content.scenarios ?? [])+[next];selectedScenario=next.id}.frame(minHeight:44)}
+        }
+    }
+    private var rubric:some View {
+        VStack(alignment:.leading,spacing:16) {
+            Text("All required and critical steps must pass. Minimum overall score: \(content.passingScore)%.").font(.system(.body,design:.serif))
+            ForEach(content.steps.indices,id:\.self) { index in JPRPaperEvaluationStep(step:$content.steps[index],number:index+1,editing:editing) }
+            if editing {
+                Button("+ Add evaluation requirement"){content.steps.append(GuidedStep(id:UUID().uuidString,title:"New evaluation step"))}.frame(minHeight:44)
+                Stepper("Passing score: \(content.passingScore)%",value:$content.passingScore,in:1...100)
+            }
+        }
     }
 }

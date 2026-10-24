@@ -15,6 +15,15 @@ import Foundation
         assert(content.schemaVersion == 2 && content.teaching?.instructionalSteps.first?.commonMistakes.first?.correction == "Correction")
         assert(content.scenarios?.first?.id == "scenario-1" && content.scenarios?.first?.difficulty == "ADVANCED")
         content.title="Edited by iOS";object["title"]="Edited by iOS"
+        content.teaching!.instructionalSteps[0].instruction="Edited on paper"
+        content.scenarios![0].briefing="Edited scenario briefing"
+        content.steps[0].check="Edited observable requirement"
+        var expectedTeaching=object["teaching"] as! [String:Any]
+        var expectedTeachingSteps=expectedTeaching["instructionalSteps"] as! [[String:Any]]
+        expectedTeachingSteps[0]["instruction"]="Edited on paper";expectedTeaching["instructionalSteps"]=expectedTeachingSteps;object["teaching"]=expectedTeaching
+        var expectedScenarios=object["scenarios"] as! [[String:Any]];expectedScenarios[0]["briefing"]="Edited scenario briefing";object["scenarios"]=expectedScenarios
+        var expectedSteps=object["steps"] as! [[String:Any]];expectedSteps[0]["check"]="Edited observable requirement";object["steps"]=expectedSteps
+        assert(content.passingScore==100 && content.steps[0].required && !content.steps[0].critical)
         let saved=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content)) as! [String:Any]
         // Models supply defaults for omitted optional collections, so compare
         // every original source field recursively while permitting those defaults.
