@@ -1,5 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import PhotosUI
+import AVKit
+import ImageIO
+import CoreTransferable
 
 struct TrainingView: View {
     @State private var home: TrainingWorkspaceHome?
@@ -287,6 +291,7 @@ private struct WorkspaceCourseView: View {
                             if let limit = c.quizAttemptLimit, c.delivery == "CBT" { Label("80% to pass · up to \(limit) attempts", systemImage: "checkmark.shield") }
                             if let dueAt = course.dueAt { Label("Due \(dueAt.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar").foregroundStyle(dueAt < Date() && c.progressStatus != "COMPLETED" ? .orange : .white.opacity(0.8)) }
                         }.font(.subheadline)
+                        ForEach(detail.documents ?? []){document in JPRMemberPaper(document:document)}
                         if manage && detail.canManage == true { instructorContent(detail) }
                         else { learnerContent(detail) }
                     } else if error == nil { ProgressView("Loading course…").tint(TrainingVisualStyle.cyan).frame(maxWidth: .infinity).padding(30) }
@@ -1138,7 +1143,7 @@ private struct GuidedSessionView: View {
         VStack(alignment:.leading,spacing:18) {
             stages(s)
             if s.jprs.count>1 {Picker("Approved JPR",selection:Binding(get:{s.jprIndex},set:{index in Task{await save(["jprIndex":index,"stepIndex":0])}})){ForEach(s.jprs.indices,id:\.self){index in Text(s.jprs[index].content.title).tag(index)}}.disabled(blocked)}
-            JPRPaperDocument(content:.constant(version.content),revision:version.revision,status:"APPROVED",stage:s.stage,editing:false,selectedScenario:Binding(get:{s.selectedScenarios?[version.id] ?? version.content.scenarios?.first?.id ?? ""},set:{scenarioId in Task{await save(["scenarioSelection":["versionId":version.id,"scenarioId":scenarioId]])}}),evaluation:s.stage=="EVALUATE" ? AnyView(paperEvaluation(s,version:version,step:step)) : nil).disabled(blocked)
+            JPRPaperDocument(content:.constant(version.content),revision:version.revision,status:"APPROVED",stage:s.stage,editing:false,selectedScenario:Binding(get:{s.selectedScenarios?[version.id] ?? version.content.scenarios?.first?.id ?? ""},set:{scenarioId in Task{await save(["scenarioSelection":["versionId":version.id,"scenarioId":scenarioId]])}}),evaluation:s.stage=="EVALUATE" ? AnyView(paperEvaluation(s,version:version,step:step)) : nil,versionId:version.id).disabled(blocked)
             Button("Print approved JPR") {Task{await printVersion(version.id)}}.buttonStyle(WorkspaceActionStyle()).disabled(blocked)
         }
     }
@@ -1434,6 +1439,7 @@ private struct GuidedJPREditor:View {
     @State private var editing=false
     @State private var paperStage="TEACH"
     @State private var paperScenario=""
+    @State private var mediaUploads=0
     init(version:GuidedVersion,keepCourseDraft:Bool=false){self.version=version;self.keepCourseDraft=keepCourseDraft;_content=State(initialValue:version.content);_reviewToken=State(initialValue:version.reviewToken)}
     var body:some View {
         ScrollView {
@@ -1441,29 +1447,32 @@ private struct GuidedJPREditor:View {
                 if let error {WorkspaceNotice(message:error,warning:true)}
                 if !status.isEmpty {Text(status).font(.caption).accessibilityLabel(status)}
                 if version.status != "APPROVED" {
-                    HStack {Button(editing ? "Read document" : "Edit draft"){editing.toggle()};Spacer();Button(busy ? "Saving…" : "Save draft"){Task{await save(approve:false)}}}.buttonStyle(WorkspaceActionStyle())
+                    HStack {Button(editing ? "Read document" : "Edit draft"){editing.toggle()}.disabled(mediaUploads>0);Spacer();Button(busy ? "Saving…" : "Save draft"){Task{await save(approve:false)}}.disabled(mediaUploads>0)}.buttonStyle(WorkspaceActionStyle())
                 }
-                Picker("JPR stage",selection:$paperStage){Text("Teach").tag("TEACH");Text("Practice").tag("PRACTICE");Text("Evaluate").tag("EVALUATE")}.pickerStyle(.segmented)
-                JPRPaperDocument(content:$content,revision:version.revision,status:version.status ?? "DRAFT",stage:paperStage,editing:editing && version.status != "APPROVED",selectedScenario:$paperScenario)
+                Picker("JPR stage",selection:$paperStage){Text("Teach").tag("TEACH");Text("Practice").tag("PRACTICE");Text("Evaluate").tag("EVALUATE")}.pickerStyle(.segmented).disabled(mediaUploads>0)
+                JPRPaperDocument(content:$content,revision:version.revision,status:version.status ?? "DRAFT",stage:paperStage,editing:editing && version.status != "APPROVED",selectedScenario:$paperScenario,versionId:version.id)
                 if let original=content.importedText,!original.isEmpty {DisclosureGroup("Original Word text for review"){Text(original).font(.caption)}}
                 if version.status != "APPROVED" {
-                    DisclosureGroup("Review & approval") {Text("Verify equipment-specific procedures and department references before approving. Approval locks this revision.").font(.caption);Button("Approve reviewed JPR"){confirmApproval=true}.frame(minHeight:44)}
+                    DisclosureGroup("Review & approval") {Text("Verify equipment-specific procedures and department references before approving. Approval locks this revision.").font(.caption);Button("Approve reviewed JPR"){confirmApproval=true}.frame(minHeight:44).disabled(mediaUploads>0)}
                 }else {Button("Create a new revision"){Task{await revise()}}.buttonStyle(WorkspaceActionStyle())}
             }.padding(16)
         }.background(Color(red:0.05,green:0.13,blue:0.25)).disabled(busy).navigationTitle("JPR document")
-        .toolbar{Button("Done"){if dirty{confirmDiscard=true}else{dismiss()}}.disabled(busy)}
-        .interactiveDismissDisabled(busy || dirty)
+        .environment(\.jprMediaBusyChanged,{active in mediaUploads=max(0,mediaUploads+(active ? 1 : -1))})
+        .trainingDestinationNavigation(blocked:busy || mediaUploads>0)
+        .toolbar{Button("Done"){if dirty{confirmDiscard=true}else{dismiss()}}.disabled(busy || mediaUploads>0)}
+        .interactiveDismissDisabled(busy || dirty || mediaUploads>0)
         .onChange(of:contentJSON){dirty=true;status="Unsaved draft changes"}
         .confirmationDialog("Discard unsaved draft changes?",isPresented:$confirmDiscard){Button("Discard changes",role:.destructive){dismiss()}}
         .confirmationDialog("Approve this department JPR?",isPresented:$confirmApproval){Button("Approve reviewed requirements"){Task{await save(approve:true)}}}message:{Text("Approval locks this revision for guided training and evaluation.")}
     }
     private var contentJSON:Data?{let encoder=JSONEncoder();encoder.outputFormatting=[.sortedKeys];return try? encoder.encode(content)}
     @MainActor private func save(approve:Bool)async{
+        guard mediaUploads==0 else{error="Wait for the media upload to finish.";return}
         busy=true;defer{busy=false};error=nil
         do{
             if reviewToken == nil {let detail:GuidedLibrary=try await APIClient.shared.trainingWorkspace("/jprs?versionId="+version.id);reviewToken=detail.versions.first?.reviewToken}
             let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content))
-            let body=try JSONSerialization.data(withJSONObject:["action":"update","id":version.id,"content":object,"reviewToken":reviewToken ?? ""])
+            let body=try JSONSerialization.data(withJSONObject:["action":"update","supportsStepMedia":true,"id":version.id,"content":object,"reviewToken":reviewToken ?? ""])
             let saved:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:body)
             reviewToken=saved.version.reviewToken;dirty=false;editing=false;status="Draft saved"
             if approve{let _:GuidedMutation=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"approve","id":version.id,"reviewToken":reviewToken ?? "","publish":!keepCourseDraft]));dismiss()}
@@ -1471,7 +1480,7 @@ private struct GuidedJPREditor:View {
     }
     @MainActor private func revise()async{
         busy=true;defer{busy=false}
-        do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let _:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"newRevision","sourceVersionId":version.id,"reviewToken":reviewToken ?? "","courseId":version.courseId ?? "","jprId":version.jprId ?? "","content":object]));dismiss()}catch{self.error=error.localizedDescription}
+        do{let object=try JSONSerialization.jsonObject(with:JSONEncoder().encode(content));let _:GuidedImport=try await APIClient.shared.trainingWorkspace("/jprs",body:JSONSerialization.data(withJSONObject:["action":"newRevision","supportsStepMedia":true,"sourceVersionId":version.id,"reviewToken":reviewToken ?? "","courseId":version.courseId ?? "","jprId":version.jprId ?? "","content":object]));dismiss()}catch{self.error=error.localizedDescription}
     }
 }
 
@@ -1679,6 +1688,7 @@ private struct JPRPaperTeachingStep:View {
             if editing {TextField("Teaching step title",text:$step.title,axis:.vertical).textFieldStyle(.plain).font(.system(.title3,design:.serif))}
             else {Text(step.title).font(.system(.title3,design:.serif))}
             JPRPaperParagraph(text:$step.instruction,editing:editing)
+            JPRStepMediaEditor(media:$step.media,editing:editing)
             JPRPaperParagraph(title:"Demonstrate",text:$step.demonstration,editing:editing)
             JPRPaperStrings(title:"Expected firefighter actions",items:$step.expectedActions,editing:editing)
             if !step.commonMistakes.isEmpty || editing {JPRPaperHeading(title:"Watch for & coach")}
@@ -1761,6 +1771,7 @@ private struct JPRPaperEvaluationStep:View {
             JPRPaperParagraph(title:"Performance requirement",text:$step.title,editing:editing)
             JPRPaperParagraph(title:"Observe",text:$step.check,editing:editing)
             JPRPaperParagraph(title:"Teach",text:$step.teach,editing:editing)
+            JPRStepMediaEditor(media:$step.media,editing:editing)
             JPRPaperParagraph(title:"Demonstrate",text:$step.show,editing:editing)
             JPRPaperParagraph(title:"Safety",text:$step.safety,editing:editing)
             if editing {Toggle("Required",isOn:$step.required);Toggle("Critical safety",isOn:$step.critical)}
@@ -1775,6 +1786,7 @@ private struct JPRPaperDocument:View {
     let editing:Bool
     @Binding var selectedScenario:String
     var evaluation:AnyView? = nil
+    var versionId:String? = nil
     private var scenarios:Binding<[GuidedScenario]> {Binding(get:{content.scenarios ?? []},set:{content.scenarios=$0})}
     private var scenarioIndex:Int? {(content.scenarios ?? []).firstIndex{$0.id==selectedScenario} ?? (content.scenarios?.isEmpty == false ? 0 : nil)}
     var body:some View {
@@ -1795,13 +1807,19 @@ private struct JPRPaperDocument:View {
             if status != "APPROVED" {
                 Text("Draft — not approved for training. Verify equipment-specific procedures and department references before approval.").font(.caption).padding(12).frame(maxWidth:.infinity,alignment:.leading).background(Color(red:0.98,green:0.94,blue:0.83))
             }
+            if stage != "TEACH" {
+                DisclosureGroup("Instructional media reference") {
+                    ForEach(content.teaching?.instructionalSteps ?? []){step in if !step.media.isEmpty{Text(step.title).font(.headline);JPRMediaGallery(media:step.media,instructor:true)}}
+                    ForEach(content.steps){step in if !step.media.isEmpty{Text(step.title).font(.headline);JPRMediaGallery(media:step.media,instructor:true)}}
+                }
+            }
             if stage=="TEACH" {teach}
             else if stage=="PRACTICE" {practice}
             else if let evaluation {evaluation}
             else {rubric}
             Divider().overlay(JPRPaperStyle.rule)
             HStack {Text(content.number);Spacer();Text(editing ? "Editing draft" : status=="APPROVED" ? "Approved content · locked" : "Draft preview")}.font(.caption2).foregroundStyle(JPRPaperStyle.muted)
-        }.padding(24).frame(maxWidth:820,alignment:.leading).background(JPRPaperStyle.page).foregroundStyle(JPRPaperStyle.ink).tint(JPRPaperStyle.ink).environment(\.colorScheme,.light)
+        }.padding(24).frame(maxWidth:820,alignment:.leading).background(JPRPaperStyle.page).foregroundStyle(JPRPaperStyle.ink).tint(JPRPaperStyle.ink).environment(\.colorScheme,.light).environment(\.jprMediaVersion,status=="APPROVED" ? versionId : nil)
     }
     private var teach:some View {
         VStack(alignment:.leading,spacing:16) {
@@ -1838,5 +1856,183 @@ private struct JPRPaperDocument:View {
                 Stepper("Passing score: \(content.passingScore)%",value:$content.passingScore,in:1...100)
             }
         }
+    }
+}
+
+// Private media is authorized before cache use. No permanent URLs or training completion side effects.
+private struct JPRMediaVersionKey:EnvironmentKey {static let defaultValue:String? = nil}
+private struct JPRMediaBusyKey:EnvironmentKey {static let defaultValue:(Bool)->Void = {_ in}}
+private extension EnvironmentValues {
+    var jprMediaVersion:String? {get{self[JPRMediaVersionKey.self]}set{self[JPRMediaVersionKey.self]=newValue}}
+    var jprMediaBusyChanged:(Bool)->Void {get{self[JPRMediaBusyKey.self]}set{self[JPRMediaBusyKey.self]=newValue}}
+}
+@MainActor private enum JPRImageCache {
+    static let session:URLSession = {let c=URLSessionConfiguration.ephemeral;c.urlCache=nil;return URLSession(configuration:c)}()
+    static let images:NSCache<NSString,UIImage> = {let cache=NSCache<NSString,UIImage>();cache.totalCostLimit=24*1024*1024;cache.countLimit=20;return cache}()
+}
+private struct JPRMediaGallery:View {
+    let media:[JPRMedia]
+    var instructor=false
+    @Environment(\.jprMediaVersion)private var versionId
+    @State private var index=0
+    @State private var image:UIImage?
+    @State private var player:AVPlayer?
+    @State private var error:String?
+    @State private var retry=0
+    @State private var enlarged=false
+    @State private var playing=false
+    @State private var failedPlayback=false
+    private var ordered:[JPRMedia]{media.sorted{$0.order<$1.order}}
+    private var current:JPRMedia? {ordered.isEmpty ? nil : ordered[min(index,ordered.count-1)]}
+    var body:some View {
+        if let current {
+            VStack(alignment:.leading,spacing:10) {
+                if current.type=="video" {
+                    if let player,let item=player.currentItem {VideoPlayer(player:player).frame(height:220).onReceive(item.publisher(for:\.status)){state in if state == .failed {failedPlayback=true}}.onReceive(NotificationCenter.default.publisher(for:.AVPlayerItemFailedToPlayToEndTime)){_ in failedPlayback=true}.accessibilityLabel(current.caption.isEmpty ? "Instructional video" : current.caption)}
+                    else {Button("Play demonstration",systemImage:"play.circle.fill"){playing=true;retry+=1}.frame(minHeight:44)}
+                    if failedPlayback {Text("Video could not play. Check your connection and retry.").font(.caption);Button("Retry video"){failedPlayback=false;retry+=1}}
+                }else if let image {Button {enlarged=true} label:{Image(uiImage:image).resizable().scaledToFit().frame(maxHeight:320).accessibilityLabel(current.caption.isEmpty ? "Instructional photograph" : current.caption)}.buttonStyle(.plain)}
+                else if error==nil {ProgressView("Loading photograph…")}
+                if !current.caption.isEmpty {Text(current.caption).font(.caption.italic()).fixedSize(horizontal:false,vertical:true)}
+                if current.aiGenerated {Text("AI-generated illustration · verify against department procedures").font(.caption)}
+                if instructor,!current.string("instructorNotes").isEmpty {Text("Instructor note: "+current.string("instructorNotes")).font(.caption)}
+                if let error {Text(error).font(.caption);Button("Retry media"){retry+=1}}
+                if ordered.count>1 {HStack {Button("Previous"){index=max(0,index-1)}.disabled(index==0);Spacer();Text("\(min(index+1,ordered.count)) / \(ordered.count)").font(.caption);Spacer();Button("Next"){index=min(ordered.count-1,index+1)}.disabled(index>=ordered.count-1)}.frame(minHeight:44)}
+            }.padding(12).background(Color.yellow.opacity(0.08),in:RoundedRectangle(cornerRadius:10))
+            .task(id:"\(current.assetId):\(versionId ?? "preview"):\(retry)"){await load(current)}
+            .onChange(of:current.assetId){playing=false;player?.pause();player=nil}
+            .onDisappear{player?.pause();player=nil;image=nil}
+            .fullScreenCover(isPresented:$enlarged){ZStack(alignment:.topTrailing){Color.black.ignoresSafeArea();if let image{ScrollView([.horizontal,.vertical]){Image(uiImage:image).resizable().scaledToFit().frame(width:UIScreen.main.bounds.width).accessibilityLabel(current.caption)}};Button("Close"){enlarged=false}.padding().foregroundStyle(.white).background(.black.opacity(0.6))}.safeAreaInset(edge:.bottom){Text(current.caption).font(.caption).padding().foregroundStyle(.white)}}
+        }
+    }
+    @MainActor private func load(_ media:JPRMedia)async {
+        error=nil;image=nil;player?.pause();player=nil
+        if media.type=="video" && !playing{return}
+        do{
+            let url=try await APIClient.shared.jprMediaURL(assetId:media.assetId,versionId:versionId)
+            try Task.checkCancellation()
+            if media.type=="video" {let next=AVPlayer(url:url);player=next;next.play();return}
+            if let cached=JPRImageCache.images.object(forKey:media.assetId as NSString){image=cached;return}
+            var request=URLRequest(url:url);request.cachePolicy = .reloadIgnoringLocalCacheData;request.timeoutInterval=30
+            let (bytes,response)=try await JPRImageCache.session.data(for:request)
+            try Task.checkCancellation()
+            guard let http=response as? HTTPURLResponse,(200..<300).contains(http.statusCode),bytes.count<=12*1024*1024,let decoded=UIImage(data:bytes) else{throw APIClient.APIError.unknown("Photograph is temporarily unavailable.")}
+            JPRImageCache.images.setObject(decoded,forKey:media.assetId as NSString,cost:Int(decoded.size.width*decoded.scale*decoded.size.height*decoded.scale*4));image=decoded
+        }catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}
+    }
+}
+private struct JPRPickedFile:Transferable {
+    let url:URL
+    static var transferRepresentation:some TransferRepresentation {FileRepresentation(importedContentType:.data){received in
+        let target=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathExtension(received.file.pathExtension)
+        try FileManager.default.copyItem(at:received.file,to:target);return JPRPickedFile(url:target)
+    }}
+}
+private struct JPRCamera: UIViewControllerRepresentable {
+    let completion:(UIImage?)->Void
+    func makeCoordinator()->Coordinator{Coordinator(completion)}
+    func makeUIViewController(context:Context)->UIImagePickerController{let picker=UIImagePickerController();picker.sourceType = .camera;picker.cameraCaptureMode = .photo;picker.delegate=context.coordinator;return picker}
+    func updateUIViewController(_ uiViewController:UIImagePickerController,context:Context){}
+    final class Coordinator:NSObject,UIImagePickerControllerDelegate,UINavigationControllerDelegate {
+        let completion:(UIImage?)->Void
+        init(_ completion:@escaping(UIImage?)->Void){self.completion=completion}
+        func imagePickerControllerDidCancel(_ picker:UIImagePickerController){completion(nil)}
+        func imagePickerController(_ picker:UIImagePickerController,didFinishPickingMediaWithInfo info:[UIImagePickerController.InfoKey:Any]){completion(info[.originalImage] as? UIImage)}
+    }
+}
+private struct JPRStepMediaEditor:View {
+    @Binding var media:[JPRMedia]
+    let editing:Bool
+    @Environment(\.jprMediaBusyChanged)private var busyChanged
+    @State private var selected:PhotosPickerItem?
+    @State private var showCamera=false
+    @State private var showExisting=false
+    @State private var existing:[JPRMediaAsset]=[]
+    @State private var nextCursor:String?
+    @State private var busy=false
+    @State private var error:String?
+    @State private var task:Task<Void,Never>?
+    @State private var replacement:String?
+    var body:some View {
+        VStack(alignment:.leading,spacing:12){
+            JPRMediaGallery(media:media,instructor:true)
+            if editing {
+                DisclosureGroup("+ Add Media") {
+                    VStack(alignment:.leading,spacing:12){
+                        Button("Take Photo",systemImage:"camera"){Task{await camera()}}
+                        PhotosPicker(selection:$selected,matching:.images){Label("Choose Photo",systemImage:"photo")}
+                        PhotosPicker(selection:$selected,matching:.videos){Label("Upload Video",systemImage:"video")}
+                        Button("Select Existing Media",systemImage:"photo.on.rectangle"){Task{await loadLibrary()}}
+                    }.frame(minHeight:44).disabled(busy || media.count>=20)
+                }
+                if busy {HStack{ProgressView("Uploading and preparing media…");Button("Cancel"){task?.cancel()}}}
+                ForEach($media){$item in
+                    VStack(alignment:.leading,spacing:8){
+                        TextField("Caption",text:Binding(get:{item.caption},set:{item.caption=$0;item.verified=false}),axis:.vertical).textFieldStyle(.roundedBorder).accessibilityLabel("Media caption")
+                        HStack{Button("Up"){move(item.id,-1)};Button("Down"){move(item.id,1)};Button("Replace"){replacement=item.id};Button("Remove",role:.destructive){media.removeAll{$0.id==item.id}}}.font(.caption).frame(minHeight:44)
+                        if replacement==item.id {PhotosPicker(selection:$selected,matching:.any(of:[.images,.videos])){Text("Choose replacement")};Button("Cancel replacement"){replacement=nil}}
+                        DisclosureGroup("Source & instructor review") {
+                            ForEach(["instructorNotes","source","equipmentManufacturer","equipmentModel"],id:\.self){key in
+                                TextField(label(key),text:Binding(get:{item.string(key)},set:{item.set(key,$0);item.verified=false}),axis:.vertical).textFieldStyle(.roundedBorder)
+                            }
+                            if item.type != "video" {Picker("Media type",selection:$item.type){Text("Photograph").tag("image");Text("Diagram").tag("diagram")}}
+                            Toggle("AI-generated illustration",isOn:Binding(get:{item.aiGenerated},set:{item.aiGenerated=$0;item.verified=false}))
+                            Toggle("Verified against department procedures and applicable manufacturer instructions",isOn:$item.verified)
+                        }.font(.caption)
+                    }.padding(.vertical,8).disabled(busy)
+                }
+            }
+            if let error{Text(error).font(.caption).foregroundStyle(.red)}
+        }
+        .sheet(isPresented:$showCamera){JPRCamera{image in showCamera=false;if let image{startCameraUpload(image)}}.ignoresSafeArea()}
+        .sheet(isPresented:$showExisting){NavigationStack{List{ForEach(existing){asset in Button(asset.fileName){attach(asset.id,type:asset.kind=="VIDEO" ? "video" : "image");showExisting=false}};if let nextCursor{Button("More media"){Task{await loadLibrary(cursor:nextCursor)}}}}.navigationTitle("Instructional media").toolbar{Button("Done"){showExisting=false}}.overlay{if existing.isEmpty{Text("No uploaded media yet.")}}}}
+        .onChange(of:selected){if let selected{startSelectionUpload(selected)}}
+        .onDisappear{task?.cancel()}
+    }
+    @MainActor private func loadLibrary(cursor:String?=nil)async{do{let response:JPRMediaLibrary=try await APIClient.shared.trainingWorkspace("/jpr-media"+(cursor.map{"?cursor="+$0} ?? ""));existing=cursor==nil ? response.assets : existing+response.assets;nextCursor=response.nextCursor;showExisting=true}catch{self.error=error.localizedDescription}}
+    private func label(_ key:String)->String{["instructorNotes":"Instructor note","source":"Source","equipmentManufacturer":"Equipment manufacturer","equipmentModel":"Equipment model"][key] ?? key}
+    private func attach(_ assetId:String,type:String){
+        if let id=replacement,let i=media.firstIndex(where:{$0.id==id}){media[i].assetId=assetId;media[i].type=type;media[i].verified=false}
+        else{media.append(JPRMedia(assetId:assetId,type:type,order:media.count))}
+        replacement=nil
+    }
+    private func move(_ id:String,_ delta:Int){var sorted=media.sorted{$0.order<$1.order};guard let i=sorted.firstIndex(where:{$0.id==id}),sorted.indices.contains(i+delta) else{return};sorted.swapAt(i,i+delta);for n in sorted.indices{sorted[n].order=n};media=sorted}
+    @MainActor private func camera()async{guard UIImagePickerController.isSourceTypeAvailable(.camera) else{error="Camera is not available on this device.";return};let allowed=await AVCaptureDevice.requestAccess(for:.video);if allowed{showCamera=true}else{error="Allow Camera access in Settings to photograph department equipment."}}
+    @MainActor private func startCameraUpload(_ image:UIImage){
+        task?.cancel();task=Task{busy=true;busyChanged(true);defer{busy=false;busyChanged(false)}
+            do{let ratio=min(1,1600/max(image.size.width,image.size.height));let rendered=UIGraphicsImageRenderer(size:CGSize(width:image.size.width*ratio,height:image.size.height*ratio),format:{let f=UIGraphicsImageRendererFormat();f.scale=1;return f}()).image{_ in image.draw(in:CGRect(origin:.zero,size:CGSize(width:image.size.width*ratio,height:image.size.height*ratio)))};guard let bytes=rendered.jpegData(compressionQuality:0.85) else{throw APIClient.APIError.unknown("Unable to prepare photograph.")};let file=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString+".jpg");try bytes.write(to:file);defer{try? FileManager.default.removeItem(at:file)};let id=try await APIClient.shared.uploadJPRMedia(file:file,mimeType:"image/jpeg");try Task.checkCancellation();attach(id,type:"image")}catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}
+        }
+    }
+    @MainActor private func startSelectionUpload(_ selection:PhotosPickerItem){
+        task?.cancel();task=Task{busy=true;busyChanged(true);error=nil;defer{busy=false;busyChanged(false);selected=nil}
+            do{guard let picked=try await selection.loadTransferable(type:JPRPickedFile.self) else{throw APIClient.APIError.unknown("Unable to read selected media.")};defer{try? FileManager.default.removeItem(at:picked.url)};try Task.checkCancellation()
+                let video=selection.supportedContentTypes.contains{$0.conforms(to:.movie)}
+                let file=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString+(video ? ".mp4" : ".jpg"));defer{try? FileManager.default.removeItem(at:file)}
+                if video {
+                    let asset=AVURLAsset(url:picked.url),duration=try await asset.load(.duration)
+                    guard duration.seconds.isFinite,duration.seconds<=180 else{throw APIClient.APIError.unknown("Choose a short instructional clip up to three minutes.")}
+                    guard let export=AVAssetExportSession(asset:asset,presetName:AVAssetExportPreset1280x720) else{throw APIClient.APIError.unknown("Unable to prepare video.")}
+                    export.outputURL=file;export.outputFileType = .mp4;export.shouldOptimizeForNetworkUse=true
+                    try await withTaskCancellationHandler(operation:{try await withCheckedThrowingContinuation{(continuation:CheckedContinuation<Void,Error>) in export.exportAsynchronously{if export.status == .completed{continuation.resume()}else{continuation.resume(throwing:export.error ?? CancellationError())}}}},onCancel:{export.cancelExport()})
+                }else{
+                    guard let source=CGImageSourceCreateWithURL(picked.url as CFURL,nil),let thumbnail=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:1600] as CFDictionary),let bytes=UIImage(cgImage:thumbnail).jpegData(compressionQuality:0.85) else{throw APIClient.APIError.unknown("Unable to prepare photograph. Choose JPEG or PNG.")};try bytes.write(to:file)
+                }
+                let id=try await APIClient.shared.uploadJPRMedia(file:file,mimeType:video ? "video/mp4" : "image/jpeg");try Task.checkCancellation();attach(id,type:video ? "video" : "image")
+            }catch{if !APIClient.isRequestCancellation(error){self.error=error.localizedDescription}}
+        }
+    }
+}
+private struct JPRMemberPaper:View {
+    let document:JPRMemberDocument
+    var body:some View {
+        DisclosureGroup("\(document.content.number) · \(document.content.title) · Revision \(document.revision)"){
+            VStack(alignment:.leading,spacing:16){
+                Text(document.content.objective).font(.system(.body,design:.serif));if let conditions=document.content.conditions,!conditions.isEmpty{Text(conditions).font(.subheadline)};Text(document.content.equipment).font(.subheadline)
+                ForEach((document.content.performanceObjectives ?? [])+(document.content.prerequisites ?? [])+(document.content.requiredEquipment ?? [])+(document.content.safetyConsiderations ?? []),id:\.self){Text($0).font(.subheadline)}
+                ForEach(document.content.steps){step in
+                    Text(step.title).font(.headline);Text(step.instruction).font(.system(.body,design:.serif));Text(step.demonstration).font(.system(.body,design:.serif));ForEach(step.expectedActions,id:\.self){Text($0).font(.subheadline)};ForEach(step.safetyConsiderations,id:\.self){Text("Safety: "+$0).font(.subheadline)};JPRMediaGallery(media:step.media)
+                }
+            }.padding(18).background(JPRPaperStyle.page).foregroundStyle(JPRPaperStyle.ink).environment(\.jprMediaVersion,document.id)
+        }.padding(16).background(Color.white.opacity(0.07),in:RoundedRectangle(cornerRadius:16))
     }
 }

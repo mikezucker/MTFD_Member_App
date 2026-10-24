@@ -44,6 +44,7 @@ struct TrainingWorkspaceCourse: Decodable, Identifiable {
     }
 }
 struct TrainingWorkspaceDetail: Decodable {
+    var documents:[JPRMemberDocument]? = nil
     let success: Bool
     let legacy: Bool
     let canManage: Bool?
@@ -509,3 +510,30 @@ struct ScheduledTrainingItem: Decodable, Identifiable {
     let instructor: String?
     let conducting: Bool?
 }
+
+// Media keeps unknown keys verbatim, just like the existing versioned JPR model.
+struct JPRMedia: Codable, Identifiable {
+    var fields:[String:GuidedJSON] = [:]
+    init(assetId:String,type:String,order:Int){id=UUID().uuidString;self.assetId=assetId;self.type=type;self.order=order}
+    init(from decoder:Decoder)throws{fields=try decoder.singleValueContainer().decode([String:GuidedJSON].self)}
+    func encode(to encoder:Encoder)throws{var c=encoder.singleValueContainer();try c.encode(fields)}
+    func string(_ key:String)->String{if case .string(let value)=fields[key]{return value};return ""}
+    mutating func set(_ key:String,_ value:String){fields[key] = .string(value)}
+    var id:String {get{string("id")}set{set("id",newValue)}}
+    var assetId:String {get{string("assetId")}set{set("assetId",newValue)}}
+    var type:String {get{string("type")}set{set("type",newValue)}}
+    var caption:String {get{string("caption")}set{set("caption",newValue)}}
+    var order:Int {get{if case .number(let v)=fields["order"]{return Int(v)};return 0}set{fields["order"] = .number(Double(newValue))}}
+    var aiGenerated:Bool {get{if case .bool(let v)=fields["aiGenerated"]{return v};return false}set{fields["aiGenerated"] = .bool(newValue)}}
+    var verified:Bool {get{string("verificationStatus")=="INSTRUCTOR_VERIFIED"}set{set("verificationStatus",newValue ? "INSTRUCTOR_VERIFIED" : "UNVERIFIED");fields.removeValue(forKey:"verifiedAt");fields.removeValue(forKey:"verifiedById")}}
+}
+private func readStepMedia(_ fields:[String:GuidedJSON])->[JPRMedia]{guard let value=fields["media"],let data=try? JSONEncoder().encode(value) else{return []};return (try? JSONDecoder().decode([JPRMedia].self,from:data)) ?? []}
+private func writeStepMedia(_ media:[JPRMedia])->GuidedJSON{guard let data=try? JSONEncoder().encode(media),let value=try? JSONDecoder().decode(GuidedJSON.self,from:data) else{return .array([])};return value}
+extension GuidedStep {var media:[JPRMedia]{get{readStepMedia(extraFields)}set{extraFields["media"]=writeStepMedia(newValue)}}}
+extension GuidedTeachingStep {var media:[JPRMedia]{get{readStepMedia(extraFields)}set{extraFields["media"]=writeStepMedia(newValue)}}}
+struct JPRMediaAsset:Decodable,Identifiable {let id:String;let kind:String;let fileName:String}
+struct JPRMediaLibrary:Decodable {let assets:[JPRMediaAsset];var nextCursor:String? = nil}
+struct JPRMediaTicket:Decodable {let assetId:String;let uploadUrl:URL}
+struct JPRMediaLocation:Decodable {let url:URL;let expiresIn:Int}
+struct JPRMemberDocument:Decodable,Identifiable {let id:String;let revision:Int;let content:JPRMemberContent}
+struct JPRMemberContent:Decodable {let number:String;let title:String;let objective:String;let equipment:String;let conditions:String?;let performanceObjectives:[String]?;let prerequisites:[String]?;let requiredEquipment:[String]?;let safetyConsiderations:[String]?;let steps:[GuidedTeachingStep]}

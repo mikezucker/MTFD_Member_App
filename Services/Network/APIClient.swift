@@ -321,6 +321,27 @@ final class APIClient {
         return try decode(T.self, from: await performRequest(request))
     }
 
+    func uploadJPRMedia(file:URL,mimeType:String) async throws -> String {
+        let size=(try file.resourceValues(forKeys:[.fileSizeKey])).fileSize ?? 0
+        let limit=mimeType.hasPrefix("video/") ? 50*1024*1024 : 12*1024*1024
+        guard size>0,size<=limit else {throw APIError.unknown("Choose a photograph up to 12 MB or a video up to 50 MB.")}
+        let ticket:JPRMediaTicket=try await trainingWorkspace("/jpr-media",body:JSONSerialization.data(withJSONObject:["action":"prepare","fileName":file.lastPathComponent,"mimeType":mimeType,"sizeBytes":size]))
+        try Task.checkCancellation()
+        var upload=URLRequest(url:ticket.uploadUrl);upload.httpMethod="PUT";upload.timeoutInterval=120
+        upload.setValue(mimeType,forHTTPHeaderField:"Content-Type");upload.setValue("false",forHTTPHeaderField:"x-upsert")
+        // The signed storage request deliberately receives no app bearer credential.
+        let (_,response)=try await URLSession.shared.upload(for:upload,fromFile:file)
+        guard let http=response as? HTTPURLResponse,(200..<300).contains(http.statusCode) else {throw APIError.unknown("Upload interrupted. Choose the file again to retry.")}
+        try Task.checkCancellation()
+        let _:TrainingWorkspaceMutation=try await trainingWorkspace("/jpr-media",body:JSONSerialization.data(withJSONObject:["action":"confirm","assetId":ticket.assetId]))
+        return ticket.assetId
+    }
+    func jprMediaURL(assetId:String,versionId:String?) async throws -> URL {
+        var components=URLComponents();components.queryItems=[URLQueryItem(name:"assetId",value:assetId)]
+        if let versionId {components.queryItems?.append(URLQueryItem(name:"versionId",value:versionId))}
+        let result:JPRMediaLocation=try await trainingWorkspace("/jpr-media"+(components.string ?? ""));return result.url
+    }
+
     func uploadWorkspaceTraining(data: Data, fileName: String, mimeType: String) async throws -> WorkspaceUploadResponse {
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()

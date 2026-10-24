@@ -1563,6 +1563,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Supporting Files/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = MTFD;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take instructional photographs for MTFD JPR drafts.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Verify your identity to complete an approved MTFD password reset on this iPhone.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -1604,6 +1605,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Supporting Files/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = MTFD;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take instructional photographs for MTFD JPR drafts.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Verify your identity to complete an approved MTFD password reset on this iPhone.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
