@@ -33,6 +33,24 @@ import Foundation
             else {assert(NSDictionary(dictionary:["v":before]).isEqual(to:["v":after]))}
         }
         preserved(object,saved)
+        // Typed media edits preserve future metadata at the attachment and step levels.
+        let rawMedia=Data(#"{"id":"media-1","assetId":"asset-1","type":"image","caption":"Original","order":0,"instructorNotes":"Restricted","futureMedia":{"keep":true}}"#.utf8)
+        var attachment=try JSONDecoder().decode(JPRMedia.self,from:rawMedia)
+        content.teaching!.instructionalSteps[0].media=[attachment]
+        content.steps[0].media=[attachment]
+        attachment.caption="Edited caption";attachment.order=1
+        content.teaching!.instructionalSteps[0].media=[attachment]
+        let mediaRoundTrip=try JSONDecoder().decode(GuidedContent.self,from:JSONEncoder().encode(content))
+        assert(mediaRoundTrip.teaching!.instructionalSteps[0].media[0].caption=="Edited caption")
+        assert(mediaRoundTrip.steps[0].media[0].assetId=="asset-1")
+        assert(mediaRoundTrip.teaching!.instructionalSteps[0].media[0].string("instructorNotes")=="Restricted")
+        if case .object(let future)=mediaRoundTrip.teaching!.instructionalSteps[0].media[0].fields["futureMedia"] {assert(future["keep"] != nil)}else{assertionFailure("Lost future media metadata")}
+        var reorder=[attachment,JPRMedia(assetId:"asset-2",type:"video",order:0)]
+        reorder.sort{$0.order<$1.order};assert(reorder[0].assetId=="asset-2")
+        content.steps[0].media=[];assert(content.steps[0].media.isEmpty)
+        let member=try JSONDecoder().decode(JPRMemberDocument.self,from:Data(#"{"id":"v1","revision":1,"content":{"number":"TEST","title":"Fixture","objective":"Objective","equipment":"Equipment","steps":[{"id":"s1","title":"Step","instruction":"Teach","demonstration":"Show","media":[{"id":"m1","assetId":"a1","type":"image","caption":"Fixture","order":0}]}]}}"#.utf8))
+        assert(member.content.steps[0].media.count==1)
+        print("JPR media: caption edits, ordering, removals, native round trips, unknown metadata and member projection passed.")
         let session=try JSONDecoder().decode(GuidedSession.self,from:Data(#"{"id":"session","title":"Fixture","courseId":"course","status":"IN_PROGRESS","stage":"PRACTICE","jprIndex":0,"stepIndex":0,"durationMinutes":60,"revision":1,"participants":[],"jprs":[],"observations":{},"selectedScenarios":{"version-1":"scenario-1"}}"#.utf8))
         assert(session.selectedScenarios?["version-1"] == "scenario-1")
         print("JPR content: legacy decoding, expanded decoding, stable scenario IDs, edit/encode round-trip and future fields passed.")
