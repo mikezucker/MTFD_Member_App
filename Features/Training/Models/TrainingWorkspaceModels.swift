@@ -12,6 +12,7 @@ struct TrainingWorkspaceHome: Decodable {
     let manageCourses: [TrainingWorkspaceManagedCourse]
 }
 struct TrainingWorkspaceMember: Decodable, Identifiable {
+    var groups: [String]? = nil
     let id: String
     let name: String?
     let role: String

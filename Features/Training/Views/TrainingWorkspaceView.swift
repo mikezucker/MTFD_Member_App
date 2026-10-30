@@ -410,6 +410,8 @@ private struct WorkspaceMemberSelection: View {
     @Binding var selected: Set<String>
     @State private var search = ""
     var body: some View {
+        let groups = Array(Set(members.flatMap { $0.groups ?? [] })).sorted().map { name in GuidedGroup(name: name, userIds: members.filter { $0.groups?.contains(name) == true }.map(\.id)) }
+        TrainingTourSelection(groups: groups, eligibleIds: members.map(\.id), selected: $selected)
         TextField("Find members", text: $search).workspaceInput().autocorrectionDisabled()
         if members.isEmpty { Text("No assigned members yet.").font(.subheadline).foregroundStyle(.white.opacity(0.65)) }
         ForEach(members.filter { search.isEmpty || ($0.name ?? "").localizedCaseInsensitiveContains(search) }) { member in
@@ -1578,7 +1580,8 @@ private struct GuidedSkillsView: View {
             }
             Stepper("\(repetitions) successful evaluations required", value: $repetitions, in: 1...100)
             DatePicker("Due", selection: $due, displayedComponents: .date)
-            Text("Assign to members").font(.headline)
+            Text("Assign to a whole tour or individuals").font(.headline)
+            TrainingTourSelection(groups: home.groups, eligibleIds: home.members.map(\.id), selected: $selected)
             ForEach(home.members) { member in
                 Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } }))
             }
@@ -2095,7 +2098,7 @@ private struct AnnualTrainingSkillsView: View {
         }.navigationTitle("Annual training").navigationBarTitleDisplayMode(.inline).tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
         .task(id: year) { await load() }
         .sheet(item: $planning, onDismiss: { Task { await load() } }) { requirement in
-            if let home { NavigationStack { AnnualSkillPlanSheet(requirement: requirement, members: home.members, initialIds: requirements.filter { $0.versionId == requirement.versionId && $0.percent < 100 }.map(\.userId)) } }
+            if let home { NavigationStack { AnnualSkillPlanSheet(requirement: requirement, members: home.members, groups: home.groups, initialIds: requirements.filter { $0.versionId == requirement.versionId && $0.percent < 100 }.map(\.userId)) } }
         }
         .sheet(isPresented: $configuring, onDismiss: { Task { await load() } }) {
             NavigationStack { GuidedSkillsView(assignmentYear: year, home: home, onEvaluate: onEvaluate).toolbar { Button("Done") { configuring = false } } }
@@ -2149,6 +2152,7 @@ private struct AnnualTrainingSkillsView: View {
 private struct AnnualSkillPlanSheet: View {
     let requirement: GuidedSkillRequirement
     let members: [GuidedMember]
+    let groups: [GuidedGroup]
     let initialIds: [String]
     @Environment(\.dismiss) private var dismiss
     @State private var selected = Set<String>()
@@ -2168,6 +2172,7 @@ private struct AnnualSkillPlanSheet: View {
                 TextField("Location", text: $location)
             }
             Section("Participants") {
+                TrainingTourSelection(groups: groups, eligibleIds: members.map(\.id), selected: $selected)
                 ForEach(members) { member in Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })) }
             }
             Section { Button(busy ? "Scheduling…" : "Add to schedule") { Task { await schedule() } }.disabled(selected.isEmpty || busy) }
@@ -2183,4 +2188,43 @@ private struct AnnualSkillPlanSheet: View {
             dismiss()
         } catch { self.error = error.localizedDescription }
     }
+}
+
+private struct TrainingTourSelection: View {
+    let groups: [GuidedGroup]
+    let eligibleIds: [String]
+    @Binding var selected: Set<String>
+    @State private var rosterAt = Date()
+    @State private var loading = false
+    @State private var error: String?
+    var body: some View {
+        DatePicker("On-duty tour at", selection: $rosterAt)
+        Button(loading ? "Loading FirstDue roster…" : "Select on-duty tour") { Task { await loadTour() } }.buttonStyle(WorkspaceActionStyle()).disabled(loading)
+        if let error { Text(error).font(.caption).foregroundStyle(.red) }
+        Text("Uses FirstDue's roster at this time, limited to members you can manage. Review the names before saving.").font(.caption).foregroundStyle(.secondary)
+        if !groups.isEmpty {
+            Menu("Select a saved group") {
+                ForEach(groups, id: \.name) { group in
+                    Button("\(group.name) · \(group.userIds.filter { eligibleIds.contains($0) }.count) members") { selected = Set(group.userIds).intersection(eligibleIds) }
+                }
+            }.buttonStyle(WorkspaceActionStyle())
+        }
+        HStack {
+            Button("Select all eligible") { selected = Set(eligibleIds) }
+            Spacer()
+            Button("Clear") { selected = [] }
+        }
+        Text("Select a tour, then adjust the names below, or choose individuals directly. Membership is captured when saved. \(selected.count) selected.").font(.caption).foregroundStyle(.secondary)
+    }
+    @MainActor private func loadTour() async {
+        loading = true; error = nil; defer { loading = false }
+        do {
+            let at = ISO8601DateFormatter().string(from: rosterAt).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let roster: GuidedDuty = try await APIClient.shared.trainingWorkspace("/guided?onDuty=1&at="+at.replacingOccurrences(of: "+", with: "%2B"))
+            let ids = Set(roster.userIds).intersection(eligibleIds)
+            guard !ids.isEmpty else { error = "No eligible members returned. Check the time or select individuals."; return }
+            selected = ids
+        } catch { self.error = error.localizedDescription + " Select individuals if the roster is unavailable." }
+    }
+
 }
