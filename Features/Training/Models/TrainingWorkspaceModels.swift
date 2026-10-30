@@ -12,6 +12,7 @@ struct TrainingWorkspaceHome: Decodable {
     let manageCourses: [TrainingWorkspaceManagedCourse]
 }
 struct TrainingWorkspaceMember: Decodable, Identifiable {
+    var groups: [String]? = nil
     let id: String
     let name: String?
     let role: String
@@ -492,10 +493,14 @@ struct GuidedSkillsResponse: Decodable {
 }
 struct GuidedUpcomingSession: Decodable, Identifiable {
  let id: String; let title: String; let startAt: Date?; let location: String?; let durationMinutes: Int
+ var status: String? = nil
+ var versionIds: [String]? = nil
+ var participantIds: [String]? = nil
 }
 struct GuidedSkillRequirement: Decodable, Identifiable {
  let id: String; let userId: String; let member: String; let versionId: String; let courseId: String; let number: String; let title: String; let revision: Int
  let required: Int; let completed: Int; let percent: Int; let dueAt: Date?; let history: [GuidedSkillHistory]
+ var periodYear: Int? = nil
 }
 struct GuidedSkillHistory: Decodable, Identifiable {
  let id: String; let outcome: String; let completedAt: Date?; let evaluator: String
