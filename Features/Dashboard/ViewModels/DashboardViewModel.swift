@@ -452,7 +452,6 @@ final class DashboardViewModel: ObservableObject {
             return response.documents
                 .filter { $0.latestVersion?.requiresAcknowledgement == true }
                 .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
-                .prefix(6)
                 .map { document in
                     DashboardPendingPolicy(
                         id: document.id,
