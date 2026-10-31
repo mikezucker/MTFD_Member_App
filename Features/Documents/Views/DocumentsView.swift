@@ -861,6 +861,7 @@ struct DocumentPDFPreview: View {
 
             SecureField("Password", text: $password)
                 .textContentType(.password)
+                .foregroundStyle(Color.primary)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .padding(.horizontal, 12)
