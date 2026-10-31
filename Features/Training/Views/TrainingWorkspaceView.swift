@@ -24,12 +24,17 @@ struct TrainingView: View {
                     AppScreen(title: "") {
                         ScrollView {
                             VStack(spacing: 0) {
-                                TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training Hub", subtitle: "Prepare. Practice. Perform.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats)
+                                if home?.guidedEnabled != true || showingMyTraining { TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training Hub", subtitle: "Prepare. Practice. Perform.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats) }
                                 VStack(alignment: .leading, spacing: 18) {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
-                                        if home.guidedEnabled == true && home.canManage && !showingMyTraining {
-                                            GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" })
+                                        if home.guidedEnabled == true && !showingMyTraining {
+                                            if home.canManage {
+                                                GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" })
+                                            } else {
+                                                AnnualTrainingSkillsView(embedded: true)
+                                                Button("My courses & records") { showingMyTraining = true }.buttonStyle(WorkspaceActionStyle())
+                                            }
                                         } else {
                                         if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
                                         if isRequiredTab { ScheduledTrainingList(sessions: home.scheduledTraining ?? []) }
@@ -890,30 +895,19 @@ private struct GuidedInstructorHome: View {
             if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
             if let home {
                 Menu {
-                    Button("Overview") { mode = "home" }
+                    Button("Annual Training") { mode = "home" }
                     Button("Training Library") { mode = "catalog" }
                     Button("Schedule & Sessions") { mode = "schedule" }
-                    NavigationLink("Skills & Evaluations") { AnnualTrainingSkillsView(home: home, onEvaluate: prepareEvaluation) }
+                    Button("Manage Program") { mode = "program" }
                     Button("My Training", action: onMyTraining)
                     Button("Course Catalog", action: onCatalog)
                     Button("Training Records") { mode = "history" }
                 } label: { Label("Training sections", systemImage: "line.3.horizontal") }.buttonStyle(WorkspaceActionStyle())
                 if mode == "catalog" { catalog(home) }
                 else if mode == "home" {
-                    Text("Overview").font(.title2.bold())
-                    ScheduledTrainingList(sessions: (home.scheduledTraining ?? []).filter { $0.conducting != true })
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 12) {
-                        Button { mode = "catalog" } label: { TrainingQuickAction(title: "Training Library", subtitle: "Find or create courses", symbol: "books.vertical.fill") }.buttonStyle(.plain)
-                        Button { mode = "schedule" } label: { TrainingQuickAction(title: "Schedule & Sessions", subtitle: "Plan, run, or resume", symbol: "calendar", accent: TrainingVisualStyle.orange) }.buttonStyle(.plain)
-                        NavigationLink { AnnualTrainingSkillsView(home: home, onEvaluate: prepareEvaluation) } label: { TrainingQuickAction(title: "Annual training", subtitle: "Skills, progress, and planning", symbol: "checkmark.seal.fill", accent: TrainingVisualStyle.mint) }.buttonStyle(.plain)
-                        Button(action: onMyTraining) { TrainingQuickAction(title: "My Training", subtitle: "Personal assignments", symbol: "person.crop.circle.fill") }.buttonStyle(.plain)
-                        Button(action: onCatalog) { TrainingQuickAction(title: "Course Catalog", subtitle: "Courses for your member type", symbol: "books.vertical.fill") }.buttonStyle(.plain)
-                        Button { mode = "history" } label: { TrainingQuickAction(title: "Training Records", subtitle: "Results and hours", symbol: "doc.text.fill", accent: TrainingVisualStyle.lavender) }.buttonStyle(.plain)
-                    }
-                    Text("Pick up where you left off").font(.headline)
-                    sessionRows(home.sessions.filter { $0.status == "IN_PROGRESS" })
-                    Text("Upcoming sessions").font(.headline)
-                    sessionRows(home.sessions.filter { $0.status == "SCHEDULED" })
+                    AnnualTrainingSkillsView(home: home, embedded: true, onManage: { mode = "program" }, onSchedule: { mode = "schedule" })
+                } else if mode == "program" {
+                    ManageAnnualTrainingProgramView(home: home, onBack: { mode = "home" }, onBusyChange: { busy = $0 })
                 } else if mode == "start" {
                     Text(evaluating ? "Start a skills evaluation" : "Plan a training session").font(.title2.bold())
                     Picker("Training source", selection: $oneOff) { Text("Course catalog").tag(false); Text("One-off topic").tag(true) }.pickerStyle(.segmented).disabled(evaluating).onChange(of: oneOff) { _, value in if value { assignmentOnly = false } }
@@ -968,7 +962,7 @@ private struct GuidedInstructorHome: View {
                     if mode == "schedule" { Button("Schedule session") { begin(); scheduled = true }.buttonStyle(WorkspaceActionStyle()); Button("Record one-off training") { begin(); oneOff = true }.buttonStyle(WorkspaceActionStyle()) }
                 }
             } else if error == nil { ProgressView("Loading training…") }
-            Text("Online connection required. Confirmed saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary)
+            if mode != "home" { Text("Online connection required. Confirmed saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary) }
         }.disabled(busy).task { await load() }
         .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: libraryWorkspace.members) } }
         .navigationDestination(isPresented: Binding(get: { activeSession != nil }, set: { if !$0 { activeSession = nil; Task { await load() } } })) { if let activeSession { GuidedSessionView(id: activeSession) } }
@@ -2045,17 +2039,24 @@ private struct JPRMemberPaper:View {
 // immutable evaluation attempts. Planning never writes a competency result.
 private struct AnnualTrainingSkillsView: View {
     var home: GuidedHome? = nil
-    var onEvaluate: ((GuidedTopic, GuidedVersion, [String]) -> Void)? = nil
-    @State private var year = Calendar(identifier: .gregorian).component(.year, from: Date())
+    var embedded = false
+    var onManage: () -> Void = {}
+    var onSchedule: () -> Void = {}
+    @State private var year = Calendar.current.component(.year, from: Date())
     @State private var crew = ""
     @State private var search = ""
     @State private var data: GuidedSkillsResponse?
     @State private var error: String?
     @State private var planning: GuidedSkillRequirement?
-    @State private var configuring = false
+    @State private var dutyAt = Date()
+    @State private var dutyIds = Set<String>()
+    @State private var loadingDuty = false
+    @State private var dutyLoaded = false
+    private var selection: Set<String>? {
+        AnnualTrainingBoardSelection.memberIds(crew, groups: home?.groups ?? [], dutyIds: dutyIds)
+    }
     private var requirements: [GuidedSkillRequirement] {
-        let ids = home?.groups.first(where: { $0.name == crew })?.userIds
-        return (data?.requirements ?? []).filter { crew.isEmpty || (crew.hasPrefix("member:") ? $0.userId == String(crew.dropFirst(7)) : ids?.contains($0.userId) == true) }
+        (data?.requirements ?? []).filter { selection?.contains($0.userId) ?? true }
     }
     private var rows: [[GuidedSkillRequirement]] {
         Dictionary(grouping: requirements, by: \.versionId).values.sorted { ($0.first?.title ?? "") < ($1.first?.title ?? "") }.filter { row in search.isEmpty || row.contains { "\($0.title) \($0.member)".localizedCaseInsensitiveContains(search) } }
@@ -2063,88 +2064,128 @@ private struct AnnualTrainingSkillsView: View {
     private var totals: (done: Int, required: Int) {
         (requirements.reduce(0) { $0 + min($1.required, $1.completed) }, requirements.reduce(0) { $0 + $1.required })
     }
+    private var pending: [GuidedUpcomingSession] {
+        (data?.sessions ?? []).filter { s in
+            ["SCHEDULED","IN_PROGRESS"].contains(s.status ?? "SCHEDULED") && (selection == nil || (s.participantIds ?? []).contains { selection!.contains($0) })
+        }.sorted { a,b in
+            if (a.status == "IN_PROGRESS") != (b.status == "IN_PROGRESS") { return a.status == "IN_PROGRESS" }
+            return (a.startAt ?? .distantPast) < (b.startAt ?? .distantPast)
+        }
+    }
     var body: some View {
-        AppScreen(title: "") {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(home == nil ? "My annual training" : "Annual training program").font(.title2.bold())
-                    Text("Members complete skills. Lieutenants plan, conduct, and document. Only locked passing evaluations count.").font(.subheadline).foregroundStyle(.secondary)
-                    Picker("Program year", selection: $year) {
-                        ForEach((Calendar.current.component(.year, from: Date())-2)...(Calendar.current.component(.year, from: Date())+1), id: \.self) { Text(String($0)).tag($0) }
-                        Text("Earlier assignments").tag(0)
-                    }
-                    if let home {
-                        Picker("Crew or member", selection: $crew) {
-                            Text("All members in my scope").tag("")
-                            ForEach(home.groups, id: \.name) { Text($0.name).tag($0.name) }
-                            ForEach(home.members) { Text($0.name).tag("member:"+$0.id) }
-                        }
-                        Button("Configure requirements / skills directory") { configuring = true }.buttonStyle(WorkspaceActionStyle())
-                    }
-                    if let error { WorkspaceNotice(message: error, warning: true) }
-                    if data != nil {
-                        WorkspacePanel {
-                            Text(totals.required == 0 ? "Unconfigured" : "\(100 * totals.done / max(1,totals.required))% complete").font(.title2.bold())
-                            Text("\(totals.done) of \(totals.required) required successful evaluations").font(.subheadline)
-                        }
-                        if requirements.isEmpty { WorkspaceNotice(message: "No requirements configured for this selection. This does not mean the annual program is complete. Your training officer must assign approved skills and required repetitions.") }
-                    } else { ProgressView("Loading annual requirements…") }
-                    TextField("Find a skill or member", text: $search).textFieldStyle(.roundedBorder).autocorrectionDisabled()
-                    ForEach(rows, id: \.first!.versionId) { row in
-                        annualRow(row)
-                    }
-                }.padding(16)
-            }.refreshable { await load() }
-        }.navigationTitle("Annual training").navigationBarTitleDisplayMode(.inline).tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
+        Group {
+            if embedded { content }
+            else { AppScreen(title: "") { ScrollView { content.padding(16) }.refreshable { await load() } } }
+        }.navigationTitle("Annual Training").navigationBarTitleDisplayMode(.inline).tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
         .task(id: year) { await load() }
         .sheet(item: $planning, onDismiss: { Task { await load() } }) { requirement in
             if let home { NavigationStack { AnnualSkillPlanSheet(requirement: requirement, members: home.members, groups: home.groups, initialIds: requirements.filter { $0.versionId == requirement.versionId && $0.percent < 100 }.map(\.userId)) } }
         }
-        .sheet(isPresented: $configuring, onDismiss: { Task { await load() } }) {
-            NavigationStack { GuidedSkillsView(assignmentYear: year, home: home, onEvaluate: onEvaluate).toolbar { Button("Done") { configuring = false } } }
+    }
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(home == nil ? "My Annual Training" : "Annual Training").font(.title2.bold())
+            Text(home == nil ? "Your required skills and recorded results." : "Plan training. Conduct it. Document each member’s skills.").font(.subheadline).foregroundStyle(.secondary)
+            HStack(alignment: .bottom) {
+                Picker("Year", selection: $year) {
+                    ForEach((Calendar.current.component(.year, from: Date())-2)...(Calendar.current.component(.year, from: Date())+1), id: \.self) { Text(String($0)).tag($0) }
+                    Text("Earlier assignments").tag(0)
+                }.pickerStyle(.menu)
+                Spacer()
+                if data != nil && totals.required > 0 { Text("\(100 * totals.done / totals.required)%").font(.title.bold()) }
+            }
+            if let home {
+                Picker("Tour or individual", selection: $crew) {
+                    Text("All members in my scope").tag("")
+                    Text("On-duty tour…").tag("duty")
+                    ForEach(home.groups, id: \.name) { Text($0.name).tag("group:"+$0.name) }
+                    ForEach(home.members) { Text($0.name).tag("member:"+$0.id) }
+                }.pickerStyle(.menu)
+                if crew == "duty" {
+                    DatePicker("On duty at", selection: $dutyAt).onChange(of: dutyAt) { _,_ in dutyLoaded = false; dutyIds = [] }
+                    Button(loadingDuty ? "Loading tour…" : "Load tour") { Task { await loadDuty() } }.buttonStyle(WorkspaceActionStyle()).disabled(loadingDuty)
+                    Text(dutyLoaded ? "\(dutyIds.count) eligible members" : "Choose a time and load the FirstDue roster.").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if let error { WorkspaceNotice(message: error, warning: true) }
+            if data == nil { ProgressView("Loading skills…") }
+            else if requirements.isEmpty {
+                WorkspacePanel {
+                    Text(crew == "duty" && !dutyLoaded ? "Select your tour" : crew.isEmpty ? "Annual program not set up" : "No requirements for this selection").font(.headline)
+                    Text(home == nil ? "Your training officer has not assigned skills for this selection yet." : "Choose required skills and assign them to a tour or individuals in Manage Program.").font(.subheadline).foregroundStyle(.secondary)
+                    if home != nil { Button("Manage Program", action: onManage).buttonStyle(WorkspaceActionStyle(primary: true)) }
+                    Text("No requirements assigned does not mean training is complete.").font(.caption).foregroundStyle(.secondary)
+                }
+            } else {
+                Text("\(totals.done) / \(totals.required) required completions").font(.caption).foregroundStyle(.secondary)
+                TextField("Find a skill…", text: $search).workspaceInput().autocorrectionDisabled()
+                ForEach(rows, id: \.first!.versionId) { row in annualRow(row) }
+                if rows.isEmpty { Text("No skills match your search.").font(.subheadline) }
+                Text("Only passed, locked individual evaluations count. Scheduling and attendance do not change progress.").font(.caption).foregroundStyle(.secondary)
+            }
+            if !pending.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack { Text("Training to conduct or document").font(.headline); Spacer(); if home != nil { Button("Schedule", action: onSchedule).font(.caption) } }
+                    ForEach(Array(pending.prefix(3))) { session in
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(session.title).font(.subheadline.bold())
+                                Text(session.status == "IN_PROGRESS" ? "Documentation outstanding" : session.startAt?.formatted(date: .abbreviated, time: .shortened) ?? "Scheduled").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue" : "Conduct") { GuidedSessionView(id: session.id) }.buttonStyle(WorkspaceActionStyle()) }
+                        }.padding(.vertical,6)
+                    }
+                }.padding(.top,12)
+            }
         }
     }
     private func annualRow(_ row: [GuidedSkillRequirement]) -> some View {
         let first = row[0]
         let target = row.reduce(0) { $0 + $1.required }
         let done = row.reduce(0) { $0 + min($1.required,$1.completed) }
-        let sessions = (data?.sessions ?? []).filter { ($0.versionIds ?? []).contains(first.versionId) && ($0.participantIds ?? []).contains(where: { id in row.contains { $0.userId == id } }) }
+        let sessions = pending.filter { ($0.versionIds ?? []).contains(first.versionId) && ($0.participantIds ?? []).contains { id in row.contains { $0.userId == id } } }
         return WorkspacePanel {
             HStack(alignment: .top, spacing: 14) {
                 Text("\(100 * done / max(1,target))%").font(.subheadline.bold()).padding(.horizontal,12).padding(.vertical,8).background(done >= target ? Color.green.opacity(0.2) : Color.orange.opacity(0.2), in: Capsule())
                 VStack(alignment: .leading, spacing: 6) {
                     Text(first.title).font(.headline).fixedSize(horizontal: false, vertical: true)
-                    Text("Revision \(first.revision) · \(done) / \(target) successful evaluations").font(.caption).foregroundStyle(.secondary)
+                    Text("\(done) / \(target) completions · Revision \(first.revision)").font(.caption).foregroundStyle(.secondary)
+                    if home != nil { Text("\(row.filter { $0.completed >= $0.required }.count) / \(row.count) members complete").font(.caption).foregroundStyle(.secondary) }
                 }
             }
-            DisclosureGroup(home == nil ? "Evaluation history" : "Member progress & history") {
+            if let session = sessions.first {
+                if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue & document" : "Conduct") { GuidedSessionView(id: session.id) }.buttonStyle(WorkspaceActionStyle(primary: true)) }
+                if let date = session.startAt { Text("Scheduled \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
+            } else if home != nil && done < target { Button("Plan") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
+            DisclosureGroup(home == nil ? "Results" : "Members & results") {
                 ForEach(row) { requirement in
                     VStack(alignment: .leading, spacing: 6) {
                         Text("\(requirement.member) · \(min(requirement.completed,requirement.required)) / \(requirement.required)")
                         if let due = requirement.dueAt { Text("Due \(due.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
                         if requirement.history.isEmpty { Text("No locked evaluations in this period.").font(.caption) }
-                        ForEach(requirement.history) { item in
-                            Text("\(item.outcome) · \(item.evaluator)" + (item.completedAt.map { " · " + $0.formatted(date: .abbreviated, time: .omitted) } ?? "")).font(.caption)
-                        }
+                        ForEach(requirement.history) { item in Text("\(item.outcome) · \(item.evaluator)" + (item.completedAt.map { " · " + $0.formatted(date: .abbreviated, time: .omitted) } ?? "")).font(.caption) }
                     }.padding(.vertical,6)
                 }
+                if home != nil { Button("Plan another session") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
             }
-            ForEach(sessions) { session in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(session.status == "IN_PROGRESS" ? "Needs documentation" : "Scheduled").font(.subheadline.bold())
-                    if let date = session.startAt { Text(date.formatted(date: .abbreviated, time: .shortened)).font(.caption) }
-                    if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue & document" : "Conduct") { GuidedSessionView(id: session.id) }.buttonStyle(WorkspaceActionStyle(primary: true)) }
-                }
-            }
-            if home != nil { Button(sessions.isEmpty ? "Plan" : "Plan another session") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
         }
     }
     @MainActor private func load() async {
         let requestedYear = year
+        data = nil
         do {
             let response: GuidedSkillsResponse = try await APIClient.shared.trainingWorkspace("/skills?year=\(requestedYear)" + (home == nil ? "" : "&managed=1"))
             guard !Task.isCancelled, requestedYear == year else { return }
             data = response; error = nil
+        } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } }
+    }
+    @MainActor private func loadDuty() async {
+        loadingDuty = true; defer { loadingDuty = false }
+        do {
+            let at = ISO8601DateFormatter().string(from: dutyAt)
+            let roster: GuidedDuty = try await APIClient.shared.trainingWorkspace("/guided?onDuty=1&at="+at)
+            dutyIds = Set(roster.userIds).intersection(home?.members.map(\.id) ?? []); dutyLoaded = true
         } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } }
     }
 }
@@ -2173,7 +2214,9 @@ private struct AnnualSkillPlanSheet: View {
             }
             Section("Participants") {
                 TrainingTourSelection(groups: groups, eligibleIds: members.map(\.id), selected: $selected)
-                ForEach(members) { member in Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })) }
+                DisclosureGroup("Review \(selected.count) selected members") {
+                    ForEach(members) { member in Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })) }
+                }
             }
             Section { Button(busy ? "Scheduling…" : "Add to schedule") { Task { await schedule() } }.disabled(selected.isEmpty || busy) }
         }.disabled(busy).navigationTitle("Plan training").navigationBarTitleDisplayMode(.inline)
@@ -2227,4 +2270,103 @@ private struct TrainingTourSelection: View {
         } catch { self.error = error.localizedDescription + " Select individuals if the roster is unavailable." }
     }
 
+}
+
+private struct ManageAnnualTrainingProgramView: View {
+    let home: GuidedHome
+    var onBack: () -> Void
+    var onBusyChange: (Bool) -> Void
+    @State private var year = Calendar.current.component(.year, from: Date())
+    @State private var courseId = ""
+    @State private var versions = Set<String>()
+    @State private var members = Set<String>()
+    @State private var repetitions = 1
+    @State private var useDeadline = false
+    @State private var due = Date()
+    @State private var busy = false
+    @State private var error: String?
+    @State private var notice = ""
+    @State private var requirements: [GuidedSkillRequirement]?
+    private var course: GuidedTopic? { home.topics.first { $0.id == courseId } }
+    private var skills: [GuidedVersion] {
+        (course?.jprs ?? []).filter { v in course?.latestJprs.contains { $0.id == v.id } == true || requirements?.contains { $0.versionId == v.id } == true }
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Manage Program").font(.title2.bold())
+            Text("Choose required skills, then assign them to a tour or individuals. Schedule sessions from Annual Training.").font(.subheadline).foregroundStyle(.secondary)
+            Button("Back to Annual Training", action: onBack).buttonStyle(WorkspaceActionStyle()).disabled(busy)
+            if let error { WorkspaceNotice(message: error, warning: true) }
+            if !notice.isEmpty { Text(notice).font(.subheadline) }
+            WorkspacePanel {
+                Picker("Program year", selection: $year) {
+                    ForEach((Calendar.current.component(.year, from: Date())-2)...(Calendar.current.component(.year, from: Date())+1), id: \.self) { Text(String($0)).tag($0) }
+                    Text("Earlier assignments").tag(0)
+                }.onChange(of: year) { _,_ in useDeadline = false; due = Calendar.current.date(from: DateComponents(year: year, month: 12, day: 31, hour: 12)) ?? Date() }
+                Picker("Course", selection: $courseId) {
+                    Text("Choose a published course").tag("")
+                    ForEach(home.topics) { Text($0.title).tag($0.id) }
+                }.onChange(of: courseId) { _,_ in versions = [] }
+                if let course {
+                    Text("1. Required skills").font(.headline)
+                    Button("Select all current skills") { versions = Set(course.latestJprs.map(\.id)) }
+                    ForEach(skills) { version in
+                        Toggle("\(version.content.title) · Revision \(version.revision)", isOn: Binding(get: { versions.contains(version.id) }, set: { checked in
+                            if checked { versions.subtract(course.jprs.filter { $0.jprId == version.jprId }.map(\.id)); versions.insert(version.id) }
+                            else { versions.remove(version.id) }
+                        }))
+                    }
+                }
+                Stepper("\(repetitions) required completions per skill", value: $repetitions, in: 1...100)
+                Toggle("Set a due date", isOn: $useDeadline)
+                if useDeadline { DatePicker("Due date", selection: $due, displayedComponents: .date) }
+                Text("2. Assign to a tour or individuals").font(.headline)
+                TrainingTourSelection(groups: home.groups, eligibleIds: home.members.map(\.id), selected: $members)
+                DisclosureGroup("Review \(members.count) selected members") {
+                    ForEach(home.members) { member in Toggle(member.name, isOn: Binding(get: { members.contains(member.id) }, set: { if $0 { members.insert(member.id) } else { members.remove(member.id) } })) }
+                }
+                Text("\(versions.count) skills · \(members.count) members · \(year == 0 ? "Earlier assignments" : String(year))").font(.subheadline)
+                Button(busy ? "Saving requirements…" : "Assign requirements") { Task { await assign() } }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(versions.isEmpty || members.isEmpty || members.count > 100)
+                if members.count > 100 { Text("Assign up to 100 members at a time. Choose a tour or a smaller selection.").font(.caption) }
+            }.disabled(busy)
+            if home.topics.isEmpty { Text("No published courses have approved skills yet. Review the Training Library.").font(.subheadline) }
+            Text("Requirements for \(year == 0 ? "earlier assignments" : String(year))").font(.headline)
+            if let requirements {
+                if requirements.isEmpty { Text("No requirements assigned for this period yet.").font(.subheadline).foregroundStyle(.secondary) }
+                ForEach(Array(Dictionary(grouping: requirements, by: \.versionId).values).sorted { $0[0].title < $1[0].title }, id: \.first!.versionId) { row in
+                    VStack(alignment: .leading, spacing: 5) { Text(row[0].title).font(.subheadline.bold()); Text("Revision \(row[0].revision) · \(row.count) members").font(.caption).foregroundStyle(.secondary) }.padding(.vertical,6)
+                }
+            } else { ProgressView("Loading requirements…") }
+            Text("Changing requirements preserves evaluation history. No training credit is awarded here.").font(.caption).foregroundStyle(.secondary)
+        }.task(id: year) { await load() }
+    }
+    @MainActor private func load() async {
+        let requestedYear = year
+        requirements = nil
+        do {
+            let response: GuidedSkillsResponse = try await APIClient.shared.trainingWorkspace("/skills?managed=1&year=\(requestedYear)")
+            guard !Task.isCancelled, requestedYear == year else { return }
+            requirements = response.requirements
+        } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } }
+    }
+    @MainActor private func assign() async {
+        guard !busy else { return }; busy = true; defer { busy = false }
+        error = nil; notice = ""
+        onBusyChange(true); defer { onBusyChange(false) }
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        if useDeadline && year != 0 && calendar.component(.year, from: due) != year { error = "The due date must be within the program year."; return }
+        var completed = Set<String>(); var failures = [String]()
+        for id in versions.sorted() {
+            do {
+                var values: [String: Any] = ["periodYear":year,"versionId":id,"memberIds":Array(members),"requiredCompletions":repetitions]
+                if useDeadline { values["dueAt"] = ISO8601DateFormatter().string(from: due) }
+                let _: TrainingWorkspaceMutation = try await APIClient.shared.trainingWorkspace("/skills", body: JSONSerialization.data(withJSONObject: values))
+                completed.insert(id)
+            } catch { failures.append((skills.first { $0.id == id }?.content.title ?? "Skill") + ": " + error.localizedDescription) }
+        }
+        versions.subtract(completed)
+        if !completed.isEmpty { notice = "\(completed.count) skills assigned to \(members.count) members. Return to Annual Training to plan sessions." }
+        if !failures.isEmpty { error = failures.joined(separator: "\n") }
+        await load()
+    }
 }
