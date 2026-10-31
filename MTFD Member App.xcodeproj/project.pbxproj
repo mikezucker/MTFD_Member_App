@@ -537,7 +537,6 @@
 		408910A42F8FECC70035C355 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				408911102F8FEE340035C355 /* Uniforms */,
 				4089110F2F8FEE2C0035C355 /* Training */,
 				4089110E2F8FEE230035C355 /* User */,
 				4089110D2F8FEE150035C355 /* Announcements */,
@@ -721,13 +720,6 @@
 			path = Training;
 			sourceTree = "<group>";
 		};
-		408911102F8FEE340035C355 /* Uniforms */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Uniforms;
-			sourceTree = "<group>";
-		};
 		408911112F90146C0035C355 /* Network */ = {
 			isa = PBXGroup;
 			children = (
@@ -802,9 +794,6 @@
 		4089111B2F9014F30035C355 /* Uniforms */ = {
 			isa = PBXGroup;
 			children = (
-				4089112A2F9015C40035C355 /* Components */,
-				408911292F9015BC0035C355 /* Models */,
-				408911282F9015B00035C355 /* ViewModels */,
 				408911272F9015AB0035C355 /* Views */,
 			);
 			path = Uniforms;
@@ -880,27 +869,6 @@
 				408910D72F8FED410035C355 /* UniformsView.swift */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		408911282F9015B00035C355 /* ViewModels */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = ViewModels;
-			sourceTree = "<group>";
-		};
-		408911292F9015BC0035C355 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		4089112A2F9015C40035C355 /* Components */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = Components;
 			sourceTree = "<group>";
 		};
 		4089112B2F9015D80035C355 /* Views */ = {
