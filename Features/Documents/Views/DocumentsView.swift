@@ -1,6 +1,7 @@
 import Combine
 import PDFKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class DocumentsViewModel: ObservableObject {
@@ -127,6 +128,8 @@ private enum PolicyLibraryFilter: String, CaseIterable, Identifiable {
 }
 
 struct DocumentsView: View {
+    @EnvironmentObject private var session: SessionManager
+    @State private var showPostDocument = false
     @StateObject private var viewModel = DocumentsViewModel()
     @StateObject private var router = NavigationRouter.shared
     @State private var query = ""
@@ -235,6 +238,11 @@ struct DocumentsView: View {
         ) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if ["ADMIN", "CHIEF", "BATTALION_CHIEF", "OFFICER_CAREER", "OFFICER_VOLUNTEER"].contains(session.currentUser?.role ?? "") {
+                        Button { showPostDocument = true } label: {
+                            Label("Post Document", systemImage: "doc.badge.plus").font(.headline).foregroundStyle(AppTheme.navy).padding(12).frame(maxWidth: .infinity).background(AppTheme.gold).clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
                     searchField
                     filterBar
 
@@ -273,6 +281,9 @@ struct DocumentsView: View {
                 await viewModel.openDocument(id: payload?.documentId ?? payload?.id)
                 router.clearDocumentRoute()
             }
+        }
+        .sheet(isPresented: $showPostDocument) {
+            DocumentPostingSheet { await viewModel.refresh() }
         }
         .sheet(item: $viewModel.selectedDocument) { document in
             if let pdf = viewModel.selectedPDF {
@@ -410,7 +421,7 @@ struct DocumentsView: View {
                         .foregroundStyle(.black)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
-                        .background(.orange)
+                        .background(.red)
                         .clipShape(Capsule())
                 }
 
@@ -421,10 +432,10 @@ struct DocumentsView: View {
                 }
             }
             .padding(14)
-            .background(Color.orange.opacity(0.14))
+            .background(Color.red.opacity(0.14))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.orange.opacity(0.28), lineWidth: 1)
+                    .stroke(Color.red.opacity(0.28), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
@@ -660,7 +671,7 @@ struct DocumentsView: View {
                             statusPill("v\(version.version)")
 
                             if version.requiresAcknowledgement {
-                                statusPill("Needs acknowledgement", tint: .orange)
+                                statusPill("Needs acknowledgement", tint: .red)
                             } else if version.assigned {
                                 statusPill("Acknowledged", tint: .green)
                             } else {
@@ -843,9 +854,10 @@ struct DocumentPDFPreview: View {
             Text("Acknowledgement required")
                 .font(.headline.weight(.bold))
 
+            if let dueAt = latestVersion?.dueAt { Text("Due \(dueAt.formatted(date: .abbreviated, time: .omitted))").font(.caption.weight(.semibold)) }
             Text("Enter your account password after reviewing this policy. Your signature is recorded with date, time, device, and network details.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.85))
 
             SecureField("Password", text: $password)
                 .textContentType(.password)
@@ -875,14 +887,15 @@ struct DocumentPDFPreview: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
-                .background(AppTheme.navy)
+                .background(Color.red)
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .disabled(isSigning || password.isEmpty)
         }
         .padding(16)
-        .background(Color(.systemBackground))
+        .background(Color(red: 0.30, green: 0.03, blue: 0.05))
+        .foregroundStyle(.white)
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(Color.black.opacity(0.12))
@@ -950,5 +963,107 @@ struct PDFKitView: UIViewRepresentable {
 
     func updateUIView(_ uiView: PDFView, context: Context) {
         uiView.document = document
+    }
+}
+
+private struct DocumentPostingSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onPosted: () async -> Void
+    @State private var options: APIClient.DocumentPostOptions?
+    @State private var title = ""
+    @State private var notes = ""
+    @State private var category = "POLICY"
+    @State private var folder = ""
+    @State private var audience = "INDIVIDUALS"
+    @State private var selected = Set<String>()
+    @State private var selectedTours = Set<String>()
+    @State private var query = ""
+    @State private var pdf: Data?
+    @State private var fileName = ""
+    @State private var importing = false
+    @State private var dueEnabled = false
+    @State private var due = Date()
+    @State private var busy = false
+    @State private var error: String?
+    @State private var receipt: APIClient.DocumentPostReceipt?
+    @State private var requestId = UUID().uuidString
+    private var recipientCount: Int {
+        guard let options else { return 0 }
+        if audience == "DEPARTMENT" { return options.users.count }
+        if audience == "TOURS" { return Set(options.tours.filter { selectedTours.contains($0.id) }.flatMap(\.memberIds)).count }
+        return selected.count
+    }
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let receipt {
+                    Section { Label("Posted to \(receipt.recipientCount) members", systemImage: "checkmark.circle.fill").foregroundStyle(.green); Text("Recipients can review and sign the document in Policy Center.") }
+                } else if let options {
+                    Section("Document") {
+                        TextField("Title", text: $title)
+                        Button(fileName.isEmpty ? "Choose PDF · up to 4 MB" : fileName) { importing = true }
+                        Picker("Category", selection: $category) { ForEach(["POLICY", "SOP", "SOG", "TRAINING", "FORM", "OTHER"], id: \.self) { Text($0).tag($0) } }
+                        Picker("Folder", selection: $folder) { Text("Unfiled").tag(""); ForEach(options.folders) { Text(folderLabel($0.id)).tag($0.id) } }
+                        TextField("Description / instructions", text: $notes, axis: .vertical)
+                        Toggle("Signature due date", isOn: $dueEnabled)
+                        if dueEnabled { DatePicker("Due", selection: $due, displayedComponents: .date) }
+                    }
+                    Section {
+                        Text(options.scopeLabel).font(.subheadline)
+                        Picker("Assign to", selection: $audience) {
+                            Text("Individual members").tag("INDIVIDUALS")
+                            if !options.tours.isEmpty { Text("Tours").tag("TOURS") }
+                            if options.canPostDepartment { Text("Department").tag("DEPARTMENT") }
+                        }
+                        if audience == "INDIVIDUALS" {
+                            TextField("Find a member", text: $query)
+                            Button(options.canPostDepartment ? "Select all eligible members" : "Select my company") { selected = Set(options.users.map(\.id)) }
+                            Button("Clear") { selected = [] }
+                            ForEach(options.users.filter { query.isEmpty || ($0.name ?? "").localizedCaseInsensitiveContains(query) }) { user in
+                                Button { if selected.contains(user.id) { selected.remove(user.id) } else { selected.insert(user.id) } } label: { HStack { Text(user.name ?? "Unnamed member"); Spacer(); if selected.contains(user.id) { Image(systemName: "checkmark") } } }
+                            }
+                        } else if audience == "TOURS" {
+                            ForEach(options.tours) { tour in
+                                Button { if selectedTours.contains(tour.id) { selectedTours.remove(tour.id) } else { selectedTours.insert(tour.id) } } label: { HStack { Text("\(tour.name) · \(tour.memberIds.count) members"); Spacer(); if selectedTours.contains(tour.id) { Image(systemName: "checkmark") } } }
+                            }
+                        }
+                    } header: { Text("Recipients") } footer: { Text("Tour and department membership is captured when posted. Recipients must review and sign.") }
+                    Section {
+                        if let error { Text(error).foregroundStyle(.red) }
+                        Button(busy ? "Posting…" : "Post & assign to \(recipientCount) members") { Task { await post() } }
+                            .disabled(busy || pdf == nil || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || recipientCount == 0)
+                    }
+                } else if let error { Text(error).foregroundStyle(.red) } else { ProgressView("Loading posting options…") }
+            }
+            .disabled(busy)
+            .navigationTitle("Post Document")
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(receipt == nil ? "Cancel" : "Done") { dismiss() }.disabled(busy) } }
+            .task { do { options = try await APIClient.shared.documentPostOptions() } catch { self.error = error.localizedDescription } }
+            .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf]) { result in
+                do {
+                    let url = try result.get(); let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    let data = try Data(contentsOf: url)
+                    guard !data.isEmpty, data.count <= 4 * 1024 * 1024 else { error = "Choose a PDF up to 4 MB."; return }
+                    pdf = data; fileName = url.lastPathComponent; error = nil
+                } catch { self.error = error.localizedDescription }
+            }
+        }
+    }
+    private func folderLabel(_ id: String) -> String {
+        var parts: [String] = []; var current: String? = id; var visited = Set<String>()
+        while let key = current, !visited.contains(key), let folder = options?.folders.first(where: { $0.id == key }) {
+            visited.insert(key); parts.insert(folder.name, at: 0); current = folder.parentId
+        }
+        return parts.joined(separator: " / ")
+    }
+    @MainActor private func post() async {
+        guard let pdf else { return }; busy = true; error = nil
+        defer { busy = false }
+        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.dateFormat = "yyyy-MM-dd"
+        do {
+            let result = try await APIClient.shared.postDocument(fields: ["requestId": requestId, "title": title, "description": notes, "category": category, "folderId": folder, "dueDate": dueEnabled ? formatter.string(from: due) : "", "audience": audience], userIds: Array(selected), tourIds: Array(selectedTours), pdf: pdf, fileName: fileName)
+            guard result.success else { error = "Unable to confirm the document was posted."; return }
+            receipt = result; await onPosted()
+        } catch { self.error = error.localizedDescription }
     }
 }
