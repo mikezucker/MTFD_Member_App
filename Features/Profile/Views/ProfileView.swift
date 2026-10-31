@@ -41,6 +41,8 @@ struct ProfileView: View {
                             rows: [
                                 ProfileInfoRow(label: "Role", value: member.role),
                                 ProfileInfoRow(label: "Station", value: StationMapper.displayName(from: member.company)),
+                                ProfileInfoRow(label: "Tour", value: member.tour?.displayName ?? "Not assigned"),
+                                ProfileInfoRow(label: "Tour lieutenant", value: member.tour?.lieutenant?.name ?? "Not assigned"),
                                 ProfileInfoRow(label: "Member ID", value: member.memberId ?? "N/A"),
                                 ProfileInfoRow(label: "Status", value: member.expiration ?? "ACTIVE"),
                                 ProfileInfoRow(label: "Email", value: member.email ?? "Not listed"),
