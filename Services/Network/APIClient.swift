@@ -316,6 +316,14 @@ final class APIClient {
 
         return nil
     }
+    func memberTours<T: Decodable>(body: Data? = nil) async throws -> T {
+        let request = try makeRequest(path: "/api/members/admin/tours", method: body == nil ? "GET" : "POST", body: body, requiresAuth: true)
+        return try decode(T.self, from: await performRequest(request))
+    }
+    func currentMemberTour() async throws -> CurrentMemberTourResponse {
+        let request = try makeRequest(path: "/api/members/tour", method: "GET", requiresAuth: true)
+        return try decode(CurrentMemberTourResponse.self, from: await performRequest(request))
+    }
     func trainingWorkspace<T: Decodable>(_ path: String = "", body: Data? = nil) async throws -> T {
         let request = try makeRequest(path: "/api/training/workspace" + path, method: body == nil ? "GET" : "POST", body: body, requiresAuth: true)
         return try decode(T.self, from: await performRequest(request))
@@ -1421,7 +1429,17 @@ extension APIClient {
         let member: Member
     }
 
+    struct MemberTour: Decodable, Identifiable, Equatable {
+        struct Lieutenant: Decodable, Equatable { let id: String; let name: String? }
+        let id: String
+        let name: String
+        let isActive: Bool
+        let lieutenant: Lieutenant?
+        var displayName: String { name + (isActive ? "" : " (archived)") }
+    }
+    struct CurrentMemberTourResponse: Decodable { let success: Bool; let tour: MemberTour? }
     struct Member: Decodable {
+        var tour: MemberTour? = nil
         let name: String
         let role: String
         let company: String?

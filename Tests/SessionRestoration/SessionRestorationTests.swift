@@ -28,7 +28,7 @@ struct UIDevice {
 
 @MainActor final class APIClient {
     static let shared = APIClient()
-    struct Member { let name: String }
+    struct Member { let name: String; var email: String? = nil; var memberId: String? = nil }
     struct MemberResponse { let member: Member }
     struct LoginResponse { let token: String?; let member: Member? }
     var authToken: String?

@@ -239,6 +239,7 @@ private struct UserAdminView: View {
         ) {
             ScrollView {
                 VStack(spacing: 16) {
+                    NavigationLink { MemberToursAdminView() } label: { Label("Tours & lieutenant assignments", systemImage: "person.3.fill") }.buttonStyle(.bordered).padding(.horizontal,24)
                     if viewModel.isLoading && viewModel.users.isEmpty {
                         ProgressView()
                             .tint(AppTheme.gold)
@@ -959,5 +960,134 @@ private struct RecoveryApproverAccessView: View {
             try await APIClient.shared.setRecoveryApprover(userId: member.id, enabled: !member.canApprove, password: password)
             dismiss()
         } catch { errorMessage = error.localizedDescription }
+    }
+}
+
+private struct AdminTourRecord: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let isActive: Bool
+    let lieutenantId: String?
+    let revision: Int
+}
+private struct AdminTourMember: Decodable, Identifiable {
+    let id: String
+    let name: String?
+    let role: String
+    let status: String
+    let tourId: String?
+}
+private struct AdminTourSnapshot: Decodable {
+    let tours: [AdminTourRecord]
+    let users: [AdminTourMember]
+    let token: String
+}
+private struct AdminTourMutation: Decodable { let success: Bool }
+private struct MemberToursAdminView: View {
+    @State private var data: AdminTourSnapshot?
+    @State private var selected: AdminTourRecord?
+    @State private var creating = false
+    @State private var newName = ""
+    @State private var busy = false
+    @State private var error: String?
+    var body: some View {
+        AppScreen(title: "Tours", subtitle: "Home tours, lieutenants and members", systemImage: "person.3.fill") {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Tour names and assignments are managed here. The live on-duty roster is separate.").font(.subheadline).foregroundStyle(.secondary)
+                    if let error { Text(error).foregroundStyle(.red); Button("Reload") { Task { await load() } } }
+                    Button("Add tour") { creating = true }.buttonStyle(.borderedProminent)
+                    if let data {
+                        ForEach(data.tours.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { tour in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text(tour.name + (tour.isActive ? "" : " · Archived")).font(.headline)
+                                Text("Lieutenant: " + (data.users.first { $0.id == tour.lieutenantId }?.name ?? "Not assigned"))
+                                Text("\(data.users.filter { $0.tourId == tour.id }.count) members assigned").font(.caption).foregroundStyle(.secondary)
+                                Button("Edit tour & members") { selected = tour }.buttonStyle(.bordered)
+                            }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                        }
+                    } else if error == nil { ProgressView("Loading tours…") }
+                }.padding(16)
+            }.refreshable { await load() }
+        }.task { await load() }.navigationTitle("Tours").navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $selected, onDismiss: { Task { await load() } }) { tour in
+            if let data { MemberTourEditor(tour: tour, data: data) }
+        }
+        .sheet(isPresented: $creating) {
+            NavigationStack { Form {
+                TextField("Tour name", text: $newName)
+                if let error { Text(error).foregroundStyle(.red) }
+                Button(busy ? "Creating…" : "Create tour") { Task { await create() } }.disabled(busy || newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }.navigationTitle("New tour").toolbar { Button("Cancel") { creating = false }.disabled(busy) }.interactiveDismissDisabled(busy) }
+        }
+    }
+    @MainActor private func load() async {
+        do { data = try await APIClient.shared.memberTours(); error = nil }
+        catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } }
+    }
+    @MainActor private func create() async {
+        guard let data else { return }; busy = true; defer { busy = false }
+        do {
+            let body: [String:Any] = ["action":"create","token":data.token,"name":newName]
+            let _: AdminTourMutation = try await APIClient.shared.memberTours(body: JSONSerialization.data(withJSONObject: body))
+            creating = false; newName = ""; await load()
+        } catch { self.error = error.localizedDescription }
+    }
+}
+private struct MemberTourEditor: View {
+    let tour: AdminTourRecord
+    let data: AdminTourSnapshot
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var lieutenant: String
+    @State private var selected: Set<String>
+    @State private var active: Bool
+    @State private var confirmMoves = false
+    @State private var search = ""
+    @State private var busy = false
+    @State private var error: String?
+    init(tour: AdminTourRecord, data: AdminTourSnapshot) {
+        self.tour = tour; self.data = data
+        _name = State(initialValue: tour.name); _lieutenant = State(initialValue: tour.lieutenantId ?? "")
+        _selected = State(initialValue: Set(data.users.filter { $0.tourId == tour.id }.map(\.id)))
+        _active = State(initialValue: tour.isActive)
+    }
+    private var moves: [AdminTourMember] { data.users.filter { selected.contains($0.id) && $0.tourId != nil && $0.tourId != tour.id } }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Tour") {
+                    TextField("Name", text: $name)
+                    Picker("Lieutenant", selection: $lieutenant) {
+                        Text("Not assigned").tag("")
+                        ForEach(data.users.filter { $0.status == "ACTIVE" && $0.role == "OFFICER_CAREER" }) { Text($0.name ?? "Unnamed officer").tag($0.id) }
+                    }.onChange(of: lieutenant) { _,id in if !id.isEmpty { selected.insert(id) } }
+                    Toggle("Active tour", isOn: $active)
+                    Text("The lieutenant can assign and evaluate this tour’s training. Reassign members and clear the lieutenant before archiving.").font(.caption)
+                }
+                if let error { Section { Text(error).foregroundStyle(.red); Text("If assignments changed elsewhere, cancel and reload the tour list before editing again.").font(.caption) } }
+                Section("Members · \(selected.count) selected") {
+                    TextField("Find a member", text: $search)
+                    Button("Clear members") { selected = [] }
+                    ForEach(data.users.filter { ($0.status == "ACTIVE" || $0.tourId == tour.id) && (search.isEmpty || ($0.name ?? "").localizedCaseInsensitiveContains(search)) }.sorted { ($0.name ?? "") < ($1.name ?? "") }) { member in
+                        Toggle(isOn: Binding(get: { selected.contains(member.id) }, set: { if $0 { selected.insert(member.id) } else { selected.remove(member.id) } })) {
+                            VStack(alignment: .leading) { Text(member.name ?? "Unnamed member"); Text(data.tours.first { $0.id == member.tourId }?.name ?? "No tour assigned").font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+                if !moves.isEmpty { Section("Tour transfers") {
+                    ForEach(moves) { member in Text((member.name ?? "Member") + " from " + (data.tours.first { $0.id == member.tourId }?.name ?? "another tour")) }
+                    Toggle("Confirm moving these members into this tour", isOn: $confirmMoves)
+                } }
+                Section { Button(busy ? "Saving…" : "Save tour & assignments") { Task { await save() } }.disabled(busy || (!moves.isEmpty && !confirmMoves) || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
+            }.disabled(busy).navigationTitle("Edit tour").toolbar { Button("Cancel") { dismiss() }.disabled(busy) }.interactiveDismissDisabled(busy)
+        }
+    }
+    @MainActor private func save() async {
+        busy = true; defer { busy = false }
+        do {
+            let body: [String:Any] = ["action":"update","id":tour.id,"token":data.token,"name":name,"isActive":active,"lieutenantId":lieutenant.isEmpty ? NSNull() : lieutenant as Any,"memberIds":Array(selected),"confirmMoves":confirmMoves]
+            let _: AdminTourMutation = try await APIClient.shared.memberTours(body: JSONSerialization.data(withJSONObject: body)); dismiss()
+        } catch { self.error = error.localizedDescription }
     }
 }

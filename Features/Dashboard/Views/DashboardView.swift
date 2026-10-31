@@ -5,6 +5,8 @@ import MapKit
 import CoreLocation
 
 struct DashboardView: View {
+    @State private var headerTour: APIClient.MemberTour?
+    @State private var headerTourLoaded = false
     @EnvironmentObject var session: SessionManager
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var viewModel = DashboardViewModel()
@@ -34,11 +36,22 @@ struct DashboardView: View {
         guard hasAuthToken else { return }
 
         async let dashboardRefresh: Void = viewModel.refreshAsync(role: mappedUserRole(from: session.currentUser?.role))
+        async let tourRefresh: Void = refreshHeaderTour()
         async let statsRefresh: Void = statsStore.forceRefresh(reason: "pullToRefresh")
-        _ = await (dashboardRefresh, statsRefresh)
+        _ = await (dashboardRefresh, statsRefresh, tourRefresh)
         scheduleLiveActivitySync()
     }
 
+    private var tourDisplayName: String? {
+        let tour = headerTourLoaded ? headerTour : session.currentUser?.tour
+        if let tour { return tour.displayName }
+        return ["MEMBER_CAREER","OFFICER_CAREER"].contains(session.currentUser?.role ?? "") ? "Tour not assigned" : nil
+    }
+    @MainActor private func refreshHeaderTour() async {
+        guard hasAuthToken else { return }
+        do { let result = try await APIClient.shared.currentMemberTour(); headerTour = result.tour; headerTourLoaded = true }
+        catch { /* Retain the last confirmed assignment during a temporary failure. */ }
+    }
     private var hasAuthToken: Bool {
         APIClient.shared.authToken?.isEmpty == false || KeychainService.shared.loadToken()?.isEmpty == false
     }
@@ -67,6 +80,7 @@ struct DashboardView: View {
                         firstName: firstName,
                         roleTitle: memberRoleDisplayName(from: session.currentUser?.role),
                         stationTitle: stationDisplayName,
+                        tourTitle: tourDisplayName,
                         alertMode: headerAlertMode,
                         isBellRinging: isDispatchBellRinging,
                         onTapAlert: handleHeaderAlertTap
@@ -314,6 +328,10 @@ struct DashboardView: View {
             .onReceive(NotificationCenter.default.publisher(for: .dashboardLayoutDidChange)) { _ in
                 dashboardLayoutRefreshID = UUID()
             }
+            .task(id: session.currentUser?.memberId) {
+                headerTourLoaded = false
+                await refreshHeaderTour()
+            }
             .task {
                 if hasAuthToken {
                     await activeDispatchRefreshLoop()
@@ -327,6 +345,7 @@ struct DashboardView: View {
 
                 viewModel.refreshIfStale(role: mappedUserRole(from: session.currentUser?.role))
                 Task {
+                    await refreshHeaderTour()
                     await statsStore.refreshIfNeeded(reason: "foreground")
                 }
                 scheduleLiveActivitySync()

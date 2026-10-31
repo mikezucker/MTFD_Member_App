@@ -133,6 +133,7 @@ struct DashboardHeaderView: View {
     let firstName: String
     let roleTitle: String
     let stationTitle: String
+    var tourTitle: String? = nil
     let alertMode: DashboardHeaderAlertMode
     let isBellRinging: Bool
     let onTapAlert: () -> Void
@@ -156,18 +157,7 @@ struct DashboardHeaderView: View {
     }
 
     private var headerSubtitle: String {
-        let cleanedRole = roleTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cleanedStation = stationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if cleanedRole.isEmpty {
-            return cleanedStation
-        }
-
-        if cleanedStation.isEmpty {
-            return cleanedRole
-        }
-
-        return "\(cleanedRole) • \(cleanedStation)"
+        [roleTitle,stationTitle,tourTitle ?? ""].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: " • ")
     }
 
     private var effectiveShouldAnimate: Bool {
