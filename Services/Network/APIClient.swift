@@ -892,6 +892,33 @@ final class APIClient {
         }
     }
 
+    struct DocumentPostOptions: Decodable {
+        struct Recipient: Decodable, Identifiable { let id: String; let name: String?; let company: String? }
+        struct Tour: Decodable, Identifiable { let id: String; let name: String; let memberIds: [String] }
+        struct Folder: Decodable, Identifiable { let id: String; let name: String; let parentId: String? }
+        let success: Bool; let canPostDepartment: Bool; let scopeLabel: String
+        let users: [Recipient]; let tours: [Tour]; let folders: [Folder]
+    }
+    struct DocumentPostReceipt: Decodable { let success: Bool; let documentId: String; let recipientCount: Int; let repeated: Bool }
+    func documentPostOptions() async throws -> DocumentPostOptions {
+        let request = try makeRequest(path: "/api/members/documents/post", method: "GET", requiresAuth: true)
+        return try decode(DocumentPostOptions.self, from: await performRequest(request))
+    }
+    func postDocument(fields: [String: String], userIds: [String], tourIds: [String], pdf: Data, fileName: String) async throws -> DocumentPostReceipt {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        func field(_ name: String, _ value: String) { body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8)) }
+        for (name, value) in fields { field(name, value) }
+        for id in userIds { field("userId", id) }
+        for id in tourIds { field("tourId", id) }
+        let safeName = fileName.replacingOccurrences(of: "[^A-Za-z0-9 ._()-]", with: "_", options: .regularExpression)
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(safeName)\"\r\nContent-Type: application/pdf\r\n\r\n".utf8))
+        body.append(pdf); body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        var request = try makeRequest(path: "/api/members/documents/post", method: "POST", body: body, requiresAuth: true)
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        return try decode(DocumentPostReceipt.self, from: await performRequest(request))
+    }
+
     func acknowledgeDocumentVersion(versionId: String, password: String) async throws -> MobileDocumentAcknowledgementResponse {
         let payload = MobileDocumentAcknowledgementRequest(password: password)
         let body = try encode(payload)
@@ -1845,6 +1872,7 @@ extension APIClient {
         let assigned: Bool
         let acknowledgedAt: Date?
         let requiresAcknowledgement: Bool
+        var dueAt: Date? = nil
     }
 
     private struct MobileDocumentAcknowledgementRequest: Encodable {
