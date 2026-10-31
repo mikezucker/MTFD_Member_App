@@ -542,3 +542,14 @@ struct JPRMediaTicket:Decodable {let assetId:String;let uploadUrl:URL}
 struct JPRMediaLocation:Decodable {let url:URL;let expiresIn:Int}
 struct JPRMemberDocument:Decodable,Identifiable {let id:String;let revision:Int;let content:JPRMemberContent}
 struct JPRMemberContent:Decodable {let number:String;let title:String;let objective:String;let equipment:String;let conditions:String?;let performanceObjectives:[String]?;let prerequisites:[String]?;let requiredEquipment:[String]?;let safetyConsiderations:[String]?;let steps:[GuidedTeachingStep]}
+
+// Shared by the native annual board and its contract tests. Nil means all scoped
+// members; an unloaded or unknown selection is empty rather than all members.
+enum AnnualTrainingBoardSelection {
+    static func memberIds(_ selection: String, groups: [GuidedGroup], dutyIds: Set<String>) -> Set<String>? {
+        if selection.isEmpty { return nil }
+        if selection == "duty" { return dutyIds }
+        if selection.hasPrefix("member:") { return [String(selection.dropFirst(7))] }
+        return Set(groups.first { "group:"+$0.name == selection }?.userIds ?? [])
+    }
+}
