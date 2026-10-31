@@ -28,10 +28,9 @@ APIClient.shared.fails=true
 precondition(awaitCount(await Subject().fetchPendingPolicyDocuments())==0)
 print("PASS: 150 pending policies counted, signed/missing versions excluded, sorted preview and empty/error handling")
 }
-static func awaitCount(_ records:[DashboardPendingPolicy])->Int {records.count}}
+}
 """
 # Await outside Swift precondition's synchronous autoclosure.
-fixture=fixture.replace('precondition(awaitCount(await Subject().fetchPendingPolicyDocuments())==0)','let result'+ 'PLACEHOLDER') if False else fixture
 fixture=fixture.replace('precondition(awaitCount(await Subject().fetchPendingPolicyDocuments())==0)','let empty=await Subject().fetchPendingPolicyDocuments();precondition(empty.count==0)',1)
 fixture=fixture.replace('precondition(awaitCount(await Subject().fetchPendingPolicyDocuments())==0)','let failed=await Subject().fetchPendingPolicyDocuments();precondition(failed.count==0)',1)
 with tempfile.TemporaryDirectory() as d:
