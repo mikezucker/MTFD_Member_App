@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-import SwiftUI
-
 enum AppIconKey: String {
     case dispatch
     case messages
@@ -182,38 +180,11 @@ struct MainTabView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            TabView(selection: $router.selectedTab) {
-                DashboardView()
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
-                }
-                .tag(NavigationRouter.AppTab.home)
-
-                TrainingView()
-                    .tabItem {
-                        Label("Training", systemImage: "flame.fill")
-                    }
-                    .tag(NavigationRouter.AppTab.training)
-
-                DocumentsView()
-                    .tabItem {
-                        Label("Policy Center", systemImage: "doc.text.fill")
-                    }
-                    .tag(NavigationRouter.AppTab.documents)
-
-                ScheduleView()
-                    .tabItem {
-                        Label("Schedule", systemImage: "calendar.badge.clock")
-                    }
-                    .tag(NavigationRouter.AppTab.schedule)
-
-                MoreView()
-                    .tabItem {
-                        Label("More", systemImage: "ellipsis.circle.fill")
-                    }
-                    .tag(NavigationRouter.AppTab.more)
+            if #available(iOS 18.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+                tabletTabs
+            } else {
+                phoneTabs
             }
-            .tint(AppTheme.gold)
 
             if showGlobalDispatchBanner, let activeDispatchPayload {
                 GlobalDispatchBanner(
@@ -258,6 +229,64 @@ struct MainTabView: View {
         .onOpenURL { url in
             handleDeepLink(url)
         }
+    }
+
+    private var phoneTabs: some View {
+            TabView(selection: $router.selectedTab) {
+                DashboardView()
+                .tabItem {
+                    Label("Home", systemImage: "house.fill")
+                }
+                .tag(NavigationRouter.AppTab.home)
+
+                TrainingView()
+                    .tabItem {
+                        Label("Training", systemImage: "flame.fill")
+                    }
+                    .tag(NavigationRouter.AppTab.training)
+
+                DocumentsView()
+                    .tabItem {
+                        Label("Policy Center", systemImage: "doc.text.fill")
+                    }
+                    .tag(NavigationRouter.AppTab.documents)
+
+                ScheduleView()
+                    .tabItem {
+                        Label("Schedule", systemImage: "calendar.badge.clock")
+                    }
+                    .tag(NavigationRouter.AppTab.schedule)
+
+                MoreView()
+                    .tabItem {
+                        Label("More", systemImage: "ellipsis.circle.fill")
+                    }
+                    .tag(NavigationRouter.AppTab.more)
+            }
+            .tint(AppTheme.gold)
+    }
+
+    @available(iOS 18.0, *)
+    private var tabletTabs: some View {
+        TabView(selection: $router.selectedTab) {
+            Tab("Home", systemImage: "house.fill", value: NavigationRouter.AppTab.home) { DashboardView() }
+            Tab("Training", systemImage: "flame.fill", value: NavigationRouter.AppTab.training) { TrainingView() }
+            Tab("Policy Center", systemImage: "doc.text.fill", value: NavigationRouter.AppTab.documents) { DocumentsView() }
+            Tab("Schedule", systemImage: "calendar.badge.clock", value: NavigationRouter.AppTab.schedule) { NavigationStack { ScheduleView() } }
+            Tab("More", systemImage: "ellipsis.circle.fill", value: NavigationRouter.AppTab.more) { MoreView() }
+            TabSection("Member tools") {
+                Tab("Dispatches", systemImage: "firetruck.fill", value: NavigationRouter.AppTab.dispatches) { NavigationStack { MessageCenterView(mode: .dispatchesOnly) } }
+                Tab("Messages", systemImage: "envelope.fill", value: NavigationRouter.AppTab.messages) { NavigationStack { MessageCenterView(mode: .messagesOnly) } }
+                if session.currentUser?.canAccessUniforms == true {
+                    Tab("Uniforms", systemImage: "tshirt.fill", value: NavigationRouter.AppTab.uniforms) { NavigationStack { UniformsView() } }
+                }
+                Tab("My Profile", systemImage: "person.crop.circle", value: NavigationRouter.AppTab.profile) { NavigationStack { ProfileView() } }
+                Tab("Settings", systemImage: "gearshape", value: NavigationRouter.AppTab.settings) { NavigationStack { SettingsView() } }
+            }
+            .defaultVisibility(.hidden, for: .tabBar)
+        }
+        .tabViewStyle(.sidebarAdaptable)
+        .tint(AppTheme.gold)
     }
 
     private func handleDeepLink(_ url: URL) {

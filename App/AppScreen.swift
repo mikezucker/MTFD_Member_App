@@ -1,4 +1,61 @@
 import SwiftUI
+import UIKit
+
+// Document and dispatch sheets may use the iPad's working area instead of
+// inheriting a narrow phone-sized form sheet. The system clamps to the window.
+struct MemberReadingPresentation: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18.0, *), UIDevice.current.userInterfaceIdiom == .pad {
+            content
+                .frame(idealWidth: 1200, idealHeight: 900)
+                .presentationSizing(.fitted)
+        } else {
+            content
+        }
+    }
+}
+
+// Use available window width, rather than a device-name check, so iPad Split
+// View and larger accessibility text can return to a single readable column.
+struct DashboardCardGrid: Layout {
+    var spacing: CGFloat = 22
+    var allowsColumns = true
+
+    private func columns(for width: CGFloat) -> Int {
+        allowsColumns && width >= 940 ? 2 : 1
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 390
+        let columns = columns(for: width)
+        let cellWidth = (width - CGFloat(columns - 1) * spacing) / CGFloat(columns)
+        var height: CGFloat = 0
+        for start in stride(from: 0, to: subviews.count, by: columns) {
+            let rowHeight = (start..<min(start + columns, subviews.count)).map {
+                subviews[$0].sizeThatFits(ProposedViewSize(width: cellWidth, height: nil)).height
+            }.max() ?? 0
+            height += rowHeight + (start == 0 ? 0 : spacing)
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let columns = columns(for: bounds.width)
+        let cellWidth = (bounds.width - CGFloat(columns - 1) * spacing) / CGFloat(columns)
+        var y = bounds.minY
+        for start in stride(from: 0, to: subviews.count, by: columns) {
+            var rowHeight: CGFloat = 0
+            for index in start..<min(start + columns, subviews.count) {
+                let size = subviews[index].sizeThatFits(ProposedViewSize(width: cellWidth, height: nil))
+                subviews[index].place(at: CGPoint(x: bounds.minX + CGFloat(index - start) * (cellWidth + spacing), y: y),
+                                     anchor: .topLeading,
+                                     proposal: ProposedViewSize(width: cellWidth, height: size.height))
+                rowHeight = max(rowHeight, size.height)
+            }
+            y += rowHeight + spacing
+        }
+    }
+}
 
 struct AppScreen<Content: View>: View {
     let title: String
@@ -34,7 +91,8 @@ struct AppScreen<Content: View>: View {
 
                 content()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: 1200, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .toolbarBackground(AppTheme.navy, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)

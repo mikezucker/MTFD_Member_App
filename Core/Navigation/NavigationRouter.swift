@@ -22,6 +22,11 @@ final class NavigationRouter: ObservableObject {
         case documents
         case schedule
         case more
+        case dispatches
+        case messages
+        case uniforms
+        case profile
+        case settings
     }
 
     func route(from payload: AppNotificationPayload) {

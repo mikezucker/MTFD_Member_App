@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CareerOfficerDashboardView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let activeDispatches: [APIClient.ActiveDispatch]
     let departmentStats: APIClient.DispatchBucket?
@@ -77,11 +78,15 @@ struct CareerOfficerDashboardView: View {
             VStack(alignment: .leading, spacing: 22) {
                 activeDispatchSection
                 callTotalsSection
-                ForEach(dashboardCards) { card in
-                    dashboardCard(card)
+                DashboardCardGrid(allowsColumns: !dynamicTypeSize.isAccessibilitySize) {
+                    ForEach(dashboardCards) { card in
+                        dashboardCard(card)
+                    }
                 }
             }
+            .frame(maxWidth: 1200, alignment: .topLeading)
             .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .top)
             .padding(.top, 22)
             .padding(.bottom, 120)
             .frame(maxWidth: .infinity, alignment: .topLeading)

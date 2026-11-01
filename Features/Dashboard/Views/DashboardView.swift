@@ -85,6 +85,8 @@ struct DashboardView: View {
                         isBellRinging: isDispatchBellRinging,
                         onTapAlert: handleHeaderAlertTap
                     )
+                    .frame(maxWidth: 1248)
+                    .frame(maxWidth: .infinity)
                     .zIndex(1)
 
                     VStack(spacing: 0) {

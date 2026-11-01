@@ -813,6 +813,7 @@ struct DocumentPDFPreview: View {
     let onAcknowledged: () async -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var password = ""
     @State private var isSigning = false
     @State private var signError: String?
@@ -828,13 +829,21 @@ struct DocumentPDFPreview: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                PDFKitView(document: pdf)
-
-                if needsSignature {
-                    signPanel
-                } else if let acknowledgedAt = signedAt ?? latestVersion?.acknowledgedAt {
-                    acknowledgedPanel(acknowledgedAt)
+            GeometryReader { geometry in
+                if geometry.size.width >= 900 && !dynamicTypeSize.isAccessibilitySize {
+                    HStack(alignment: .top, spacing: 0) {
+                        PDFKitView(document: pdf)
+                        if needsSignature || signedAt != nil || latestVersion?.acknowledgedAt != nil {
+                            ScrollView { acknowledgementContent }
+                                .frame(width: 300)
+                                .background(AppTheme.navy)
+                        }
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        PDFKitView(document: pdf)
+                        acknowledgementContent
+                    }
                 }
             }
                 .navigationTitle(document.title)
@@ -846,6 +855,15 @@ struct DocumentPDFPreview: View {
                         }
                     }
                 }
+        }
+        .modifier(MemberReadingPresentation())
+    }
+
+    @ViewBuilder private var acknowledgementContent: some View {
+        if needsSignature {
+            signPanel
+        } else if let acknowledgedAt = signedAt ?? latestVersion?.acknowledgedAt {
+            acknowledgedPanel(acknowledgedAt)
         }
     }
 
