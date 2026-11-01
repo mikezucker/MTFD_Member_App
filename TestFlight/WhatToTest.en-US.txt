@@ -1,4 +1,4 @@
-MTFD MEMBER APP — INTERNAL TEST BUILD
+MTFD MEMBER APP — TESTFLIGHT BUILD
 
 TRAINING — WORK IN PROGRESS
 The Training Hub, annual training workflow, JPR content, and instructor interfaces remain under active development. Included for testing and feedback; not yet ready for operational reliance. Detailed JPR content review and consistent simplified formatting across every skill/scenario are still in progress. iPad work, training draft UI cleanup, clearer Training Connect flow, and additional images/media remain on the work list.
