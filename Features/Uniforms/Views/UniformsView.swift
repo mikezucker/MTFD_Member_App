@@ -8,6 +8,7 @@ struct UniformsView: View {
     @State private var isLoading = false
     @State private var isSubmitting = false
     @State private var errorMessage: String?
+    @State private var showStatus = true
     @State private var successMessage: String?
 
     private var selectedItems: [APIClient.UniformRequestSubmissionItem] {
@@ -61,13 +62,20 @@ struct UniformsView: View {
                     } else if let response {
                         summaryCard(response)
 
-                        if response.canSubmit {
+                        Picker("Uniforms view", selection: $showStatus) {
+                            Text("My Orders").tag(true)
+                            Text("New Request").tag(false)
+                        }
+                        .pickerStyle(.segmented)
+
+                        if showStatus {
+                            if let errorMessage { errorCard(errorMessage) }
+                            historySection(response.requests)
+                        } else if response.canSubmit {
                             requestForm(response)
                         } else {
                             restrictedCard
                         }
-
-                        historySection(response.requests)
                     } else if let errorMessage {
                         errorCard(errorMessage)
                     }
@@ -133,11 +141,11 @@ struct UniformsView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(response.canSubmit ? "Request Uniform Items" : "Uniform Status")
+                        Text(showStatus ? "My Uniform Orders" : "Request Uniform Items")
                             .font(.title3.weight(.bold))
                             .foregroundStyle(.white)
 
-                        Text(response.canSubmit ? "Build a request and send it to the uniform review queue." : "You can view request history here.")
+                        Text(showStatus ? "\(response.requests.count) total orders. Follow progress and see who is processing them." : "Build a request and send it to the uniform review queue.")
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.68))
                             .fixedSize(horizontal: false, vertical: true)
@@ -149,9 +157,17 @@ struct UniformsView: View {
                 }
 
                 HStack(spacing: 8) {
-                    statPill(title: "Selected", value: "\(selectedItemCount)", tint: AppTheme.gold)
+                    if showStatus {
+                        statPill(title: "Approved", value: "\(response.requests.filter { $0.status == "APPROVED" }.count)", tint: .green)
+                    } else {
+                        statPill(title: "Selected", value: "\(selectedItemCount)", tint: AppTheme.gold)
+                    }
                     statPill(title: "Pending", value: "\(pendingCount)", tint: pendingCount > 0 ? .orange : .green)
-                    statPill(title: "History", value: "\(response.requests.count)", tint: .white.opacity(0.7))
+                    if showStatus {
+                        statPill(title: "Declined", value: "\(response.requests.filter { $0.status == "DECLINED" }.count)", tint: .red)
+                    } else {
+                        statPill(title: "History", value: "\(response.requests.count)", tint: .white.opacity(0.7))
+                    }
                 }
             }
         }
@@ -320,7 +336,7 @@ struct UniformsView: View {
 
     private func historySection(_ requests: [APIClient.UniformRequest]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeader("Request History", systemImage: "clock.badge.checkmark.fill")
+            sectionHeader("My Orders", systemImage: "clock.badge.checkmark.fill")
 
             uniformCard {
                 if requests.isEmpty {
@@ -329,12 +345,10 @@ struct UniformsView: View {
                         .foregroundStyle(.white.opacity(0.72))
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    DashboardScrollableList(itemCount: requests.count, maxHeight: 420) {
-                        VStack(spacing: 12) {
+                    VStack(spacing: 12) {
                             ForEach(requests) { request in
                                 historyRow(request)
                             }
-                        }
                     }
                 }
             }
@@ -360,7 +374,7 @@ struct UniformsView: View {
             }
 
             if let assignedTo = request.assignedTo?.displayName {
-                Text("Reviewer: \(assignedTo)")
+                Text("Processor: \(assignedTo)")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.68))
             }
@@ -373,20 +387,43 @@ struct UniformsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            VStack(alignment: .leading, spacing: 5) {
-                ForEach(request.items.prefix(4)) { item in
-                    Text("\(item.quantity)x \(item.description) • \(item.size)")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.64))
-                        .lineLimit(1)
-                }
-
-                if request.items.count > 4 {
-                    Text("+\(request.items.count - 4) more item\(request.items.count - 4 == 1 ? "" : "s")")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.gold)
-                }
+            if request.assignedTo == nil {
+                Text("Awaiting processor assignment")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.68))
             }
+            if let updatedAt = request.updatedAt {
+                Text("Updated \(formatDate(updatedAt))")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+            if let reviewedAt = request.reviewedAt {
+                Text("Reviewed \(formatDate(reviewedAt))")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.58))
+            }
+            DisclosureGroup("View items and request details") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(request.items) { item in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("\(item.quantity)x \(item.description) • \(item.size)")
+                                .font(.caption.weight(.semibold))
+                            Text("Style \(item.style)")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.58))
+                        }
+                    }
+                    if let comments = request.comments, !comments.isEmpty {
+                        Text("Your comments: \(comments)")
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 8)
+            }
+            .font(.subheadline.weight(.semibold))
+            .tint(AppTheme.gold)
         }
         .padding(.bottom, 12)
         .overlay(alignment: .bottom) {
@@ -569,6 +606,7 @@ struct UniformsView: View {
         do {
             let updated = try await APIClient.shared.submitUniformRequest(payload)
             response = updated
+            showStatus = true
             drafts = [:]
             comments = ""
             replacementAcknowledged = false
