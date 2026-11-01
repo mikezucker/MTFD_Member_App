@@ -1,0 +1,57 @@
+MTFD MEMBER APP — INTERNAL TEST BUILD
+
+TRAINING — WORK IN PROGRESS
+The Training Hub, annual training workflow, JPR content, and instructor interfaces remain under active development. Included for testing and feedback; not yet ready for operational reliance. Detailed JPR content review and consistent simplified formatting across every skill/scenario are still in progress. iPad work, training draft UI cleanup, clearer Training Connect flow, and additional images/media remain on the work list.
+
+DASHBOARD AND TOURS
+• Assigned Training in its existing dashboard section, with full-color icons.
+• Scheduled training visibility in the dashboard and Training Hub.
+• Configurable Tours 1–4, membership and lieutenant assignments.
+• Member tour shown in app and website headers.
+• Correct pending-policy totals while previewing only three policies.
+
+TRAINING — TESTING / IN DEVELOPMENT
+• Annual required-skills list with completion percentages.
+• Progress based on locked, passing evaluations.
+• Assign training to whole tours or individual members.
+• Plan popup saves training to the schedule.
+• Plan → Schedule → Conduct workflow.
+• Members complete requirements; lieutenants conduct and document training.
+
+JPRS AND COURSE CONTENT — TESTING / IN DEVELOPMENT
+• JPR Content V2 with objectives, prerequisites, equipment and instructor preparation.
+• Teaching steps, demonstrations, expected actions, mistakes, corrections, safety considerations and critical failures.
+• Multiple practice scenarios and existing pass/fail evaluation workflow.
+• Protection of approved revisions and locked evaluations; older-client field preservation.
+• Bulk import validation, dry runs and duplicate prevention.
+• Paper-style reading/draft editing and simpler instructor sheets with department logo.
+• Image/video/reference-media support and AI-assisted draft creation.
+• Detailed-skills and equipment-specific content corrections continue.
+
+POLICY CENTER AND DOCUMENTS
+• PowerDMS document migration with duplicate consolidation.
+• Audience restrictions for career, volunteer and other assigned recipients.
+• App document sign-off, red outstanding-signature prompts and corrected counts.
+• Officer Post Document dialog and assignments to individuals, tours or department.
+• Volunteer officers limited to their companies; career officers, Battalion Chiefs and Chief Officers can assign department-wide.
+
+UNIFORMS
+• Saved requests include styles, sizes, quantities, comments and status.
+• Configurable Uniform Coordinators and per-order responsible processor.
+• Push and Message Center notifications for submissions, processing assignments and decisions. No email delivery.
+• My Orders status view with Pending, Approved and Declined totals, processor, dates, notes and complete item details.
+• Separate My Orders / New Request tabs; successful submission returns to My Orders.
+• Complete personal order history; members see only their own orders.
+
+CONNECTED WEBSITE / ADMIN UPDATES
+• Annual training planning, scheduling, assignments and progress.
+• Multiple-document selection / Select All Matching, bulk folder/category/recipient adjustments.
+• Solid document dialogs and corrected folder/library spacing.
+• Uniform coordinator setup, processor assignment, approve/decline with notes and printable order sheets / Save PDF.
+• Dedicated member My Uniform Orders webpage.
+
+PROJECT CLEANUP
+• Removed four empty Uniforms Xcode groups; retained the working Uniforms screen.
+
+PLEASE TEST
+Sign-in, tour headers, assigned training, document visibility/signing, accurate counts, uniform submission → processor push → review → member status update, and iPhone/iPad layouts. Report issues and unfinished training behavior through TestFlight feedback.
