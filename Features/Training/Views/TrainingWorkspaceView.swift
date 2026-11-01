@@ -1030,7 +1030,20 @@ private struct GuidedInstructorHome: View {
         }.pickerStyle(.menu).tint(TrainingVisualStyle.cyan)
     }
     private func begin() { evaluating = false; assignmentOnly = false; mode = "start"; selected = []; versions = []; topicId = ""; search = ""; title = ""; notes = ""; oneOff = false; scheduled = false; date = Date(); status = ""; requestId = UUID().uuidString }
-    @MainActor private func load() async { do { async let guided: GuidedHome = APIClient.shared.trainingWorkspace("/guided"); async let fresh: TrainingWorkspaceHome = APIClient.shared.trainingWorkspace(); let result = try await (guided, fresh); home = result.0; refreshedWorkspace = result.1; error = nil } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
+    @MainActor private func load() async {
+        do {
+            // These decoded models are main-actor isolated. Keep both reads on
+            // that actor and publish only after the complete refresh succeeds.
+            let guided: GuidedHome = try await APIClient.shared.trainingWorkspace("/guided")
+            let fresh: TrainingWorkspaceHome = try await APIClient.shared.trainingWorkspace()
+            try Task.checkCancellation()
+            home = guided
+            refreshedWorkspace = fresh
+            error = nil
+        } catch {
+            if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription }
+        }
+    }
     @MainActor private func onDuty() async {
         busy = true; defer { busy = false }
         let at = ISO8601DateFormatter().string(from: date).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -1938,6 +1951,35 @@ private struct JPRCamera: UIViewControllerRepresentable {
         func imagePickerController(_ picker:UIImagePickerController,didFinishPickingMediaWithInfo info:[UIImagePickerController.InfoKey:Any]){completion(info[.originalImage] as? UIImage)}
     }
 }
+// AVAssetExportSession is not Sendable on all supported SDKs. Keep access
+// actor-isolated, including completion and cancellation, instead of sending
+// the session into the cancellation handler's concurrent closure.
+@MainActor private final class JPRVideoExport {
+    private let session: AVAssetExportSession
+
+    init(session: AVAssetExportSession) { self.session = session }
+
+    func run() async throws {
+        try Task.checkCancellation()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                session.exportAsynchronously {
+                    Task { @MainActor in
+                        if self.session.status == .completed {
+                            continuation.resume()
+                        } else {
+                            continuation.resume(throwing: self.session.error ?? CancellationError())
+                        }
+                    }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.session.cancelExport() }
+        }
+        try Task.checkCancellation()
+    }
+}
+
 private struct JPRStepMediaEditor:View {
     @Binding var media:[JPRMedia]
     let editing:Bool
@@ -2011,7 +2053,7 @@ private struct JPRStepMediaEditor:View {
                     guard duration.seconds.isFinite,duration.seconds<=180 else{throw APIClient.APIError.unknown("Choose a short instructional clip up to three minutes.")}
                     guard let export=AVAssetExportSession(asset:asset,presetName:AVAssetExportPreset1280x720) else{throw APIClient.APIError.unknown("Unable to prepare video.")}
                     export.outputURL=file;export.outputFileType = .mp4;export.shouldOptimizeForNetworkUse=true
-                    try await withTaskCancellationHandler(operation:{try await withCheckedThrowingContinuation{(continuation:CheckedContinuation<Void,Error>) in export.exportAsynchronously{if export.status == .completed{continuation.resume()}else{continuation.resume(throwing:export.error ?? CancellationError())}}}},onCancel:{export.cancelExport()})
+                    try await JPRVideoExport(session: export).run()
                 }else{
                     guard let source=CGImageSourceCreateWithURL(picked.url as CFURL,nil),let thumbnail=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:1600] as CFDictionary),let bytes=UIImage(cgImage:thumbnail).jpegData(compressionQuality:0.85) else{throw APIClient.APIError.unknown("Unable to prepare photograph. Choose JPEG or PNG.")};try bytes.write(to:file)
                 }
