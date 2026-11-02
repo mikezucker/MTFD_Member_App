@@ -516,7 +516,8 @@ struct VolunteerOfficerDashboardView: View {
                 subtitle: pendingDocuments > 0
                     ? "\(pendingDocuments) item\(pendingDocuments == 1 ? "" : "s") need acknowledgement."
                     : "No policies need acknowledgement.",
-                systemImage: "doc.text.fill"
+                systemImage: "doc.text.fill",
+                requiresAttention: pendingDocuments > 0
             ) {
                 onOpenDocuments()
             }

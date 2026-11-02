@@ -42,7 +42,16 @@ struct CareerOfficerDashboardView: View {
     }
 
     private var availableTotalsScopes: [OfficerTotalsScope] {
-        [.department, .station1, .station2, .station3, .station4, .station5]
+        [OfficerTotalsScope.department] + [OfficerTotalsScope.station1, .station2, .station3, .station4, .station5].filter { scope in
+            switch scope {
+            case .department: return true
+            case .station1: return chiefStationStats?.station1 != nil
+            case .station2: return chiefStationStats?.station2 != nil
+            case .station3: return chiefStationStats?.station3 != nil
+            case .station4: return chiefStationStats?.station4 != nil
+            case .station5: return chiefStationStats?.station5 != nil
+            }
+        }
     }
 
     private var selectedTotalsBucket: APIClient.DispatchBucket? {
@@ -208,7 +217,8 @@ struct CareerOfficerDashboardView: View {
             }
 
             if selectedTotalsBucket == nil {
-                loadingCard("Loading call totals...")
+                if isLoading { loadingCard("Loading call totals...") }
+                else { emptyCard("Call totals are temporarily unavailable. Pull to refresh to try again.") }
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
@@ -380,31 +390,6 @@ struct CareerOfficerDashboardView: View {
         }
     }
 
-    private var resolvedApparatusStation: String? {
-        let station = upcomingSchedule?.nextShift?.station?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return station?.isEmpty == false ? station : nil
-    }
-
-    private var stationScopedWorkOrders: [DashboardApparatusWorkOrder] {
-        guard let station = resolvedApparatusStation?.lowercased() else {
-            return workOrders
-        }
-
-        let stationNumber = station
-            .replacingOccurrences(of: "station", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return workOrders.filter { order in
-            let apparatus = order.apparatusName.lowercased()
-
-            return apparatus.contains(station) ||
-                (!stationNumber.isEmpty && apparatus.contains(" \(stationNumber)")) ||
-                (!stationNumber.isEmpty && apparatus.contains(stationNumber))
-        }
-    }
-
     private var apparatusStatusSubtitle: String {
         "All open apparatus work orders."
     }
@@ -484,7 +469,8 @@ struct CareerOfficerDashboardView: View {
                 subtitle: pendingDocuments > 0
                     ? "\(pendingDocuments) item\(pendingDocuments == 1 ? "" : "s") need acknowledgement."
                     : "No policies need acknowledgement.",
-                systemImage: "doc.text.fill"
+                systemImage: "doc.text.fill",
+                requiresAttention: pendingDocuments > 0
             ) {
                 onOpenDocuments()
             }
@@ -658,7 +644,7 @@ private struct DashboardPolicyAcknowledgementCard: View {
 
                         Text("\(totalPendingCount) pending acknowledgement\(totalPendingCount == 1 ? "" : "s")")
                             .font(.caption)
-                            .foregroundStyle(.orange.opacity(0.95))
+                            .foregroundStyle(.red)
                     }
 
                     Spacer()
@@ -681,11 +667,11 @@ private struct DashboardPolicyAcknowledgementCard: View {
                 }
             }
             .padding(16)
-            .background(Color.orange.opacity(0.16))
+            .background(Color.red.opacity(0.18))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color.orange.opacity(0.42), lineWidth: 1)
+                    .stroke(Color.red.opacity(0.8), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
