@@ -845,46 +845,47 @@ private struct WorkspaceCourseListRow: View {
         if course.delivery == "PRACTICAL" { return "View course" }
         return course.progressStatus == "IN_PROGRESS" ? "Resume course" : "Start course"
     }
+    private var details: String {
+        var parts = [course.delivery == "CBT" ? "Online" : course.delivery == "PRACTICAL" ? "Practical" : "Course"]
+        if complete { parts.append("\(workspaceHours(course.creditedMinutes)) hr recorded") }
+        else {
+            if let minutes = course.durationMinutes { parts.append("\(minutes) min") }
+            if let due = course.dueAt { parts.append("Due \(due.formatted(.dateTime.month(.abbreviated).day()))") }
+        }
+        return parts.joined(separator: " · ")
+    }
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
                 CourseHomeIcon(title: course.title, delivery: course.delivery)
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(course.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
-                    Text(course.delivery == "CBT" ? "Online course" : course.delivery == "PRACTICAL" ? "Practical training" : "Training course")
-                        .font(.caption).foregroundStyle(.white.opacity(0.72))
-                    if let due = course.dueAt, !complete {
-                        Label("Due \(due.formatted(date: .abbreviated, time: .omitted))", systemImage: "calendar")
-                            .font(.caption).foregroundStyle(due < Date() ? Color(red: 1, green: 0.56, blue: 0.5) : .white.opacity(0.72))
-                    }
+                    Text(details).font(.caption).foregroundStyle(!complete && course.dueAt.map { $0 < Date() } == true ? Color(red: 1, green: 0.56, blue: 0.5) : .white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.white.opacity(0.7)).padding(.top, 4)
-            }
-            if course.assigned {
-                HStack {
-                    Text(complete ? "Completed" : course.progressStatus == "IN_PROGRESS" ? "In progress" : "Not started")
-                        .font(.caption.weight(.semibold)).foregroundStyle(color)
-                    Spacer()
-                    if let percent = course.displayProgressPercent { Text("\(percent)%").font(.caption.bold()).monospacedDigit().foregroundStyle(.white) }
-                }
-                if let percent = course.displayProgressPercent {
-                    GeometryReader { geometry in
-                        Capsule().fill(color.opacity(0.18))
-                            .overlay(alignment: .leading) {
-                                Capsule().fill(color).frame(width: percent == 0 ? 0 : max(6, geometry.size.width * CGFloat(percent) / 100))
-                            }
-                    }.frame(height: 7)
-                        .accessibilityLabel("Course progress").accessibilityValue("\(percent) percent")
-                }
+                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.white.opacity(0.7))
             }
             HStack {
-                if complete { Label("\(workspaceHours(course.creditedMinutes)) hr recorded", systemImage: "checkmark.seal.fill").font(.caption).foregroundStyle(.white.opacity(0.75)) }
-                else if let minutes = course.durationMinutes { Label("\(minutes) min", systemImage: "clock").font(.caption).foregroundStyle(.white.opacity(0.75)) }
-                Spacer()
-                Text(action).font(.caption.weight(.semibold)).foregroundStyle(AppTheme.gold)
+                if course.assigned {
+                    Text(complete ? "Completed" : course.progressStatus == "IN_PROGRESS" ? "In progress" : "Not started")
+                        .foregroundStyle(color)
+                    if let percent = course.displayProgressPercent { Text("· \(percent)%").monospacedDigit().foregroundStyle(.white) }
+                }
+                Spacer(minLength: 8)
+                Text(action).foregroundStyle(AppTheme.gold)
+            }.font(.caption.weight(.semibold))
+            if course.assigned, let percent = course.displayProgressPercent {
+                GeometryReader { geometry in
+                    Capsule().fill(color.opacity(0.18))
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(color).frame(width: percent == 0 ? 0 : max(6, geometry.size.width * CGFloat(percent) / 100))
+                        }
+                }.frame(height: 7)
+                    .accessibilityLabel("Course progress").accessibilityValue("\(percent) percent")
             }
         }
-        .padding(12).background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
         .overlay { RoundedRectangle(cornerRadius: 14).stroke(CourseHomeStyle.border, lineWidth: 1) }
         .contentShape(Rectangle()).accessibilityElement(children: .combine)
     }
@@ -1102,23 +1103,21 @@ private struct GuidedInstructorHome: View {
             HStack { Text("Courses to assign or teach").font(.headline); Spacer(); Text("\(courses.count)").font(.caption).foregroundStyle(.white.opacity(0.7)) }
             ForEach(courses) { course in
                 let topic = home.topics.first { $0.id == course.id }
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 10) {
-                        CourseHomeIcon(title: course.title, delivery: course.delivery)
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(course.title).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
-                            Text(course.delivery == "CBT" ? "Online course" : "Practical training")
-                                .font(.caption).foregroundStyle(.white.opacity(0.72))
-                            if let topic { Text("\(topic.latestJprs.count) approved \(topic.latestJprs.count == 1 ? "JPR" : "JPRs") · \(topic.durationMinutes) min").font(.caption).foregroundStyle(.white.opacity(0.72)) }
-                            else if course.delivery == "PRACTICAL" { Text("JPR publication pending").font(.caption).foregroundStyle(.orange) }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 16) {
+                        officerCourseSummary(course, topic: topic).fixedSize(horizontal: true, vertical: false).frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) { officerCourseActions(course, topic: topic) }.fixedSize(horizontal: true, vertical: false)
                     }
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 10) { officerCourseActions(course, topic: topic) }
-                        VStack(alignment: .leading, spacing: 8) { officerCourseActions(course, topic: topic) }
+                    VStack(alignment: .leading, spacing: 8) {
+                        officerCourseSummary(course, topic: topic)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { officerCourseActions(course, topic: topic) }
+                            VStack(alignment: .leading, spacing: 6) { officerCourseActions(course, topic: topic) }
+                        }
                     }
                 }
-                .padding(12).background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
                 .overlay { RoundedRectangle(cornerRadius: 14).stroke(CourseHomeStyle.border, lineWidth: 1) }
             }
             if courses.isEmpty {
@@ -1127,14 +1126,29 @@ private struct GuidedInstructorHome: View {
             }
         }.foregroundStyle(.white)
     }
+    private func officerCourseSummary(_ course: TrainingWorkspaceManagedCourse, topic: GuidedTopic?) -> some View {
+        HStack(spacing: 10) {
+            CourseHomeIcon(title: course.title, delivery: course.delivery)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(course.title).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                if let topic {
+                    Text("Practical · \(topic.latestJprs.count) approved \(topic.latestJprs.count == 1 ? "JPR" : "JPRs") · \(topic.durationMinutes) min")
+                        .font(.caption).foregroundStyle(.white.opacity(0.72))
+                } else {
+                    Text(course.delivery == "CBT" ? "Online course" : "Practical · JPR publication pending")
+                        .font(.caption).foregroundStyle(course.delivery == "CBT" ? .white.opacity(0.72) : .orange)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
     @ViewBuilder private func officerCourseActions(_ course: TrainingWorkspaceManagedCourse, topic: GuidedTopic?) -> some View {
         NavigationLink {
             WorkspaceCourseView(course: TrainingWorkspaceCourse(id: course.id, title: course.title, description: nil, delivery: course.delivery, archived: false, assigned: false, progressStatus: "NOT_STARTED", completedAt: nil, dueAt: nil, durationMinutes: topic?.durationMinutes, creditedMinutes: 0, pendingForm: false), members: libraryWorkspace.members, manage: true, allowJprReview: libraryWorkspace.canCreate, assignOnOpen: true)
-        } label: { Label("Assign course", systemImage: "person.badge.plus") }
-        .buttonStyle(CourseHomeButtonStyle())
+        } label: { Label("Assign", systemImage: "person.badge.plus") }
+        .buttonStyle(CourseHomeButtonStyle(compact: true)).accessibilityLabel("Assign course")
         if let topic {
             Button { choose(topic) } label: { Label("Train now", systemImage: "play.fill") }
-                .buttonStyle(CourseHomeButtonStyle(primary: true))
+                .buttonStyle(CourseHomeButtonStyle(primary: true, compact: true))
         }
     }
 
