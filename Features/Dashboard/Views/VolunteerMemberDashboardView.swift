@@ -672,7 +672,7 @@ struct VolunteerMemberDashboardView: View {
     }
 
     private var filteredWorkOrders: [DashboardApparatusWorkOrder] {
-        if selectedApparatusName == "All" {
+        if selectedApparatusName == "All" || !apparatusFilterNames.contains(selectedApparatusName) {
             return workOrders
         }
 

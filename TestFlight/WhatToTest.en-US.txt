@@ -56,7 +56,7 @@ PROJECT CLEANUP
 PLEASE TEST
 Sign-in, tour headers, assigned training, document visibility/signing, accurate counts, uniform submission → processor push → review → member status update, and iPhone/iPad layouts. Report issues and unfinished training behavior through TestFlight feedback.
 
-TRAINING DRILL REVIEW
-• Separate passed, needs-practice, incomplete and absent results before finalizing.
-• Clear member next steps, deadlines and overdue skills.
-• All unfinished sessions remain visible; annual progress refreshes after returning.
+TRAINING / DASHBOARD
+• Course list/progress; officer Assign/Train now/quick classes.
+• Unified JPR sheets, Teach→Practice→Evaluate, result review.
+• No company: all apparatus. Career Officer call totals fixed. Pending policies red.

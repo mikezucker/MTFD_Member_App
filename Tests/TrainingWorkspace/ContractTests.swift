@@ -95,6 +95,12 @@ import Foundation
             precondition(requirement.nextStep == (result == "PASS" ? "More repetitions due" : result == "FAIL" ? "Practice & reevaluate" : "Finish evaluation"))
         }
         print("PASS: native mixed-tour summary matches backend grading; member next steps and Eastern due-day boundaries")
+        let oldCourse = try JSONDecoder().decode(TrainingWorkspaceCourse.self, from: Data(#"{"id":"old","title":"Legacy API","delivery":"PRACTICAL","assigned":true,"progressStatus":"IN_PROGRESS","creditedMinutes":0,"pendingForm":false}"#.utf8))
+        precondition(oldCourse.displayProgressPercent == nil, "An older API must not invent partial progress")
+        let progressCourse = try JSONDecoder().decode(TrainingWorkspaceCourse.self, from: Data(#"{"id":"progress","title":"Course progress","delivery":"CBT","assigned":true,"progressStatus":"IN_PROGRESS","progressPercent":50,"creditedMinutes":0,"pendingForm":false}"#.utf8))
+        precondition(progressCourse.displayProgressPercent == 50)
+        precondition(fixture.home.courses.contains { $0.progressStatus == "COMPLETED" && $0.displayProgressPercent == 100 })
+        print("PASS: native course progress decodes additive API fields and preserves older API compatibility")
         print("PASS: all-member, saved group, individual and unloaded-tour native selection")
         print("PASS: annual period, pinned skill, scheduled session metadata and older API compatibility")
         print("PASS: real guided session, Word draft library, 15 participants, revision and incomplete-result contracts")

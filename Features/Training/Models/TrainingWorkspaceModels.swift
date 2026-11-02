@@ -28,6 +28,9 @@ struct TrainingWorkspaceManagedCourse: Decodable, Identifiable {
     let delivery: String
 }
 struct TrainingWorkspaceCourse: Decodable, Identifiable {
+    var progressPercent: Int? = nil
+    var completedItemCount: Int? = nil
+    var totalItemCount: Int? = nil
     let id: String
     let title: String
     let description: String?
@@ -40,8 +43,12 @@ struct TrainingWorkspaceCourse: Decodable, Identifiable {
     let durationMinutes: Int?
     let creditedMinutes: Int
     let pendingForm: Bool
+    var displayProgressPercent: Int? {
+        if progressStatus == "COMPLETED" { return 100 }
+        return progressPercent.map { min(99, max(0, $0)) }
+    }
     var legacyItem: MobileTrainingItem {
-        MobileTrainingItem(id: id, courseId: id, title: title, description: description, status: "PUBLISHED", dueAt: dueAt, isOverdue: dueAt.map { $0 < Date() && progressStatus != "COMPLETED" } ?? false, assignedAt: nil, assignmentType: "USER", progressStatus: progressStatus, progressPercent: progressStatus == "COMPLETED" ? 100 : 0, completedAt: completedAt, moduleCount: 0, lessonCount: 0, objectiveCount: 0, practicalObjectiveCount: 0)
+        MobileTrainingItem(id: id, courseId: id, title: title, description: description, status: "PUBLISHED", dueAt: dueAt, isOverdue: dueAt.map { $0 < Date() && progressStatus != "COMPLETED" } ?? false, assignedAt: nil, assignmentType: "USER", progressStatus: progressStatus, progressPercent: displayProgressPercent ?? 0, completedAt: completedAt, moduleCount: 0, lessonCount: 0, objectiveCount: 0, practicalObjectiveCount: 0)
     }
 }
 struct TrainingWorkspaceDetail: Decodable {
