@@ -15,8 +15,6 @@ struct TrainingView: View {
     @State private var refreshing = false
     @State private var showingMyTraining = false
     @State private var navigationID = UUID()
-    @State private var trainingRefreshID = UUID()
-    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -32,9 +30,10 @@ struct TrainingView: View {
                                     if let home {
                                         if home.guidedEnabled == true && !showingMyTraining {
                                             if home.canManage {
-                                                GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" }, refreshToken: trainingRefreshID)
+                                                GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" })
                                             } else {
-                                                AnnualTrainingSkillsView(embedded: true, refreshToken: trainingRefreshID, onCourses: { showingMyTraining = true })
+                                                AnnualTrainingSkillsView(embedded: true)
+                                                Button("My courses & records") { showingMyTraining = true }.buttonStyle(WorkspaceActionStyle())
                                             }
                                         } else {
                                         if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
@@ -86,7 +85,6 @@ struct TrainingView: View {
                     .toolbar(.hidden, for: .navigationBar)
                     .tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
                     .task { await load() }
-                    .onChange(of: scenePhase) { _, phase in if phase == .active && home != nil { Task { await load() } } }
                     .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: home?.members ?? []) } }
                 }
                 .id(navigationID)
@@ -144,7 +142,7 @@ struct TrainingView: View {
         guard !refreshing else { return }
         refreshing = true
         defer { refreshing = false }
-        do { let result: TrainingWorkspaceHome = try await APIClient.shared.trainingWorkspace(); home = result; trainingRefreshID = UUID(); if result.guidedEnabled == true && tab == "To Do" { tab = "Required Training" }; error = nil }
+        do { let result: TrainingWorkspaceHome = try await APIClient.shared.trainingWorkspace(); home = result; if result.guidedEnabled == true && tab == "To Do" { tab = "Required Training" }; error = nil }
         catch is CancellationError { }
         catch let failure where APIClient.isRequestCancellation(failure) { }
         catch APIClient.APIError.serverError(let code, _) where code == 404 { useLegacy = true }
@@ -864,7 +862,6 @@ private struct GuidedInstructorHome: View {
     let workspace: TrainingWorkspaceHome
     var onMyTraining: () -> Void = {}
     var onCatalog: () -> Void = {}
-    var refreshToken: UUID? = nil
     @State private var creating = false
     @State private var refreshedWorkspace: TrainingWorkspaceHome?
     private var libraryWorkspace: TrainingWorkspaceHome { refreshedWorkspace ?? workspace }
@@ -897,10 +894,18 @@ private struct GuidedInstructorHome: View {
             if let error { WorkspaceNotice(message: error, warning: true); if home == nil { Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) } }
             if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
             if let home {
-                if mode != "home" { trainingSections }
+                Menu {
+                    Button("Annual Training") { mode = "home" }
+                    Button("Training Library") { mode = "catalog" }
+                    Button("Schedule & Sessions") { mode = "schedule" }
+                    Button("Manage Program") { mode = "program" }
+                    Button("My Training", action: onMyTraining)
+                    Button("Course Catalog", action: onCatalog)
+                    Button("Training Records") { mode = "history" }
+                } label: { Label("Training sections", systemImage: "line.3.horizontal") }.buttonStyle(WorkspaceActionStyle())
                 if mode == "catalog" { catalog(home) }
                 else if mode == "home" {
-                    AnnualTrainingSkillsView(home: home, embedded: true, onManage: { mode = "program" }, onSchedule: { mode = "schedule" }, refreshToken: refreshToken, onLibrary: { mode = "catalog" }, sectionMenu: AnyView(trainingSections))
+                    AnnualTrainingSkillsView(home: home, embedded: true, onManage: { mode = "program" }, onSchedule: { mode = "schedule" })
                 } else if mode == "program" {
                     ManageAnnualTrainingProgramView(home: home, onBack: { mode = "home" }, onBusyChange: { busy = $0 })
                 } else if mode == "start" {
@@ -958,21 +963,9 @@ private struct GuidedInstructorHome: View {
                 }
             } else if error == nil { ProgressView("Loading training…") }
             if mode != "home" { Text("Online connection required. Confirmed saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary) }
-        }.disabled(busy).task(id: refreshToken) { await load() }
+        }.disabled(busy).task { await load() }
         .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: libraryWorkspace.members) } }
         .navigationDestination(isPresented: Binding(get: { activeSession != nil }, set: { if !$0 { activeSession = nil; Task { await load() } } })) { if let activeSession { GuidedSessionView(id: activeSession) } }
-    }
-    private var trainingSections: some View {
-        Menu {
-            Button("Annual Training") { mode = "home" }
-            Button("Training Library") { mode = "catalog" }
-            Button("Schedule & Sessions") { mode = "schedule" }
-            Button("Manage Program") { mode = "program" }
-            Button("My Training", action: onMyTraining)
-            Button("Course Catalog", action: onCatalog)
-            Button("Training Records") { mode = "history" }
-        } label: { Label(mode == "home" ? "More" : "Training sections", systemImage: "ellipsis.circle") }
-            .font(.subheadline.weight(.semibold)).frame(minHeight: 44).accessibilityLabel("Training sections")
     }
     private func prepareEvaluation(_ course: GuidedTopic, _ version: GuidedVersion, _ members: [String]) {
         choose(course); evaluating = true; versions = [version.id]; selected = Set(members)
@@ -2110,17 +2103,6 @@ private struct AnnualTrainingSkillsView: View {
     var embedded = false
     var onManage: () -> Void = {}
     var onSchedule: () -> Void = {}
-    var refreshToken: UUID? = nil
-    var onCourses: (() -> Void)? = nil
-    var onLibrary: (() -> Void)? = nil
-    var sectionMenu: AnyView? = nil
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var filter: AnnualTrainingHomeFilter = .all
-    @State private var showAllSessions = false
-    @State private var loading = true
-    @State private var loadedYear: Int?
-    @State private var requestGeneration = UUID()
     @State private var year = Calendar.current.component(.year, from: Date())
     @State private var crew = ""
     @State private var search = ""
@@ -2137,8 +2119,9 @@ private struct AnnualTrainingSkillsView: View {
     private var requirements: [GuidedSkillRequirement] {
         (data?.requirements ?? []).filter { selection?.contains($0.userId) ?? true }
     }
-    private var allRows: [[GuidedSkillRequirement]] { AnnualTrainingHome.skillRows(requirements) }
-    private var rows: [[GuidedSkillRequirement]] { AnnualTrainingHome.skillRows(requirements, filter: filter, search: search) }
+    private var rows: [[GuidedSkillRequirement]] {
+        Dictionary(grouping: requirements, by: \.versionId).values.sorted { ($0.first?.title ?? "") < ($1.first?.title ?? "") }.filter { row in search.isEmpty || row.contains { "\($0.title) \($0.member)".localizedCaseInsensitiveContains(search) } }
+    }
     private var totals: (done: Int, required: Int) {
         (requirements.reduce(0) { $0 + min($1.required, $1.completed) }, requirements.reduce(0) { $0 + $1.required })
     }
@@ -2155,197 +2138,71 @@ private struct AnnualTrainingSkillsView: View {
             if embedded { content }
             else { AppScreen(title: "") { ScrollView { content.padding(16) }.refreshable { await load() } } }
         }.navigationTitle("Annual Training").navigationBarTitleDisplayMode(.inline).tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
-        .task(id: "\(year)-\(refreshToken?.uuidString ?? "")") { await load() }
+        .task(id: year) { await load() }
         .sheet(item: $planning, onDismiss: { Task { await load() } }) { requirement in
             if let home { NavigationStack { AnnualSkillPlanSheet(requirement: requirement, members: home.members, groups: home.groups, initialIds: requirements.filter { $0.versionId == requirement.versionId && $0.percent < 100 }.map(\.userId)) } }
         }
     }
     private var content: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            homeHeader
-            scopeControls
-            if let error {
-                WorkspaceNotice(message: error, warning: true)
-                Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle())
-            }
-            if data == nil {
-                if loading { ProgressView("Loading your training…").frame(maxWidth: .infinity).padding(24) }
-            } else {
-                if totals.required > 0 { progressSummary }
-                if !pending.isEmpty { pendingSection }
-                if requirements.isEmpty { emptyProgram }
-                else { skillsSection }
-            }
-        }.foregroundStyle(.white)
-    }
-
-    private var homeHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 14) {
-                TrainingEmblem(symbol: "graduationcap.fill", compact: true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(home == nil ? "MY TRAINING" : "CREW TRAINING")
-                        .font(.caption2.bold()).tracking(1.5).foregroundStyle(TrainingVisualStyle.cyan)
-                    Text("Annual training").font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
-                }.accessibilityElement(children: .combine)
-                Spacer(minLength: 0)
-                if loading && data != nil { ProgressView().tint(TrainingVisualStyle.cyan).accessibilityLabel("Refreshing training") }
-                if !dynamicTypeSize.isAccessibilitySize { sectionMenu }
-            }
-            if dynamicTypeSize.isAccessibilitySize { sectionMenu?.frame(maxWidth: .infinity, alignment: .trailing) }
-        }
-    }
-
-    private var scopeControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            let layout = horizontalSizeClass == .regular && !dynamicTypeSize.isAccessibilitySize
-                ? AnyLayout(HStackLayout(alignment: .top, spacing: 14))
-                : AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            layout {
-                if let home {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("TOUR OR INDIVIDUAL").font(.caption2.bold()).foregroundStyle(.secondary)
-                        Picker("Tour or individual", selection: $crew) {
-                            Text("All members in my scope").tag("")
-                            Text("On-duty tour…").tag("duty")
-                            ForEach(home.groups, id: \.name) { Text($0.name).tag("group:"+$0.name) }
-                            ForEach(home.members) { Text($0.name).tag("member:"+$0.id) }
-                        }.pickerStyle(.menu).labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                HStack(spacing: 8) {
-                    Label("Year", systemImage: "calendar").font(.subheadline).foregroundStyle(.secondary)
-                    Picker("Program year", selection: $year) {
-                        ForEach((Calendar.current.component(.year, from: Date())-2)...(Calendar.current.component(.year, from: Date())+1), id: \.self) { Text(String($0)).tag($0) }
-                        Text("Earlier assignments").tag(0)
-                    }.pickerStyle(.menu).labelsHidden()
-                    if home == nil { Spacer(minLength: 0) }
-                }
-            }
-            if home != nil && crew == "duty" {
-                DatePicker("On duty at", selection: $dutyAt).onChange(of: dutyAt) { _,_ in dutyLoaded = false; dutyIds = [] }
-                Button(loadingDuty ? "Loading tour…" : "Load tour") { Task { await loadDuty() } }.buttonStyle(WorkspaceActionStyle()).disabled(loadingDuty)
-                Text(dutyLoaded ? "\(dutyIds.count) eligible members" : "Choose a time and load the FirstDue roster.").font(.caption).foregroundStyle(.secondary)
-            }
-            if home != nil || onCourses != nil {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) { shortcuts }
-                    VStack(alignment: .leading, spacing: 8) { shortcuts }
-                }.buttonStyle(.bordered).controlSize(.large).font(.subheadline.weight(.semibold))
-            }
-        }
-    }
-
-    @ViewBuilder private var shortcuts: some View {
-        if home != nil {
-            Button(action: onSchedule) { Label("Sessions", systemImage: "calendar.badge.clock") }
-            if let onLibrary { Button(action: onLibrary) { Label("Training library", systemImage: "books.vertical") } }
-        }
-        if let onCourses { Button(action: onCourses) { Label("Courses & records", systemImage: "list.bullet.rectangle") } }
-    }
-
-    private var progressSummary: some View {
-        HStack(alignment: .center, spacing: 16) {
-            TrainingProgressDial(percent: 100 * totals.done / max(1, totals.required))
-            VStack(alignment: .leading, spacing: 6) {
-                Text("\(totals.done) of \(totals.required) required completions").font(.headline)
-                Text("\(allRows.filter { $0.allSatisfy { $0.completed >= $0.required } }.count) of \(allRows.count) skills complete" + (home == nil ? "" : " for this selection"))
-                    .font(.caption).foregroundStyle(.secondary)
-                let overdue = allRows.filter { $0.contains { $0.isOverdue() } }.count
-                if overdue > 0 {
-                    Label("\(overdue) overdue \(overdue == 1 ? "skill" : "skills")", systemImage: "exclamationmark.circle.fill")
-                        .font(.caption.bold()).foregroundStyle(TrainingVisualStyle.orange)
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading)
-        }.workspaceCard()
-    }
-
-    private var pendingSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label(pending.first?.status == "IN_PROGRESS" ? "Resume training" : "Coming up", systemImage: pending.first?.status == "IN_PROGRESS" ? "arrow.clockwise" : "calendar")
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 18) {
+            Text(home == nil ? "My Annual Training" : "Annual Training").font(.title2.bold())
+            Text(home == nil ? "Your required skills and recorded results." : "Plan training. Conduct it. Document each member’s skills.").font(.subheadline).foregroundStyle(.secondary)
+            HStack(alignment: .bottom) {
+                Picker("Year", selection: $year) {
+                    ForEach((Calendar.current.component(.year, from: Date())-2)...(Calendar.current.component(.year, from: Date())+1), id: \.self) { Text(String($0)).tag($0) }
+                    Text("Earlier assignments").tag(0)
+                }.pickerStyle(.menu)
                 Spacer()
-                Text("\(pending.count) \(pending.count == 1 ? "session" : "sessions")").font(.caption).foregroundStyle(.secondary)
+                if data != nil && totals.required > 0 { Text("\(100 * totals.done / totals.required)%").font(.title.bold()) }
             }
-            WorkspacePanel {
-                ForEach(showAllSessions ? pending : Array(pending.prefix(1))) { session in
-                    if home != nil {
-                        NavigationLink { GuidedSessionView(id: session.id).onDisappear { Task { await load() } } }
-                        label: { sessionSummary(session) }.buttonStyle(.plain)
-                    } else { sessionSummary(session) }
-                    if showAllSessions && session.id != pending.last?.id { Divider().overlay(.white.opacity(0.12)) }
-                }
-                if pending.count > 1 {
-                    Button(showAllSessions ? "Show next session" : "Show all \(pending.count) sessions") { showAllSessions.toggle() }
-                        .font(.subheadline.weight(.semibold)).foregroundStyle(TrainingVisualStyle.cyan).frame(minHeight: 44)
-                }
-            }
-        }
-    }
-
-    private func sessionSummary(_ session: GuidedUpcomingSession) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            TrainingEmblem(symbol: session.status == "IN_PROGRESS" ? "clock" : "calendar", compact: true, color: TrainingVisualStyle.lavender)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(session.title).font(.subheadline.bold()).fixedSize(horizontal: false, vertical: true)
-                Text(session.status == "IN_PROGRESS" ? "Saved work ready to continue" : session.startAt?.formatted(date: .abbreviated, time: .shortened) ?? "Scheduled")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("\(session.durationMinutes) minutes" + (session.location.flatMap { $0.isEmpty ? nil : " · " + $0 } ?? ""))
-                    .font(.caption).foregroundStyle(.secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            if home != nil { Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(TrainingVisualStyle.cyan) }
-        }.frame(minHeight: 56).contentShape(Rectangle())
-    }
-
-    private var emptyProgram: some View {
-        WorkspacePanel {
-            Label(crew == "duty" && !dutyLoaded ? "Select your tour" : crew.isEmpty ? "Annual program not set up" : "No requirements for this selection", systemImage: "checklist").font(.headline)
-            Text(home == nil ? "Your training officer has not assigned skills for this selection yet." : "Choose required skills and assign them to a tour or individuals in Manage Program.").font(.subheadline).foregroundStyle(.secondary)
-            if home != nil { Button("Manage Program", action: onManage).buttonStyle(WorkspaceActionStyle(primary: true)) }
-            Text("No requirements assigned does not mean training is complete.").font(.caption).foregroundStyle(.secondary)
-        }
-    }
-
-    private var skillsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(home == nil ? "Your required skills" : "Required skills").font(.headline)
-                Spacer()
-                Text("\(allRows.count)").font(.caption.bold()).foregroundStyle(.secondary)
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(AnnualTrainingHomeFilter.allCases, id: \.self) { item in
-                        Button { filter = item } label: {
-                            Text("\(item.rawValue) · \(AnnualTrainingHome.skillRows(requirements, filter: item).count)")
-                                .font(.subheadline.weight(.semibold)).padding(.horizontal, 14).frame(minHeight: 44)
-                                .foregroundStyle(filter == item ? AppTheme.navy : .white)
-                                .background(filter == item ? TrainingVisualStyle.cyan : Color.white.opacity(0.08), in: Capsule())
-                        }.buttonStyle(.plain).accessibilityAddTraits(filter == item ? .isSelected : [])
-                    }
+            if let home {
+                Picker("Tour or individual", selection: $crew) {
+                    Text("All members in my scope").tag("")
+                    Text("On-duty tour…").tag("duty")
+                    ForEach(home.groups, id: \.name) { Text($0.name).tag("group:"+$0.name) }
+                    ForEach(home.members) { Text($0.name).tag("member:"+$0.id) }
+                }.pickerStyle(.menu)
+                if crew == "duty" {
+                    DatePicker("On duty at", selection: $dutyAt).onChange(of: dutyAt) { _,_ in dutyLoaded = false; dutyIds = [] }
+                    Button(loadingDuty ? "Loading tour…" : "Load tour") { Task { await loadDuty() } }.buttonStyle(WorkspaceActionStyle()).disabled(loadingDuty)
+                    Text(dutyLoaded ? "\(dutyIds.count) eligible members" : "Choose a time and load the FirstDue roster.").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Find a skill or JPR…", text: $search).autocorrectionDisabled()
-                if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("Clear skill search") }
-            }.workspaceInput()
-            DashboardCardGrid(spacing: 16, allowsColumns: !dynamicTypeSize.isAccessibilitySize, minimumColumnWidth: 340) {
-                ForEach(rows, id: \.first!.versionId) { row in annualRow(row) }
-            }
-            if rows.isEmpty {
+            if let error { WorkspaceNotice(message: error, warning: true) }
+            if data == nil { ProgressView("Loading skills…") }
+            else if requirements.isEmpty {
                 WorkspacePanel {
-                    Text(search.isEmpty ? (filter == .completed ? "No completed skills yet" : "No outstanding skills") : "No matching skills").font(.headline)
-                    Text(search.isEmpty ? "Choose another filter to see your other skills." : "Try a skill name, JPR number, or member name.").font(.subheadline).foregroundStyle(.secondary)
-                    Button("Show all skills") { filter = .all; search = "" }.buttonStyle(WorkspaceActionStyle())
+                    Text(crew == "duty" && !dutyLoaded ? "Select your tour" : crew.isEmpty ? "Annual program not set up" : "No requirements for this selection").font(.headline)
+                    Text(home == nil ? "Your training officer has not assigned skills for this selection yet." : "Choose required skills and assign them to a tour or individuals in Manage Program.").font(.subheadline).foregroundStyle(.secondary)
+                    if home != nil { Button("Manage Program", action: onManage).buttonStyle(WorkspaceActionStyle(primary: true)) }
+                    Text("No requirements assigned does not mean training is complete.").font(.caption).foregroundStyle(.secondary)
                 }
+            } else {
+                Text("\(totals.done) / \(totals.required) required completions").font(.caption).foregroundStyle(.secondary)
+                TextField("Find a skill…", text: $search).workspaceInput().autocorrectionDisabled()
+                ForEach(rows, id: \.first!.versionId) { row in annualRow(row) }
+                if rows.isEmpty { Text("No skills match your search.").font(.subheadline) }
+                Text("Only passed, locked individual evaluations count. Scheduling and attendance do not change progress.").font(.caption).foregroundStyle(.secondary)
             }
-            Text("Only passed, locked evaluations count toward progress. Attendance and scheduling do not award skill credit.")
-                .font(.caption).foregroundStyle(.secondary)
+            if !pending.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack { Text(home == nil ? "Your scheduled training" : "Training to conduct or document · \(pending.count)").font(.headline); Spacer(); if home != nil { Button("Schedule", action: onSchedule).font(.caption) } }
+                    ForEach(pending) { session in
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(session.title).font(.subheadline.bold())
+                                Text(session.status == "IN_PROGRESS" ? "Documentation outstanding" : session.startAt?.formatted(date: .abbreviated, time: .shortened) ?? "Scheduled").font(.caption).foregroundStyle(.secondary)
+                                if let location = session.location, !location.isEmpty { Text(location).font(.caption).foregroundStyle(.secondary) }
+                                Text("\(session.durationMinutes) minutes").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue" : "Conduct") { GuidedSessionView(id: session.id).onDisappear { Task { await load() } } }.buttonStyle(WorkspaceActionStyle()) }
+                        }.padding(.vertical,6)
+                    }
+                }.padding(.top,12)
+            }
         }
     }
-
     private func annualRow(_ row: [GuidedSkillRequirement]) -> some View {
         let first = row[0]
         let target = row.reduce(0) { $0 + $1.required }
@@ -2367,13 +2224,12 @@ private struct AnnualTrainingSkillsView: View {
                     }
                 }
             }
-            ProgressView(value: Double(done), total: Double(max(1, target))).tint(done >= target ? TrainingVisualStyle.mint : TrainingVisualStyle.cyan).accessibilityLabel("Skill completions").accessibilityValue("\(done) of \(target)")
+            if home == nil && done < target { Text("Arrange the next practice or observed evaluation with your instructor. Attendance alone does not complete this skill.").font(.subheadline).foregroundStyle(.secondary) }
             if let session = sessions.first {
                 if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue & document" : "Conduct") { GuidedSessionView(id: session.id).onDisappear { Task { await load() } } }.buttonStyle(WorkspaceActionStyle(primary: true)) }
                 if let date = session.startAt { Text("Scheduled \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
-            } else if home != nil && done < target { Button("Plan training") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
-            DisclosureGroup(home == nil ? "Results & next steps" : "Members & results") {
-                if home == nil && done < target { Text("Arrange the next practice or observed evaluation with your instructor. Attendance alone does not complete this skill.").font(.subheadline).foregroundStyle(.secondary) }
+            } else if home != nil && done < target { Button("Plan") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
+            DisclosureGroup(home == nil ? "Results" : "Members & results") {
                 ForEach(row) { requirement in
                     VStack(alignment: .leading, spacing: 6) {
                         Text("\(requirement.member) · \(min(requirement.completed,requirement.required)) / \(requirement.required)")
@@ -2389,18 +2245,12 @@ private struct AnnualTrainingSkillsView: View {
     }
     @MainActor private func load() async {
         let requestedYear = year
-        let generation = UUID()
-        requestGeneration = generation
-        if loadedYear != requestedYear { data = nil }
-        loading = true
-        defer { if requestGeneration == generation { loading = false } }
+        data = nil
         do {
             let response: GuidedSkillsResponse = try await APIClient.shared.trainingWorkspace("/skills?year=\(requestedYear)" + (home == nil ? "" : "&managed=1"))
-            guard !Task.isCancelled, requestedYear == year, generation == requestGeneration else { return }
-            data = response; loadedYear = requestedYear; error = nil
-        } catch {
-            if !APIClient.isRequestCancellation(error), requestedYear == year, generation == requestGeneration { self.error = error.localizedDescription }
-        }
+            guard !Task.isCancelled, requestedYear == year else { return }
+            data = response; error = nil
+        } catch { if !APIClient.isRequestCancellation(error), requestedYear == year { self.error = error.localizedDescription } }
     }
     @MainActor private func loadDuty() async {
         loadingDuty = true; defer { loadingDuty = false }
