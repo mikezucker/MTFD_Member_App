@@ -1084,6 +1084,7 @@ private struct GuidedSessionView: View {
     @State private var duration = ""
     @State private var confirmReload = false
     @State private var printHTML: String?
+    @State private var confirmingFinalization = false
     var body: some View {
         AppScreen(title: session?.title ?? "Training", subtitle: "Approved JPR guidance", systemImage: "graduationcap.fill") {
             ScrollView {
@@ -1109,7 +1110,8 @@ private struct GuidedSessionView: View {
                     } else if error == nil { ProgressView("Loading saved session…") }
                 }.padding(16)
             }
-        }.trainingDestinationNavigation(blocked: busy || pending != nil || commentDraft != nil || durationDirty)
+        }.tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
+        .trainingDestinationNavigation(blocked: busy || pending != nil || commentDraft != nil || durationDirty)
         .navigationBarBackButtonHidden(busy || pending != nil || commentDraft != nil || durationDirty)
         .interactiveDismissDisabled(busy || pending != nil || commentDraft != nil || durationDirty)
         .task { await load() }
@@ -1121,6 +1123,14 @@ private struct GuidedSessionView: View {
             Button("Keep scheduled training", role: .cancel) { }
         } message: { Text("Remove this scheduled session? This cannot be undone. Existing course and skill assignments remain.") }
         .alert("Reload last saved session?", isPresented: $confirmReload) { Button("Cancel",role:.cancel) {}; Button("Discard unconfirmed change",role:.destructive) { pending = nil; Task { await load() } } } message: { Text("Only confirmed saved work will be restored.") }
+        .alert("Finalize this training?", isPresented: $confirmingFinalization) {
+            Button("Keep reviewing", role: .cancel) { }
+            Button("Finalize training") { Task { await save(["finalize": true]) } }
+        } message: {
+            if let session {
+                Text((session.oneOff == true ? "\(session.review.attended) attended · \(session.review.absent) absent" : session.review.description) + ". Attendees receive \(session.durationMinutes) minutes. Absent members receive no hours or evaluations. Results will be locked; further evaluation requires a new session.")
+            }
+        }
         .sheet(item: $commenting) { member in
             NavigationStack { Form {
                 Text(member.name)
@@ -1192,13 +1202,18 @@ private struct GuidedSessionView: View {
     }
     private func summary(_ s:GuidedSession) -> some View {
         let attended=s.participants.filter{$0.attended != false}
-        let passed=s.oneOff == true ? 0 : attended.filter{m in s.jprs.allSatisfy{s.outcome($0,m)=="Passed"}}.count
         return VStack(alignment:.leading,spacing:18) {
             Text("Training summary").font(.title2.bold())
             if s.jprs.contains(where: { v in v.content.steps.contains(where: { step in step.critical && attended.contains(where: { s.observations[s.key(v,step,$0)]?.rating == "NEEDS_WORK" }) }) }) { TrainingSafetyNotice(text: "Critical safety failures were recorded. Review the affected members and instructor feedback. These evaluations do not pass.", critical: true) }
-            if s.oneOff == true { Text("\(attended.count) attended · Attendance and hours only"); if let notes = s.notes { Text(notes) } } else { Text("\(attended.count) attended · \(passed) passed required JPRs · \(attended.count-passed) need additional training or evaluation") }
+            if s.oneOff == true { Text("\(s.review.attended) attended · \(s.review.absent) absent · Attendance and hours only"); if let notes = s.notes { Text(notes) } }
+            else {
+                Text(s.review.description)
+                if s.review.needsWork > 0 { Text("Members needing more practice require a new observed evaluation after practice.").font(.subheadline) }
+                if s.review.incomplete > 0 { Text("Finish unobserved requirements before finalizing, or record an incomplete evaluation and reevaluate in a new session.").font(.subheadline) }
+            }
+            if s.review.absent > 0 { Text("Absent members receive no hours or evaluations. Their outstanding skill requirements remain due.").font(.subheadline) }
             if !s.locked {
-                HStack { TextField("Training minutes",text:$duration).keyboardType(.numberPad).textFieldStyle(.roundedBorder).disabled(busy || pending != nil);Button("Save duration") { Task { await save(["durationMinutes":Int(duration) ?? 0]) } }.disabled(busy || pending != nil || !durationDirty) }
+                HStack { TextField("Training minutes",text:$duration).keyboardType(.numberPad).textFieldStyle(.roundedBorder).disabled(busy || pending != nil);Button("Save duration") { Task { await save(["durationMinutes":Int(duration) ?? 0]) } }.disabled(busy || pending != nil || !durationDirty || !(1...1440).contains(Int(duration) ?? 0)) }
             } else { Text("\(s.durationMinutes) minutes of training") }
             ForEach(s.participants) { member in
                 WorkspacePanel {
@@ -1214,7 +1229,11 @@ private struct GuidedSessionView: View {
                     }
                 }
             }
-            if !s.locked { Button("Save Training") {Task {await save(["finalize":true])}}.buttonStyle(WorkspaceActionStyle()).disabled(blocked);if s.oneOff != true {stages(s)} }
+            if !s.locked {
+                if let start = s.startAt, start > Date() { Text("This session is scheduled in the future. Attendance and results can be finalized after it takes place.").font(.subheadline) }
+                Button("Review & finalize training") { confirmingFinalization = true }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(blocked || (s.startAt ?? .distantPast) > Date())
+                if s.oneOff != true {stages(s)}
+            }
             else { Text("Training saved. Available for FirstDue CSV export; import has not been confirmed.").foregroundStyle(TrainingVisualStyle.cyan) }
             Text("Attendance records training hours. Unobserved performance stays incomplete.").font(.caption)
         }
@@ -2167,15 +2186,17 @@ private struct AnnualTrainingSkillsView: View {
             }
             if !pending.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack { Text("Training to conduct or document").font(.headline); Spacer(); if home != nil { Button("Schedule", action: onSchedule).font(.caption) } }
-                    ForEach(Array(pending.prefix(3))) { session in
+                    HStack { Text(home == nil ? "Your scheduled training" : "Training to conduct or document · \(pending.count)").font(.headline); Spacer(); if home != nil { Button("Schedule", action: onSchedule).font(.caption) } }
+                    ForEach(pending) { session in
                         HStack(alignment: .top, spacing: 12) {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(session.title).font(.subheadline.bold())
                                 Text(session.status == "IN_PROGRESS" ? "Documentation outstanding" : session.startAt?.formatted(date: .abbreviated, time: .shortened) ?? "Scheduled").font(.caption).foregroundStyle(.secondary)
+                                if let location = session.location, !location.isEmpty { Text(location).font(.caption).foregroundStyle(.secondary) }
+                                Text("\(session.durationMinutes) minutes").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue" : "Conduct") { GuidedSessionView(id: session.id) }.buttonStyle(WorkspaceActionStyle()) }
+                            if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue" : "Conduct") { GuidedSessionView(id: session.id).onDisappear { Task { await load() } } }.buttonStyle(WorkspaceActionStyle()) }
                         }.padding(.vertical,6)
                     }
                 }.padding(.top,12)
@@ -2194,19 +2215,28 @@ private struct AnnualTrainingSkillsView: View {
                     Text(first.title).font(.headline).fixedSize(horizontal: false, vertical: true)
                     Text("\(done) / \(target) completions · Revision \(first.revision)").font(.caption).foregroundStyle(.secondary)
                     if home != nil { Text("\(row.filter { $0.completed >= $0.required }.count) / \(row.count) members complete").font(.caption).foregroundStyle(.secondary) }
+                    if let due = row.filter({ $0.completed < $0.required }).compactMap(\.dueAt).min() {
+                        Text("Due \(due.formatted(date: .abbreviated, time: .omitted))" + (row.contains { $0.isOverdue() } ? " · Overdue" : "")).font(.caption).foregroundStyle(row.contains { $0.isOverdue() } ? TrainingVisualStyle.orange : .secondary)
+                    }
+                    if home == nil {
+                        Text(first.nextStep).font(.subheadline.bold()).foregroundStyle(first.completed >= first.required ? TrainingVisualStyle.mint : TrainingVisualStyle.orange)
+                        if let latest = first.latestResult { Text("Latest result: \(latest.label)").font(.caption) }
+                    }
                 }
             }
+            if home == nil && done < target { Text("Arrange the next practice or observed evaluation with your instructor. Attendance alone does not complete this skill.").font(.subheadline).foregroundStyle(.secondary) }
             if let session = sessions.first {
-                if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue & document" : "Conduct") { GuidedSessionView(id: session.id) }.buttonStyle(WorkspaceActionStyle(primary: true)) }
+                if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue & document" : "Conduct") { GuidedSessionView(id: session.id).onDisappear { Task { await load() } } }.buttonStyle(WorkspaceActionStyle(primary: true)) }
                 if let date = session.startAt { Text("Scheduled \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
             } else if home != nil && done < target { Button("Plan") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
             DisclosureGroup(home == nil ? "Results" : "Members & results") {
                 ForEach(row) { requirement in
                     VStack(alignment: .leading, spacing: 6) {
                         Text("\(requirement.member) · \(min(requirement.completed,requirement.required)) / \(requirement.required)")
+                        Text(requirement.nextStep).font(.caption.bold())
                         if let due = requirement.dueAt { Text("Due \(due.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
                         if requirement.history.isEmpty { Text("No locked evaluations in this period.").font(.caption) }
-                        ForEach(requirement.history) { item in Text("\(item.outcome) · \(item.evaluator)" + (item.completedAt.map { " · " + $0.formatted(date: .abbreviated, time: .omitted) } ?? "")).font(.caption) }
+                        ForEach(requirement.history) { item in Text("\(item.label) · \(item.evaluator)" + (item.completedAt.map { " · " + $0.formatted(date: .abbreviated, time: .omitted) } ?? "")).font(.caption) }
                     }.padding(.vertical,6)
                 }
                 if home != nil { Button("Plan another session") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
@@ -2220,7 +2250,7 @@ private struct AnnualTrainingSkillsView: View {
             let response: GuidedSkillsResponse = try await APIClient.shared.trainingWorkspace("/skills?year=\(requestedYear)" + (home == nil ? "" : "&managed=1"))
             guard !Task.isCancelled, requestedYear == year else { return }
             data = response; error = nil
-        } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } }
+        } catch { if !APIClient.isRequestCancellation(error), requestedYear == year { self.error = error.localizedDescription } }
     }
     @MainActor private func loadDuty() async {
         loadingDuty = true; defer { loadingDuty = false }

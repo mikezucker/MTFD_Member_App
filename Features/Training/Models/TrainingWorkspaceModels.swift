@@ -465,14 +465,36 @@ struct GuidedSession: Decodable, Identifiable {
     var startAt: Date? = nil
     var location: String? = nil
     var locked: Bool { status == "FINALIZED" }
+    var review: GuidedSessionReview {
+        var result = GuidedSessionReview()
+        for member in participants {
+            if member.attended == false { result.absent += 1; continue }
+            result.attended += 1
+            if oneOff == true { continue }
+            let outcomes = jprs.map { outcome($0, member) }
+            if outcomes.contains("Needs additional training") { result.needsWork += 1 }
+            else if outcomes.isEmpty || outcomes.contains("Incomplete") { result.incomplete += 1 }
+            else { result.passed += 1 }
+        }
+        return result
+    }
     func key(_ version: GuidedVersion, _ step: GuidedStep, _ member: GuidedMember) -> String { "\(version.id):\(step.id):\(member.id)" }
     func outcome(_ version: GuidedVersion, _ member: GuidedMember) -> String {
         let steps = version.content.steps
+        guard !steps.isEmpty else { return "Incomplete" }
         if steps.contains(where: { ($0.required || $0.critical) && observations[key(version,$0,member)]?.rating == "NEEDS_WORK" }) { return "Needs additional training" }
         if steps.contains(where: { ($0.required || $0.critical) && (observations[key(version,$0,member)]?.rating ?? "NOT_EVALUATED") == "NOT_EVALUATED" }) { return "Incomplete" }
         let score = Int((100.0 * Double(steps.filter { observations[key(version,$0,member)]?.rating == "PASS" }.count) / Double(steps.count)).rounded())
         return score >= version.content.passingScore ? "Passed" : "Needs additional training"
     }
+}
+struct GuidedSessionReview {
+    var attended = 0
+    var absent = 0
+    var passed = 0
+    var needsWork = 0
+    var incomplete = 0
+    var description: String { "\(attended) attended · \(absent) absent · \(passed) passed all selected JPRs · \(needsWork) need more practice · \(incomplete) need evaluation" }
 }
 struct GuidedMutation: Decodable { let success: Bool; let sessionId: String?; let revision: Int? }
 struct GuidedDuty: Decodable { let userIds: [String] }
@@ -501,9 +523,23 @@ struct GuidedSkillRequirement: Decodable, Identifiable {
  let id: String; let userId: String; let member: String; let versionId: String; let courseId: String; let number: String; let title: String; let revision: Int
  let required: Int; let completed: Int; let percent: Int; let dueAt: Date?; let history: [GuidedSkillHistory]
  var periodYear: Int? = nil
+ var latestResult: GuidedSkillHistory? { history.max { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) } }
+ var nextStep: String {
+    if completed >= required { return "Complete" }
+    if latestResult?.outcome == "FAIL" { return "Practice & reevaluate" }
+    if latestResult?.outcome == "INCOMPLETE" { return "Finish evaluation" }
+    return completed > 0 ? "More repetitions due" : "Evaluation due"
+ }
+ func isOverdue(at now: Date = Date()) -> Bool {
+    guard completed < required, let dueAt else { return false }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/New_York")!
+    return calendar.startOfDay(for: dueAt) < calendar.startOfDay(for: now)
+ }
 }
 struct GuidedSkillHistory: Decodable, Identifiable {
  let id: String; let outcome: String; let completedAt: Date?; let evaluator: String
+ var label: String { outcome == "PASS" ? "Passed" : outcome == "FAIL" ? "Needs additional training" : "Incomplete" }
 }
 
 struct ScheduledTrainingItem: Decodable, Identifiable {
