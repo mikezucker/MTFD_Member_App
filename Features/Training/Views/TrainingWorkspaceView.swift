@@ -25,7 +25,7 @@ struct TrainingView: View {
                     AppScreen(title: "") {
                         ScrollView {
                             VStack(spacing: 0) {
-                                TrainingScreenHeader(title: home?.canManage == true && !showingMyTraining ? "Training" : "My Courses", subtitle: home?.canManage == true && !showingMyTraining ? "Assign courses or run training with your crew." : "Assigned courses, progress, and completion records.", systemImage: "graduationcap.fill", isRefreshing: refreshing)
+                                TrainingScreenHeader(title: home?.canManage == true && !showingMyTraining ? "Training" : "My Courses", subtitle: home?.canManage == true && !showingMyTraining ? "Assign courses or run training with your crew." : "Assigned courses, progress, and completion records.", systemImage: "graduationcap.fill", isRefreshing: refreshing, compact: true)
                                 VStack(alignment: .leading, spacing: 18) {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
@@ -804,7 +804,11 @@ private struct GuidedCatalogCourseCard: View {
 private enum CourseHomeStyle {
     static let row = Color(red: 25/255, green: 47/255, blue: 73/255)
     static let border = Color.white.opacity(0.24)
-    static let progress = Color(red: 72/255, green: 185/255, blue: 255/255)
+    static func progressColor(_ percent: Int) -> Color {
+        if percent < 33 { return Color(red: 1, green: 0.40, blue: 0.38) }
+        if percent < 67 { return Color(red: 1, green: 0.81, blue: 0.25) }
+        return Color(red: 0.30, green: 0.86, blue: 0.53)
+    }
 }
 
 private struct CourseHomeButtonStyle: ButtonStyle {
@@ -824,8 +828,8 @@ private struct CourseHomeIcon: View {
     let title: String
     let delivery: String
     var body: some View {
-        TrainingColorIcon(symbol: delivery == "CBT" ? "play.rectangle.fill" : TrainingVisualStyle.symbol(for: title), size: 30)
-            .frame(width: 50, height: 50)
+        TrainingColorIcon(symbol: delivery == "CBT" ? "play.rectangle.fill" : TrainingVisualStyle.symbol(for: title), size: 26)
+            .frame(width: 44, height: 44)
             .background(.white, in: RoundedRectangle(cornerRadius: 12))
             .accessibilityHidden(true)
     }
@@ -834,7 +838,7 @@ private struct CourseHomeIcon: View {
 private struct WorkspaceCourseListRow: View {
     let course: TrainingWorkspaceCourse
     private var complete: Bool { course.progressStatus == "COMPLETED" }
-    private var color: Color { complete ? .green : CourseHomeStyle.progress }
+    private var color: Color { CourseHomeStyle.progressColor(course.displayProgressPercent ?? 0) }
     private var action: String {
         if complete { return "View record" }
         if !course.assigned { return "View & enroll" }
@@ -842,11 +846,11 @@ private struct WorkspaceCourseListRow: View {
         return course.progressStatus == "IN_PROGRESS" ? "Resume course" : "Start course"
     }
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 CourseHomeIcon(title: course.title, delivery: course.delivery)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(course.title).font(.headline).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                    Text(course.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                     Text(course.delivery == "CBT" ? "Online course" : course.delivery == "PRACTICAL" ? "Practical training" : "Training course")
                         .font(.caption).foregroundStyle(.white.opacity(0.72))
                     if let due = course.dueAt, !complete {
@@ -864,7 +868,12 @@ private struct WorkspaceCourseListRow: View {
                     if let percent = course.displayProgressPercent { Text("\(percent)%").font(.caption.bold()).monospacedDigit().foregroundStyle(.white) }
                 }
                 if let percent = course.displayProgressPercent {
-                    ProgressView(value: Double(percent), total: 100).tint(color)
+                    GeometryReader { geometry in
+                        Capsule().fill(color.opacity(0.18))
+                            .overlay(alignment: .leading) {
+                                Capsule().fill(color).frame(width: percent == 0 ? 0 : max(6, geometry.size.width * CGFloat(percent) / 100))
+                            }
+                    }.frame(height: 7)
                         .accessibilityLabel("Course progress").accessibilityValue("\(percent) percent")
                 }
             }
@@ -872,10 +881,10 @@ private struct WorkspaceCourseListRow: View {
                 if complete { Label("\(workspaceHours(course.creditedMinutes)) hr recorded", systemImage: "checkmark.seal.fill").font(.caption).foregroundStyle(.white.opacity(0.75)) }
                 else if let minutes = course.durationMinutes { Label("\(minutes) min", systemImage: "clock").font(.caption).foregroundStyle(.white.opacity(0.75)) }
                 Spacer()
-                Text(action).font(.subheadline.weight(.semibold)).foregroundStyle(AppTheme.gold)
+                Text(action).font(.caption.weight(.semibold)).foregroundStyle(AppTheme.gold)
             }
         }
-        .padding(16).background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
+        .padding(12).background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
         .overlay { RoundedRectangle(cornerRadius: 14).stroke(CourseHomeStyle.border, lineWidth: 1) }
         .contentShape(Rectangle()).accessibilityElement(children: .combine)
     }
@@ -1093,11 +1102,11 @@ private struct GuidedInstructorHome: View {
             HStack { Text("Courses to assign or teach").font(.headline); Spacer(); Text("\(courses.count)").font(.caption).foregroundStyle(.white.opacity(0.7)) }
             ForEach(courses) { course in
                 let topic = home.topics.first { $0.id == course.id }
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 10) {
                         CourseHomeIcon(title: course.title, delivery: course.delivery)
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(course.title).font(.headline).fixedSize(horizontal: false, vertical: true)
+                            Text(course.title).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
                             Text(course.delivery == "CBT" ? "Online course" : "Practical training")
                                 .font(.caption).foregroundStyle(.white.opacity(0.72))
                             if let topic { Text("\(topic.latestJprs.count) approved \(topic.latestJprs.count == 1 ? "JPR" : "JPRs") · \(topic.durationMinutes) min").font(.caption).foregroundStyle(.white.opacity(0.72)) }
@@ -1109,7 +1118,7 @@ private struct GuidedInstructorHome: View {
                         VStack(alignment: .leading, spacing: 8) { officerCourseActions(course, topic: topic) }
                     }
                 }
-                .padding(16).background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
+                .padding(12).background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
                 .overlay { RoundedRectangle(cornerRadius: 14).stroke(CourseHomeStyle.border, lineWidth: 1) }
             }
             if courses.isEmpty {

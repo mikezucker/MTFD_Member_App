@@ -1047,14 +1047,15 @@ struct TrainingScreenHeader: View {
     let systemImage: String
     var isRefreshing = false
     var stats: [TrainingHeaderStat] = []
+    var compact = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .center, spacing: 14) {
                 if !dynamicTypeSize.isAccessibilitySize {
-                    TrainingColorIcon(symbol: systemImage, size: 32)
-                        .frame(width: 54, height: 60)
+                    TrainingColorIcon(symbol: systemImage, size: compact ? 26 : 32)
+                        .frame(width: compact ? 44 : 54, height: compact ? 48 : 60)
                         .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 17))
                         .overlay { RoundedRectangle(cornerRadius: 17).stroke(Color.white.opacity(0.1), lineWidth: 1) }
                         .accessibilityHidden(true)
@@ -1063,10 +1064,10 @@ struct TrainingScreenHeader: View {
                     Text("MTFD · TRAINING DIVISION")
                         .font(.caption2.weight(.bold)).tracking(1.5)
                         .foregroundStyle(.white.opacity(0.7)).fixedSize(horizontal: false, vertical: true)
-                    Text(title).font(.system(.title, design: .rounded, weight: .bold))
+                    Text(title).font(.system(compact ? .title3 : .title, design: .rounded, weight: .bold))
                         .foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
-                    Text(subtitle).font(.subheadline)
+                    Text(subtitle).font(compact ? .caption : .subheadline)
                         .foregroundStyle(.white.opacity(0.75)).fixedSize(horizontal: false, vertical: true)
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if isRefreshing { ProgressView().tint(TrainingVisualStyle.cyan).accessibilityLabel("Refreshing training") }
@@ -1085,7 +1086,7 @@ struct TrainingScreenHeader: View {
                 }
             }
         }
-        .padding(.horizontal, 18).padding(.vertical, 18)
+        .padding(.horizontal, 18).padding(.vertical, compact ? 12 : 18)
         .background(AppTheme.navy)
         .overlay(alignment: .bottom) { Rectangle().fill(.white.opacity(0.08)).frame(height: 1) }
     }
