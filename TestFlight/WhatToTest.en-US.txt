@@ -56,7 +56,7 @@ PROJECT CLEANUP
 PLEASE TEST
 Sign-in, tour headers, assigned training, document visibility/signing, accurate counts, uniform submission → processor push → review → member status update, and iPhone/iPad layouts. Report issues and unfinished training behavior through TestFlight feedback.
 
-TRAINING DRILL REVIEW
-• Separate passed, needs-practice, incomplete and absent results before finalizing.
-• Clear member next steps, deadlines and overdue skills.
-• All unfinished sessions remain visible; annual progress refreshes after returning.
+TRAINING DRILL & HOME
+• Review passed, needs-practice, incomplete and absent results before finalizing.
+• Faster home: resume sessions, overdue-first skills, filters and progress.
+• Adaptive iPhone/iPad layout; member next steps and refreshed annual progress.

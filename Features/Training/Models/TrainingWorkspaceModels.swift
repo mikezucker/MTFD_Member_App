@@ -589,3 +589,40 @@ enum AnnualTrainingBoardSelection {
         return Set(groups.first { "group:"+$0.name == selection }?.userIds ?? [])
     }
 }
+
+enum AnnualTrainingHomeFilter: String, CaseIterable {
+    case all = "All"
+    case outstanding = "To do"
+    case completed = "Complete"
+}
+
+enum AnnualTrainingHome {
+    static func skillRows(_ requirements: [GuidedSkillRequirement], filter: AnnualTrainingHomeFilter = .all, search: String = "", now: Date = Date()) -> [[GuidedSkillRequirement]] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Dictionary(grouping: requirements, by: \.versionId).values
+            .map { $0.sorted { $0.member.localizedStandardCompare($1.member) == .orderedAscending } }
+            .filter { row in
+                let complete = row.allSatisfy { $0.completed >= $0.required }
+                let matchesFilter = filter == .all || (filter == .completed ? complete : !complete)
+                return matchesFilter && (query.isEmpty || row.contains { "\($0.number) \($0.title) \($0.member)".localizedCaseInsensitiveContains(query) })
+            }
+            .sorted { left, right in
+                let l = priority(left, now: now), r = priority(right, now: now)
+                if l != r { return l < r }
+                let ld = left.filter { $0.completed < $0.required }.compactMap(\.dueAt).min() ?? .distantFuture
+                let rd = right.filter { $0.completed < $0.required }.compactMap(\.dueAt).min() ?? .distantFuture
+                if ld != rd { return ld < rd }
+                let comparison = (left.first?.title ?? "").localizedStandardCompare(right.first?.title ?? "")
+                if comparison != .orderedSame { return comparison == .orderedAscending }
+                return (left.first?.versionId ?? "") < (right.first?.versionId ?? "")
+            }
+    }
+
+    private static func priority(_ row: [GuidedSkillRequirement], now: Date) -> Int {
+        let outstanding = row.filter { $0.completed < $0.required }
+        if outstanding.isEmpty { return 3 }
+        if outstanding.contains(where: { $0.isOverdue(at: now) }) { return 0 }
+        if outstanding.contains(where: { ["FAIL", "INCOMPLETE"].contains($0.latestResult?.outcome ?? "") }) { return 1 }
+        return 2
+    }
+}

@@ -20,9 +20,10 @@ struct MemberReadingPresentation: ViewModifier {
 struct DashboardCardGrid: Layout {
     var spacing: CGFloat = 22
     var allowsColumns = true
+    var minimumColumnWidth: CGFloat = 459
 
     private func columns(for width: CGFloat) -> Int {
-        allowsColumns && width >= 940 ? 2 : 1
+        allowsColumns && width >= 2 * minimumColumnWidth + spacing ? 2 : 1
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
