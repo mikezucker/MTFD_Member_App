@@ -153,6 +153,7 @@ struct LoginView: View {
 
                     Spacer(minLength: keyboardHeight > 0 ? 180 : 32)
                 }
+                .frame(maxWidth: 520)
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, keyboardHeight > 0 ? 20 : 0)
                 .offset(y: keyboardHeight > 0 ? -70 : 0)

@@ -15,6 +15,7 @@ struct TrainingView: View {
     @State private var refreshing = false
     @State private var showingMyTraining = false
     @State private var navigationID = UUID()
+    @State private var showingAnnualTraining = false
 
     var body: some View {
         Group {
@@ -24,29 +25,25 @@ struct TrainingView: View {
                     AppScreen(title: "") {
                         ScrollView {
                             VStack(spacing: 0) {
-                                if home?.guidedEnabled != true || showingMyTraining { TrainingScreenHeader(title: home?.guidedEnabled == true && (home?.canManage != true || showingMyTraining) ? "My Training" : "Training Hub", subtitle: "Prepare. Practice. Perform.", systemImage: "graduationcap.fill", isRefreshing: refreshing, stats: headerStats) }
+                                AppScreenHeader(title: "Training", subtitle: nil, systemImage: "graduationcap.fill")
                                 VStack(alignment: .leading, spacing: 18) {
                                     if let error { WorkspaceNotice(message: error, warning: true); Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) }
                                     if let home {
-                                        if home.guidedEnabled == true && !showingMyTraining {
-                                            if home.canManage {
+                                        if home.guidedEnabled == true && home.canManage && !showingMyTraining {
                                                 GuidedInstructorHome(workspace: home, onMyTraining: { showingMyTraining = true }, onCatalog: { showingMyTraining = true; tab = "Catalog" })
-                                            } else {
-                                                AnnualTrainingSkillsView(embedded: true)
-                                                Button("My courses & records") { showingMyTraining = true }.buttonStyle(WorkspaceActionStyle())
-                                            }
                                         } else {
                                         if home.guidedEnabled == true && home.canManage { Button { returnToTrainingHome() } label: { Label("Training Home", systemImage: "house.fill") }.buttonStyle(WorkspaceActionStyle()) }
-                                        if isRequiredTab { ScheduledTrainingList(sessions: home.scheduledTraining ?? []) }
+                                        if isRequiredTab && !(home.scheduledTraining ?? []).isEmpty { DisclosureGroup("Scheduled training · \(home.scheduledTraining?.count ?? 0)") { ScheduledTrainingList(sessions: home.scheduledTraining ?? []) }.font(.subheadline) }
+                                        if isRequiredTab { memberSpotlight(home) }
                                         trainingTabs
                                         if tab == "My JPR Results" { GuidedMemberResults() } else {
-                                        if home.guidedEnabled == true { NavigationLink("My annual training") { AnnualTrainingSkillsView() }.buttonStyle(WorkspaceActionStyle()) }
+
                                         HStack(spacing: 10) {
                                             Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.55))
                                             TextField("Search courses", text: $search).foregroundStyle(.white).autocorrectionDisabled()
                                             if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.accessibilityLabel("Clear search") }
-                                        }.workspaceCard()
-                                        sectionHeading(trainingSectionTitle, subtitle: tab == "Catalog" ? "Available for your member type. Enroll to get started." : tab == "Completed" ? "Completion dates, results, and credited hours." : "Assigned courses and your next steps.")
+                                        }.padding(12).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                                        HStack { Text(trainingSectionTitle).font(.headline).foregroundStyle(.white); Spacer(); Text("\(shownCourses.count)").font(.caption).foregroundStyle(.white.opacity(0.7)) }
                                         if shownCourses.isEmpty {
                                             WorkspacePanel {
                                                 Label(search.isEmpty ? (tab == "Catalog" ? "No courses available" : tab == "Completed" ? "Your training record starts here" : "You're up to date") : "No matching courses", systemImage: tab == "Completed" ? "checkmark.seal" : "graduationcap")
@@ -59,7 +56,7 @@ struct TrainingView: View {
                                             NavigationLink {
                                                 if course.delivery == "LEGACY" && course.archived != true { TrainingCourseDetailView(item: course.legacyItem).trainingDestinationNavigation() }
                                                 else { WorkspaceCourseView(course: course, members: home.members, manage: false) }
-                                            } label: { WorkspaceCourseCard(course: course) }.buttonStyle(.plain)
+                                            } label: { WorkspaceCourseListRow(course: course) }.buttonStyle(.plain)
                                         }
                                         if isRequiredTab && home.courses.contains(where: { $0.pendingForm }) {
                                             sectionHeading("Outstanding Forms", subtitle: "Follow-up items are separate from earned credit.")
@@ -85,11 +82,45 @@ struct TrainingView: View {
                     .toolbar(.hidden, for: .navigationBar)
                     .tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
                     .task { await load() }
+                    .navigationDestination(isPresented: $showingAnnualTraining) { AnnualTrainingSkillsView().trainingDestinationNavigation() }
                     .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: home?.members ?? []) } }
                 }
                 .id(navigationID)
                 .environment(\.trainingHomeAction, { returnToTrainingHome() })
             }
+        }
+    }
+    private func memberSpotlight(_ home: TrainingWorkspaceHome) -> some View {
+        let next = home.courses.first { $0.assigned && $0.delivery == "CBT" && $0.progressStatus == "IN_PROGRESS" } ?? home.courses.first { $0.assigned && $0.progressStatus != "COMPLETED" }
+        let completed = home.courses.filter { $0.progressStatus == "COMPLETED" }.count
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("BUILD YOUR SKILLS").font(.caption.bold()).tracking(1.5).foregroundStyle(AppTheme.gold)
+            if let next {
+                NavigationLink {
+                    if next.delivery == "LEGACY" && next.archived != true { TrainingCourseDetailView(item: next.legacyItem).trainingDestinationNavigation() }
+                    else { WorkspaceCourseView(course: next, members: home.members, manage: false) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("Keep your momentum.").font(.title2.bold())
+                                Text("Your next step: \(next.title)").font(.subheadline)
+                            }
+                            Spacer(minLength: 8)
+                            Image(systemName: "bolt.shield.fill").font(.system(size: 30)).foregroundStyle(AppTheme.commandBlue)
+                        }
+                        if let percent = next.displayProgressPercent {
+                            HStack { Text("\(percent)% complete").font(.caption.bold()); Spacer(); Text(next.delivery == "CBT" ? "Online course" : "Practical training").font(.caption) }
+                            ProgressView(value: Double(percent), total: 100).tint(CourseHomeStyle.progressColor(percent))
+                        }
+                        HStack { Label(next.delivery == "CBT" && next.progressStatus == "IN_PROGRESS" ? "Resume course" : "View course", systemImage: "play.fill"); Spacer(); Image(systemName: "arrow.right") }
+                            .font(.subheadline.bold()).foregroundStyle(.white).padding(12).frame(minHeight: 44).background(AppTheme.navy, in: RoundedRectangle(cornerRadius: 10))
+                    }.foregroundStyle(AppTheme.navy).padding(16)
+                        .background(LinearGradient(colors: [Color(red: 1, green: 0.94, blue: 0.77), Color(red: 1, green: 0.85, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 18))
+                }.buttonStyle(.plain)
+            } else { Label("You're up to date. Explore the catalog or check your annual skills.", systemImage: "checkmark.seal.fill").font(.subheadline).foregroundStyle(.green) }
+            Label("\(completed) courses completed · \(workspaceHours(home.courses.reduce(0) { $0 + $1.creditedMinutes })) hr recorded", systemImage: "checkmark.seal.fill")
+                .font(.caption).foregroundStyle(.white.opacity(0.75))
         }
     }
     private func returnToTrainingHome() {
@@ -112,7 +143,27 @@ struct TrainingView: View {
         }
     }
     private var trainingTabs: some View {
-        WorkspaceTrainingNavigation(selection: $tab, guided: home?.guidedEnabled == true)
+        HStack(alignment: .center, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    courseFilter("Assigned", value: home?.guidedEnabled == true ? "Required Training" : "To Do")
+                    courseFilter("In progress", value: "In Progress")
+                    courseFilter("Completed", value: "Completed")
+                }
+            }
+            Menu {
+                Button("Course catalog") { tab = "Catalog" }
+                if home?.guidedEnabled == true {
+                    Button("My JPR results") { tab = "My JPR Results" }
+                    Button("Annual training") { showingAnnualTraining = true }
+                }
+            } label: { Image(systemName: "ellipsis.circle").font(.title3).frame(width: 44, height: 44).foregroundStyle(AppTheme.gold) }
+            .accessibilityLabel("More training options")
+        }
+    }
+    private func courseFilter(_ title: String, value: String) -> some View {
+        Button { tab = value } label: { Text(title).font(.subheadline.weight(.semibold)) }
+            .buttonStyle(CourseHomeButtonStyle(primary: tab == value || (title == "Assigned" && isRequiredTab), compact: true)).accessibilityAddTraits(tab == value ? .isSelected : [])
     }
     private var isRequiredTab: Bool { tab == "To Do" || tab == "Required Training" }
     private var trainingSectionTitle: String {
@@ -120,8 +171,8 @@ struct TrainingView: View {
         case "Catalog": return "Course Catalog"
         case "Completed": return "Completed Training"
         case "In Progress": return "In Progress"
-        case "Required Training": return "Required Training"
-        default: return "My Training"
+        case "Required Training": return "Assigned courses"
+        default: return "Assigned courses"
         }
     }
     private func sectionHeading(_ title: String, subtitle: String) -> some View {
@@ -267,6 +318,8 @@ private struct WorkspaceCourseView: View {
     let members: [TrainingWorkspaceMember]
     let manage: Bool
     var allowJprReview = false
+    var assignOnOpen = false
+    @State private var showingAssignment = false
     @State private var detail: TrainingWorkspaceDetail?
     @State private var error: String?
     @State private var saved: String?
@@ -308,7 +361,7 @@ private struct WorkspaceCourseView: View {
         .sheet(isPresented: $editing, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: members, courseId: course.id) } }
         .disabled(busy)
         .overlay { if busy { ProgressView("Saving…").padding(24).background(AppTheme.navy, in: RoundedRectangle(cornerRadius: 16)).foregroundStyle(.white) } }
-        .task { await load() }
+        .task { showingAssignment = assignOnOpen; await load() }
         .alert("Archive this course?", isPresented: $confirmingArchive) { Button("Cancel", role: .cancel) { }; Button("Archive", role: .destructive) { perform(["action": "archive"]) } } message: { Text("The course leaves active training. Completion records and hours are preserved.") }
     }
     @ViewBuilder private func instructorContent(_ detail: TrainingWorkspaceDetail) -> some View {
@@ -324,7 +377,7 @@ private struct WorkspaceCourseView: View {
         WorkspacePanel("Assign course (optional)") {
             Text("You can leave this course unassigned and return here later. This grants course access; it does not schedule a session or assign a skill requirement.").font(.caption)
             Text("\(detail.roster?.count ?? 0) \((detail.roster?.count ?? 0) == 1 ? "member" : "members") assigned").font(.subheadline).foregroundStyle(.white.opacity(0.7))
-            DisclosureGroup("Assign members") {
+            DisclosureGroup("Assign members", isExpanded: $showingAssignment) {
                 WorkspaceMemberSelection(members: members, selected: $selected)
                 Button("Assign selected members") { perform(["action": "assign", "userIds": Array(selected)]) }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(selected.isEmpty)
             }
@@ -781,6 +834,97 @@ private struct GuidedCatalogCourseCard: View {
     }
 }
 
+// Course-first home uses compact list rows and the app's full-color icons.
+private enum CourseHomeStyle {
+    static let row = Color(red: 25/255, green: 47/255, blue: 73/255)
+    static let border = Color.white.opacity(0.24)
+    static func progressColor(_ percent: Int) -> Color {
+        if percent < 33 { return Color(red: 1, green: 0.40, blue: 0.38) }
+        if percent < 67 { return Color(red: 1, green: 0.81, blue: 0.25) }
+        return Color(red: 0.30, green: 0.86, blue: 0.53)
+    }
+}
+
+private struct CourseHomeButtonStyle: ButtonStyle {
+    var primary = false
+    var compact = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+            .padding(.horizontal, compact ? 9 : 14).frame(minHeight: 44)
+            .foregroundStyle(primary ? AppTheme.navy : .white)
+            .background(primary ? AppTheme.gold : Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            .overlay { RoundedRectangle(cornerRadius: 10).stroke(primary ? Color.clear : Color.white.opacity(0.32), lineWidth: 1) }
+            .opacity(configuration.isPressed ? 0.75 : 1)
+    }
+}
+
+private struct CourseHomeIcon: View {
+    let title: String
+    let delivery: String
+    var body: some View {
+        TrainingColorIcon(symbol: delivery == "CBT" ? "play.rectangle.fill" : TrainingVisualStyle.symbol(for: title), size: 26)
+            .frame(width: 44, height: 44)
+            .background(.white, in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityHidden(true)
+    }
+}
+
+private struct WorkspaceCourseListRow: View {
+    let course: TrainingWorkspaceCourse
+    private var complete: Bool { course.progressStatus == "COMPLETED" }
+    private var color: Color { CourseHomeStyle.progressColor(course.displayProgressPercent ?? 0) }
+    private var action: String {
+        if complete { return "View record" }
+        if !course.assigned { return "View & enroll" }
+        if course.delivery == "PRACTICAL" { return "View course" }
+        return course.progressStatus == "IN_PROGRESS" ? "Resume course" : "Start course"
+    }
+    private var details: String {
+        var parts = [course.delivery == "CBT" ? "Online" : course.delivery == "PRACTICAL" ? "Practical" : "Course"]
+        if complete { parts.append("\(workspaceHours(course.creditedMinutes)) hr recorded") }
+        else {
+            if let minutes = course.durationMinutes { parts.append("\(minutes) min") }
+            if let due = course.dueAt { parts.append("Due \(due.formatted(.dateTime.month(.abbreviated).day()))") }
+        }
+        return parts.joined(separator: " · ")
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                CourseHomeIcon(title: course.title, delivery: course.delivery)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(course.title).font(.subheadline.weight(.semibold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                    Text(details).font(.caption).foregroundStyle(!complete && course.dueAt.map { $0 < Date() } == true ? Color(red: 1, green: 0.56, blue: 0.5) : .white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.white.opacity(0.7))
+            }
+            HStack {
+                if course.assigned {
+                    Text(complete ? "Completed" : course.progressStatus == "IN_PROGRESS" ? "In progress" : "Not started")
+                        .foregroundStyle(color)
+                    if let percent = course.displayProgressPercent { Text("· \(percent)%").monospacedDigit().foregroundStyle(.white) }
+                }
+                Spacer(minLength: 8)
+                Text(action).foregroundStyle(AppTheme.gold)
+            }.font(.caption.weight(.semibold))
+            if course.assigned, let percent = course.displayProgressPercent {
+                GeometryReader { geometry in
+                    Capsule().fill(color.opacity(0.18))
+                        .overlay(alignment: .leading) {
+                            Capsule().fill(color).frame(width: percent == 0 ? 0 : max(6, geometry.size.width * CGFloat(percent) / 100))
+                        }
+                }.frame(height: 7)
+                    .accessibilityLabel("Course progress").accessibilityValue("\(percent) percent")
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
+        .overlay { RoundedRectangle(cornerRadius: 14).stroke(CourseHomeStyle.border, lineWidth: 1) }
+        .contentShape(Rectangle()).accessibilityElement(children: .combine)
+    }
+}
+
 private struct WorkspaceCourseCard: View {
     let course: TrainingWorkspaceCourse
     private var completed: Bool { course.progressStatus == "COMPLETED" }
@@ -869,6 +1013,8 @@ private struct GuidedInstructorHome: View {
     @State private var home: GuidedHome?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var mode = "home"
+    @State private var quickCourseId: String?
+    @State private var quickScheduled = false
     @State private var courseSearch = ""
     @State private var categoryId = ""
     @State private var assignmentOnly = false
@@ -894,17 +1040,28 @@ private struct GuidedInstructorHome: View {
             if let error { WorkspaceNotice(message: error, warning: true); if home == nil { Button("Try again") { Task { await load() } }.buttonStyle(WorkspaceActionStyle()) } }
             if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
             if let home {
+                if mode != "quick" {
+                HStack(alignment: .center, spacing: 12) {
+                    if mode == "home" { Text("LEAD YOUR CREW").font(.caption.bold()).tracking(1.5).foregroundStyle(AppTheme.gold) }
+                    Spacer(minLength: 0)
                 Menu {
-                    Button("Annual Training") { mode = "home" }
+                    Button("Training Home") { mode = "home" }
+                    Button("Annual Training") { mode = "annual" }
                     Button("Training Library") { mode = "catalog" }
                     Button("Schedule & Sessions") { mode = "schedule" }
                     Button("Manage Program") { mode = "program" }
                     Button("My Training", action: onMyTraining)
                     Button("Course Catalog", action: onCatalog)
                     Button("Training Records") { mode = "history" }
-                } label: { Label("Training sections", systemImage: "line.3.horizontal") }.buttonStyle(WorkspaceActionStyle())
-                if mode == "catalog" { catalog(home) }
-                else if mode == "home" {
+                } label: { Label("More", systemImage: "ellipsis.circle") }.font(.subheadline.weight(.semibold)).foregroundStyle(AppTheme.gold).frame(minHeight: 44)
+                }
+                }
+                if mode == "quick" {
+                    QuickTrainingBuilder(home: home, initialCourseId: quickCourseId, initialScheduled: quickScheduled, onCancel: { mode = "home" }, onStarted: { activeSession = $0; mode = "home" }, onScheduled: { mode = "schedule"; Task { await load() } })
+                }
+                else if mode == "catalog" { catalog(home) }
+                else if mode == "home" { officerHero; officerCourses(home) }
+                else if mode == "annual" {
                     AnnualTrainingSkillsView(home: home, embedded: true, onManage: { mode = "program" }, onSchedule: { mode = "schedule" })
                 } else if mode == "program" {
                     ManageAnnualTrainingProgramView(home: home, onBack: { mode = "home" }, onBusyChange: { busy = $0 })
@@ -959,7 +1116,7 @@ private struct GuidedInstructorHome: View {
                     ForEach(sessions) { session in
                         Button { activeSession = session.id } label: { WorkspaceToolRow(title: session.title, subtitle: "\(session.participantCount) participants · \((session.startAt ?? session.updatedAt).formatted(date: .abbreviated,time: .shortened))", icon: "chevron.right") }.buttonStyle(.plain)
                     }
-                    if mode == "schedule" { Button("Schedule session") { begin(); scheduled = true }.buttonStyle(WorkspaceActionStyle()); Button("Record one-off training") { begin(); oneOff = true }.buttonStyle(WorkspaceActionStyle()) }
+                    if mode == "schedule" { Button("Schedule session") { quickCourseId = nil; quickScheduled = true; mode = "quick" }.buttonStyle(WorkspaceActionStyle()); Button("On-the-fly training") { quickCourseId = nil; quickScheduled = false; mode = "quick" }.buttonStyle(WorkspaceActionStyle()) }
                 }
             } else if error == nil { ProgressView("Loading training…") }
             if mode != "home" { Text("Online connection required. Confirmed saved work can be resumed after an interruption.").font(.caption).foregroundStyle(.secondary) }
@@ -967,6 +1124,99 @@ private struct GuidedInstructorHome: View {
         .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) { NavigationStack { WorkspaceCourseBuilder(members: libraryWorkspace.members) } }
         .navigationDestination(isPresented: Binding(get: { activeSession != nil }, set: { if !$0 { activeSession = nil; Task { await load() } } })) { if let activeSession { GuidedSessionView(id: activeSession) } }
     }
+    private var officerHero: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 24) {
+                officerHeroHeading.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
+                officerHeroAction.frame(width: 260)
+            }
+            VStack(alignment: .leading, spacing: 12) { officerHeroHeading; officerHeroAction }
+        }.foregroundStyle(AppTheme.navy).padding(16)
+            .background(LinearGradient(colors: [Color(red: 1, green: 0.94, blue: 0.77), Color(red: 1, green: 0.85, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 18))
+    }
+    private var officerHeroHeading: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Ready for the next call.").font(.title2.bold())
+                Text("Turn this shift into hands-on practice.").font(.subheadline)
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "flame.fill").font(.system(size: 30)).foregroundStyle(.orange)
+        }
+    }
+    private var officerHeroAction: some View {
+        Button { quickCourseId = nil; quickScheduled = false; mode = "quick" } label: {
+            HStack { Label("On-the-fly training", systemImage: "bolt.fill"); Spacer(); Image(systemName: "arrow.right") }
+                .font(.subheadline.bold()).foregroundStyle(.white).padding(12).frame(minHeight: 44).background(AppTheme.navy, in: RoundedRectangle(cornerRadius: 10))
+        }.buttonStyle(.plain)
+    }
+    private func officerCourses(_ home: GuidedHome) -> some View {
+        let courses = libraryWorkspace.manageCourses.filter {
+            $0.status == "PUBLISHED" && $0.delivery != "LEGACY" && (courseSearch.isEmpty || $0.title.localizedCaseInsensitiveContains(courseSearch))
+        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return VStack(alignment: .leading, spacing: 14) {
+            let unfinished = home.sessions.filter { $0.status == "IN_PROGRESS" }
+            if !unfinished.isEmpty {
+                Button { mode = "continue" } label: { Label("Continue saved training · \(unfinished.count)", systemImage: "clock.arrow.circlepath") }
+                    .buttonStyle(CourseHomeButtonStyle())
+            }
+            HStack(spacing: 10) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.65))
+                TextField("Find a course", text: $courseSearch).autocorrectionDisabled()
+            }.padding(12).background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            HStack { Text("Courses to assign or teach").font(.headline); Spacer(); Text("\(courses.count)").font(.caption).foregroundStyle(.white.opacity(0.7)) }
+            ForEach(courses) { course in
+                let topic = home.topics.first { $0.id == course.id }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 16) {
+                        officerCourseSummary(course, topic: topic).fixedSize(horizontal: true, vertical: false).frame(maxWidth: .infinity, alignment: .leading)
+                        HStack(spacing: 8) { officerCourseActions(course, topic: topic) }.fixedSize(horizontal: true, vertical: false)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        officerCourseSummary(course, topic: topic)
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 8) { officerCourseActions(course, topic: topic) }
+                            VStack(alignment: .leading, spacing: 6) { officerCourseActions(course, topic: topic) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12).padding(.vertical, 10)
+                .background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 14))
+                .overlay { RoundedRectangle(cornerRadius: 14).stroke(CourseHomeStyle.border, lineWidth: 1) }
+            }
+            if courses.isEmpty {
+                Text(courseSearch.isEmpty ? "No published courses are available to assign yet. Drafts are in the Training Library." : "No courses match your search.")
+                    .font(.subheadline).foregroundStyle(.white.opacity(0.75)).padding(.vertical, 16)
+            }
+        }.foregroundStyle(.white)
+    }
+    private func officerCourseSummary(_ course: TrainingWorkspaceManagedCourse, topic: GuidedTopic?) -> some View {
+        HStack(spacing: 10) {
+            CourseHomeIcon(title: course.title, delivery: course.delivery)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(course.title).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                if let topic {
+                    Text("Practical · \(topic.latestJprs.count) approved \(topic.latestJprs.count == 1 ? "JPR" : "JPRs") · \(topic.durationMinutes) min")
+                        .font(.caption).foregroundStyle(.white.opacity(0.72))
+                } else {
+                    Text(course.delivery == "CBT" ? "Online course" : "Practical · JPR publication pending")
+                        .font(.caption).foregroundStyle(course.delivery == "CBT" ? .white.opacity(0.72) : .orange)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+    @ViewBuilder private func officerCourseActions(_ course: TrainingWorkspaceManagedCourse, topic: GuidedTopic?) -> some View {
+        NavigationLink {
+            WorkspaceCourseView(course: TrainingWorkspaceCourse(id: course.id, title: course.title, description: nil, delivery: course.delivery, archived: false, assigned: false, progressStatus: "NOT_STARTED", completedAt: nil, dueAt: nil, durationMinutes: topic?.durationMinutes, creditedMinutes: 0, pendingForm: false), members: libraryWorkspace.members, manage: true, allowJprReview: libraryWorkspace.canCreate, assignOnOpen: true)
+        } label: { Label("Assign", systemImage: "person.badge.plus") }
+        .buttonStyle(CourseHomeButtonStyle(compact: true)).accessibilityLabel("Assign course")
+        if let topic {
+            Button { quickCourseId = topic.id; quickScheduled = false; mode = "quick" } label: { Label("Train now", systemImage: "play.fill") }
+                .buttonStyle(CourseHomeButtonStyle(primary: true, compact: true))
+        }
+    }
+
     private func prepareEvaluation(_ course: GuidedTopic, _ version: GuidedVersion, _ members: [String]) {
         choose(course); evaluating = true; versions = [version.id]; selected = Set(members)
     }
@@ -1009,7 +1259,7 @@ private struct GuidedInstructorHome: View {
             }
             if !courseSearch.isEmpty || !categoryId.isEmpty { Text("\(courses.count) matching courses").font(.caption).foregroundStyle(.white.opacity(0.7)) }
             LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.adaptive(minimum: 300), alignment: .top)], spacing: 16) {
-                ForEach(courses) { course in GuidedCatalogCourseCard(course: course, members: libraryWorkspace.members, canManage: libraryWorkspace.manageCourses.contains(where: { $0.id == course.id }), canReview: libraryWorkspace.canCreate) { choose(course) } }
+                ForEach(courses) { course in GuidedCatalogCourseCard(course: course, members: libraryWorkspace.members, canManage: libraryWorkspace.manageCourses.contains(where: { $0.id == course.id }), canReview: libraryWorkspace.canCreate) { quickCourseId = course.id; quickScheduled = false; mode = "quick" } }
             }
             if courses.isEmpty { WorkspacePanel { Text(home.topics.isEmpty ? "No courses ready yet" : "No matching courses").font(.headline); Text(home.topics.isEmpty ? "Published courses with approved JPRs appear here." : "Try a course name, JPR number, or another category.").font(.subheadline).foregroundStyle(.white.opacity(0.65)) } }
             ForEach((home.pendingCourses ?? []).filter { (categoryId.isEmpty || $0.category?.id == categoryId) && (courseSearch.isEmpty || $0.title.localizedCaseInsensitiveContains(courseSearch)) }) { course in
@@ -1030,7 +1280,20 @@ private struct GuidedInstructorHome: View {
         }.pickerStyle(.menu).tint(TrainingVisualStyle.cyan)
     }
     private func begin() { evaluating = false; assignmentOnly = false; mode = "start"; selected = []; versions = []; topicId = ""; search = ""; title = ""; notes = ""; oneOff = false; scheduled = false; date = Date(); status = ""; requestId = UUID().uuidString }
-    @MainActor private func load() async { do { async let guided: GuidedHome = APIClient.shared.trainingWorkspace("/guided"); async let fresh: TrainingWorkspaceHome = APIClient.shared.trainingWorkspace(); let result = try await (guided, fresh); home = result.0; refreshedWorkspace = result.1; error = nil } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } } }
+    @MainActor private func load() async {
+        do {
+            // These decoded models are main-actor isolated. Keep both reads on
+            // that actor and publish only after the complete refresh succeeds.
+            let guided: GuidedHome = try await APIClient.shared.trainingWorkspace("/guided")
+            let fresh: TrainingWorkspaceHome = try await APIClient.shared.trainingWorkspace()
+            try Task.checkCancellation()
+            home = guided
+            refreshedWorkspace = fresh
+            error = nil
+        } catch {
+            if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription }
+        }
+    }
     @MainActor private func onDuty() async {
         busy = true; defer { busy = false }
         let at = ISO8601DateFormatter().string(from: date).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
@@ -1071,14 +1334,16 @@ private struct GuidedSessionView: View {
     @State private var duration = ""
     @State private var confirmReload = false
     @State private var printHTML: String?
+    @State private var confirmingFinalization = false
     var body: some View {
-        AppScreen(title: session?.title ?? "Training", subtitle: "Approved JPR guidance", systemImage: "graduationcap.fill") {
+        AppScreen(title: session?.title ?? "Training", subtitle: session?.oneOff == true ? "Custom training" : "Approved JPR guidance", systemImage: "graduationcap.fill") {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let error { WorkspaceNotice(message: error, warning: true) }
                     if pending != nil { Button("Retry saving") { Task { await retry() } }.buttonStyle(WorkspaceActionStyle()); Button("Reload last saved session") { confirmReload = true } }
                     Text(busy ? "Saving…" : saved).font(.caption).foregroundStyle(TrainingVisualStyle.cyan).accessibilityLabel(busy ? "Saving" : saved)
                     if let s = session {
+                        TrainingSessionPlanSection(plan: s.plan, notes: s.oneOff == true ? "" : s.notes ?? "")
                         if s.status == "SCHEDULED" {
                             Text("Scheduled training").font(.title2.bold())
                             if let date = s.startAt { Text(date.formatted(date: .abbreviated, time: .shortened)) }
@@ -1096,7 +1361,8 @@ private struct GuidedSessionView: View {
                     } else if error == nil { ProgressView("Loading saved session…") }
                 }.padding(16)
             }
-        }.trainingDestinationNavigation(blocked: busy || pending != nil || commentDraft != nil || durationDirty)
+        }.tint(TrainingVisualStyle.cyan).environment(\.colorScheme, .dark)
+        .trainingDestinationNavigation(blocked: busy || pending != nil || commentDraft != nil || durationDirty)
         .navigationBarBackButtonHidden(busy || pending != nil || commentDraft != nil || durationDirty)
         .interactiveDismissDisabled(busy || pending != nil || commentDraft != nil || durationDirty)
         .task { await load() }
@@ -1108,6 +1374,14 @@ private struct GuidedSessionView: View {
             Button("Keep scheduled training", role: .cancel) { }
         } message: { Text("Remove this scheduled session? This cannot be undone. Existing course and skill assignments remain.") }
         .alert("Reload last saved session?", isPresented: $confirmReload) { Button("Cancel",role:.cancel) {}; Button("Discard unconfirmed change",role:.destructive) { pending = nil; Task { await load() } } } message: { Text("Only confirmed saved work will be restored.") }
+        .alert("Finalize this training?", isPresented: $confirmingFinalization) {
+            Button("Keep reviewing", role: .cancel) { }
+            Button("Finalize training") { Task { await save(["finalize": true]) } }
+        } message: {
+            if let session {
+                Text((session.oneOff == true ? "\(session.review.attended) attended · \(session.review.absent) absent" : session.review.description) + ". Attendees receive \(session.durationMinutes) minutes. Absent members receive no hours or evaluations. Results will be locked; further evaluation requires a new session.")
+            }
+        }
         .sheet(item: $commenting) { member in
             NavigationStack { Form {
                 Text(member.name)
@@ -1132,7 +1406,7 @@ private struct GuidedSessionView: View {
     private var blocked: Bool { busy || pending != nil || durationDirty }
     private func stages(_ s: GuidedSession) -> some View {
         ScrollView(.horizontal,showsIndicators:false) { HStack {
-            ForEach(["TEACH","PRACTICE","EVALUATE","SUMMARY"],id:\.self) { stage in Button(stage == "SUMMARY" ? "Review & save" : stage) { Task { await save(["stage":stage]) } }.buttonStyle(WorkspaceActionStyle()).disabled(blocked || s.locked).opacity(s.stage == stage ? 1 : 0.65) }
+            ForEach(["TEACH","PRACTICE","EVALUATE","SUMMARY"],id:\.self) { stage in Button(stage == "SUMMARY" ? "Review & save" : stage == "TEACH" ? "Teach" : stage == "PRACTICE" ? "Practice" : "Evaluate") { Task { await save(["stage":stage]) } }.buttonStyle(WorkspaceActionStyle()).disabled(blocked || s.locked).opacity(s.stage == stage ? 1 : 0.65) }
         } }
     }
     private func guide(_ s: GuidedSession, version: GuidedVersion, step: GuidedStep) -> some View {
@@ -1141,6 +1415,11 @@ private struct GuidedSessionView: View {
             if s.jprs.count>1 {Picker("Approved JPR",selection:Binding(get:{s.jprIndex},set:{index in Task{await save(["jprIndex":index,"stepIndex":0])}})){ForEach(s.jprs.indices,id:\.self){index in Text(s.jprs[index].content.title).tag(index)}}.disabled(blocked)}
             JPRPaperDocument(content:.constant(version.content),revision:version.revision,status:"APPROVED",stage:s.stage,editing:false,selectedScenario:Binding(get:{s.selectedScenarios?[version.id] ?? version.content.scenarios?.first?.id ?? ""},set:{scenarioId in Task{await save(["scenarioSelection":["versionId":version.id,"scenarioId":scenarioId]])}}),evaluation:s.stage=="EVALUATE" ? AnyView(paperEvaluation(s,version:version,step:step)) : nil,versionId:version.id).disabled(blocked)
             Button("Print approved JPR") {Task{await printVersion(version.id)}}.buttonStyle(WorkspaceActionStyle()).disabled(blocked)
+            if s.stage == "TEACH" || s.stage == "PRACTICE" {
+                Button(s.stage == "TEACH" ? "Continue to practice" : "Begin observed evaluation") {
+                    Task { await save(["stage": s.stage == "TEACH" ? "PRACTICE" : "EVALUATE", "jprIndex": 0, "stepIndex": 0]) }
+                }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(blocked)
+            }
         }
     }
     private func paperEvaluation(_ s:GuidedSession,version:GuidedVersion,step:GuidedStep)->some View {
@@ -1179,13 +1458,27 @@ private struct GuidedSessionView: View {
     }
     private func summary(_ s:GuidedSession) -> some View {
         let attended=s.participants.filter{$0.attended != false}
-        let passed=s.oneOff == true ? 0 : attended.filter{m in s.jprs.allSatisfy{s.outcome($0,m)=="Passed"}}.count
         return VStack(alignment:.leading,spacing:18) {
+            if s.locked {
+                VStack(alignment: .leading, spacing: 10) {
+                    Image(systemName: "checkmark.seal.fill").font(.system(size: 32))
+                    Text("Good work, crew.").font(.title2.bold())
+                    Text("Your training record is saved.").font(.subheadline)
+                    Text(s.oneOff == true ? "Attendance and hours recorded." : s.review.description).font(.caption)
+                }.foregroundStyle(AppTheme.navy).frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                    .background(Color(red: 1, green: 0.93, blue: 0.72), in: RoundedRectangle(cornerRadius: 16))
+            }
             Text("Training summary").font(.title2.bold())
             if s.jprs.contains(where: { v in v.content.steps.contains(where: { step in step.critical && attended.contains(where: { s.observations[s.key(v,step,$0)]?.rating == "NEEDS_WORK" }) }) }) { TrainingSafetyNotice(text: "Critical safety failures were recorded. Review the affected members and instructor feedback. These evaluations do not pass.", critical: true) }
-            if s.oneOff == true { Text("\(attended.count) attended · Attendance and hours only"); if let notes = s.notes { Text(notes) } } else { Text("\(attended.count) attended · \(passed) passed required JPRs · \(attended.count-passed) need additional training or evaluation") }
+            if s.oneOff == true { Text("\(s.review.attended) attended · \(s.review.absent) absent · Attendance and hours only"); if let notes = s.notes { Text(notes) } }
+            else {
+                Text(s.review.description)
+                if s.review.needsWork > 0 { Text("Members needing more practice require a new observed evaluation after practice.").font(.subheadline) }
+                if s.review.incomplete > 0 { Text("Finish unobserved requirements before finalizing, or record an incomplete evaluation and reevaluate in a new session.").font(.subheadline) }
+            }
+            if s.review.absent > 0 { Text("Absent members receive no hours or evaluations. Their outstanding skill requirements remain due.").font(.subheadline) }
             if !s.locked {
-                HStack { TextField("Training minutes",text:$duration).keyboardType(.numberPad).textFieldStyle(.roundedBorder).disabled(busy || pending != nil);Button("Save duration") { Task { await save(["durationMinutes":Int(duration) ?? 0]) } }.disabled(busy || pending != nil || !durationDirty) }
+                HStack { TextField("Training minutes",text:$duration).keyboardType(.numberPad).textFieldStyle(.roundedBorder).disabled(busy || pending != nil);Button("Save duration") { Task { await save(["durationMinutes":Int(duration) ?? 0]) } }.disabled(busy || pending != nil || !durationDirty || !(1...1440).contains(Int(duration) ?? 0)) }
             } else { Text("\(s.durationMinutes) minutes of training") }
             ForEach(s.participants) { member in
                 WorkspacePanel {
@@ -1201,7 +1494,11 @@ private struct GuidedSessionView: View {
                     }
                 }
             }
-            if !s.locked { Button("Save Training") {Task {await save(["finalize":true])}}.buttonStyle(WorkspaceActionStyle()).disabled(blocked);if s.oneOff != true {stages(s)} }
+            if !s.locked {
+                if let start = s.startAt, start > Date() { Text("This session is scheduled in the future. Attendance and results can be finalized after it takes place.").font(.subheadline) }
+                Button("Review & finalize training") { confirmingFinalization = true }.buttonStyle(WorkspaceActionStyle(primary: true)).disabled(blocked || (s.startAt ?? .distantPast) > Date())
+                if s.oneOff != true {stages(s)}
+            }
             else { Text("Training saved. Available for FirstDue CSV export; import has not been confirmed.").foregroundStyle(TrainingVisualStyle.cyan) }
             Text("Attendance records training hours. Unobserved performance stays incomplete.").font(.caption)
         }
@@ -1632,14 +1929,15 @@ struct ScheduledTrainingList: View {
 // A document is a presentation of the existing versioned model, never a second
 // text store. Bindings edit individual values while Codable retains extra fields.
 private enum JPRPaperStyle {
-    static let page=Color(red:1,green:0.996,blue:0.98)
+    static let page=Color.white
     static let ink=Color(red:0.125,green:0.173,blue:0.239)
     static let muted=Color(red:0.36,green:0.40,blue:0.45)
-    static let rule=Color(red:0.82,green:0.83,blue:0.80)
+    static let rule=Color(red:0.86,green:0.89,blue:0.91)
+    static let accent=Color(red:23/255,green:61/255,blue:96/255)
 }
 private struct JPRPaperHeading:View {
     let title:String
-    var body:some View {Text(title.uppercased()).font(.caption.weight(.semibold)).tracking(1).foregroundStyle(JPRPaperStyle.muted).padding(.top,12)}
+    var body:some View {Text(title).font(.title3.weight(.semibold)).foregroundStyle(JPRPaperStyle.accent).padding(.top,12)}
 }
 private struct JPRPaperParagraph:View {
     var title:String? = nil
@@ -1649,8 +1947,8 @@ private struct JPRPaperParagraph:View {
         if !text.isEmpty || editing {
             VStack(alignment:.leading,spacing:7) {
                 if let title {JPRPaperHeading(title:title)}
-                if editing {TextField(title ?? "Text",text:$text,axis:.vertical).textFieldStyle(.plain).font(.system(.body,design:.serif)).accessibilityLabel(title ?? "Document text")}
-                else {Text(text).font(.system(.body,design:.serif)).fixedSize(horizontal:false,vertical:true)}
+                if editing {TextField(title ?? "Text",text:$text,axis:.vertical).textFieldStyle(.plain).font(.system(.body,design:.default)).accessibilityLabel(title ?? "Document text")}
+                else {Text(text).font(.system(.body,design:.default)).fixedSize(horizontal:false,vertical:true)}
             }
         }
     }
@@ -1665,7 +1963,7 @@ private struct JPRPaperStrings:View {
                 JPRPaperHeading(title:title)
                 ForEach(items.indices,id:\.self) { index in
                     HStack(alignment:.top,spacing:8) {
-                        Text("•").font(.system(.body,design:.serif))
+                        Text("•").font(.system(.body,design:.default))
                         JPRPaperParagraph(text:$items[index],editing:editing)
                         if editing {Button {items.remove(at:index)} label:{Image(systemName:"minus.circle")}.accessibilityLabel("Remove \(title) item \(index+1)").frame(minWidth:32,minHeight:44)}
                     }
@@ -1683,8 +1981,8 @@ private struct JPRPaperTeachingStep:View {
         VStack(alignment:.leading,spacing:12) {
             Divider().overlay(JPRPaperStyle.rule)
             JPRPaperHeading(title:"Teaching step \(number)")
-            if editing {TextField("Teaching step title",text:$step.title,axis:.vertical).textFieldStyle(.plain).font(.system(.title3,design:.serif))}
-            else {Text(step.title).font(.system(.title3,design:.serif))}
+            if editing {TextField("Teaching step title",text:$step.title,axis:.vertical).textFieldStyle(.plain).font(.system(.title3,design:.default))}
+            else {Text(step.title).font(.system(.title3,design:.default))}
             JPRPaperParagraph(text:$step.instruction,editing:editing)
             JPRStepMediaEditor(media:$step.media,editing:editing)
             JPRPaperParagraph(title:"Demonstrate",text:$step.demonstration,editing:editing)
@@ -1776,6 +2074,68 @@ private struct JPRPaperEvaluationStep:View {
         }
     }
 }
+// The same reading order as the website: setup, numbered actions, coaching,
+// safety stops, then optional demonstration and source detail. Content is never rewritten.
+private struct JPRInstructorSheet: View {
+    let teaching: GuidedTeaching
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
+                JPRPaperStrings(title: "Get ready", items: .constant(teaching.requiredEquipment), editing: false)
+                JPRPaperStrings(title: "Prerequisites", items: .constant(teaching.prerequisites), editing: false)
+                Text("Show it → Coach it → Reset → Watch an independent attempt.").font(.subheadline.bold())
+            }.padding(16).background(Color(red: 242/255, green: 246/255, blue: 250/255), in: RoundedRectangle(cornerRadius: 8))
+            JPRPaperStrings(title: "Keep it safe", items: .constant(teaching.safetyConsiderations), editing: false)
+            if !teaching.criticalFailures.isEmpty { safety(teaching.criticalFailures, title: "Stop immediately") }
+            JPRPaperHeading(title: "Teach the skill")
+            ForEach(Array(teaching.instructionalSteps.enumerated()), id: \.element.id) { index, step in
+                VStack(alignment: .leading, spacing: 14) {
+                    Divider().overlay(JPRPaperStyle.rule)
+                    HStack(alignment: .top, spacing: 12) {
+                        Text("\(index+1)").font(.body.bold()).foregroundStyle(.white).frame(width: 34, height: 34).background(JPRPaperStyle.accent, in: Circle())
+                        Text(step.title).font(.title3.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                    }
+                    JPRPaperParagraph(text: .constant(step.instruction), editing: false)
+                    JPRStepMediaEditor(media: .constant(step.media), editing: false)
+                    ForEach(step.commonMistakes.indices, id: \.self) { i in
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text("Watch for").font(.subheadline.bold())
+                            Text(step.commonMistakes[i].mistake).fixedSize(horizontal: false, vertical: true)
+                            Text("Correct it").font(.subheadline.bold())
+                            Text(step.commonMistakes[i].correction).fixedSize(horizontal: false, vertical: true)
+                        }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(red: 245/255, green: 248/255, blue: 251/255))
+                            .overlay(alignment: .leading) { Rectangle().fill(Color(red: 198/255, green: 213/255, blue: 227/255)).frame(width: 3) }
+                    }
+                    JPRPaperStrings(title: "Safety for this step", items: .constant(step.safetyConsiderations), editing: false)
+                    if !step.criticalFailures.isEmpty { safety(step.criticalFailures, title: "Stop for this step") }
+                    DisclosureGroup("Show the firefighter · full step detail") {
+                        VStack(alignment: .leading, spacing: 14) {
+                            JPRPaperParagraph(title: "Show the firefighter", text: .constant(step.demonstration), editing: false)
+                            JPRPaperStrings(title: "Watch the firefighter", items: .constant(step.expectedActions), editing: false)
+                        }.padding(.top, 10)
+                    }.font(.subheadline.weight(.semibold)).tint(JPRPaperStyle.accent)
+                }
+            }
+            DisclosureGroup("Preparation and full instructor guidance") {
+                VStack(alignment: .leading, spacing: 14) {
+                    JPRPaperStrings(title: "Performance objectives", items: .constant(teaching.performanceObjectives), editing: false)
+                    JPRPaperStrings(title: "Instructor preparation", items: .constant(teaching.instructorPreparation), editing: false)
+                }.padding(.top, 10)
+            }.tint(JPRPaperStyle.accent)
+            DisclosureGroup("Standards and department references") {
+                ForEach(teaching.references.indices, id: \.self) { i in JPRPaperReference(reference: .constant(teaching.references[i]), editing: false) }
+            }.tint(JPRPaperStyle.accent)
+        }.font(.body)
+    }
+    private func safety(_ items: [String], title: String) -> some View {
+        JPRPaperStrings(title: title, items: .constant(items), editing: false)
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(red: 1, green: 240/255, blue: 240/255))
+            .overlay(alignment: .leading) { Rectangle().fill(Color(red: 181/255, green: 44/255, blue: 48/255)).frame(width: 4) }
+    }
+}
+
 private struct JPRPaperDocument:View {
     @Binding var content:GuidedContent
     let revision:Int
@@ -1789,18 +2149,19 @@ private struct JPRPaperDocument:View {
     private var scenarioIndex:Int? {(content.scenarios ?? []).firstIndex{$0.id==selectedScenario} ?? (content.scenarios?.isEmpty == false ? 0 : nil)}
     var body:some View {
         VStack(alignment:.leading,spacing:18) {
-            HStack(alignment:.top) {
-                VStack(alignment:.leading,spacing:3) {Text("MORRIS TOWNSHIP FIRE DEPARTMENT").font(.caption.weight(.semibold));Text("INSTRUCTOR TRAINING GUIDE").font(.caption2)}
-                Spacer(minLength:8)
-                VStack(alignment:.trailing,spacing:3) {
-                    if editing {TextField("JPR number",text:$content.number).textFieldStyle(.plain).multilineTextAlignment(.trailing)}else{Text(content.number)}
-                    Text("\(status=="APPROVED" ? "Approved" : "Draft") · Revision \(revision)")
-                }.font(.caption2)
+            HStack(alignment: .center, spacing: 14) {
+                Image("MTFDLogo").resizable().scaledToFit().frame(width: 64, height: 64).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Morris Township Fire Department").font(.headline.weight(.bold))
+                    Text("Training Division · Job Performance Requirement").font(.caption)
+                    Text("\(status == "APPROVED" ? "Approved" : "Draft") · Revision \(revision)").font(.caption).foregroundStyle(JPRPaperStyle.muted)
+                    if editing { TextField("JPR number", text: $content.number).textFieldStyle(.plain).font(.caption) }
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
             Rectangle().fill(JPRPaperStyle.ink).frame(height:2)
             JPRPaperHeading(title:stage=="TEACH" ? "Instructor guide" : stage=="PRACTICE" ? "Supervised practice" : "Performance evaluation")
-            if editing {TextField("JPR title",text:$content.title,axis:.vertical).textFieldStyle(.plain).font(.system(.title,design:.serif))}
-            else {Text(content.title).font(.system(.title,design:.serif)).fixedSize(horizontal:false,vertical:true)}
+            if editing {TextField("JPR title",text:$content.title,axis:.vertical).textFieldStyle(.plain).font(.system(.title,design:.default))}
+            else {Text(content.title).font(.system(.title,design:.default,weight:.bold)).fixedSize(horizontal:false,vertical:true)}
             if editing {TextField("Category",text:$content.category).textFieldStyle(.plain).font(.caption)}else{Text(content.category).font(.caption).foregroundStyle(JPRPaperStyle.muted)}
             if status != "APPROVED" {
                 Text("Draft — not approved for training. Verify equipment-specific procedures and department references before approval.").font(.caption).padding(12).frame(maxWidth:.infinity,alignment:.leading).background(Color(red:0.98,green:0.94,blue:0.83))
@@ -1823,9 +2184,19 @@ private struct JPRPaperDocument:View {
         VStack(alignment:.leading,spacing:16) {
             JPRPaperParagraph(title:"Performance objective",text:$content.objective,editing:editing)
             JPRPaperParagraph(title:"Conditions of performance",text:$content.conditions,editing:editing)
-            JPRPaperParagraph(title:"Equipment",text:$content.equipment,editing:editing)
-            JPRPaperParagraph(title:"Instructor guidance",text:$content.guidance,editing:editing)
-            if let teaching=Binding($content.teaching) {JPRPaperTeaching(teaching:teaching,editing:editing)}
+            if editing || content.teaching == nil {
+                JPRPaperParagraph(title:"Equipment",text:$content.equipment,editing:editing)
+                JPRPaperParagraph(title:"Instructor guidance",text:$content.guidance,editing:editing)
+            } else {
+                DisclosureGroup("Course equipment & instructor guidance") {
+                    JPRPaperParagraph(title:"Equipment",text:$content.equipment,editing:false)
+                    JPRPaperParagraph(title:"Instructor guidance",text:$content.guidance,editing:false)
+                }.tint(JPRPaperStyle.accent)
+            }
+            if let teaching=Binding($content.teaching) {
+                if editing { JPRPaperTeaching(teaching:teaching,editing:true) }
+                else { JPRInstructorSheet(teaching: teaching.wrappedValue) }
+            }
             else {
                 ForEach(content.steps.indices,id:\.self) { index in JPRPaperEvaluationStep(step:$content.steps[index],number:index+1,editing:editing) }
                 if editing {Button("+ Add expanded teaching guide"){content.schemaVersion=2;content.teaching=GuidedTeaching()}.frame(minHeight:44)}
@@ -1841,13 +2212,13 @@ private struct JPRPaperDocument:View {
                     ForEach(content.scenarios ?? []) {Text("\($0.title) · \($0.difficulty)").tag($0.id)}
                 }.font(.subheadline)
                 JPRPaperScenario(scenario:scenarios[index],editing:editing)
-            }else {Text("No structured scenarios in this revision. Use the approved JPR for supervised practice.").font(.system(.body,design:.serif))}
+            }else {Text("No structured scenarios in this revision. Use the approved JPR for supervised practice.").font(.system(.body,design:.default))}
             if editing {Button("+ Add scenario"){var next=GuidedScenario();next.id=UUID().uuidString;next.title="New scenario";content.schemaVersion=2;content.scenarios=(content.scenarios ?? [])+[next];selectedScenario=next.id}.frame(minHeight:44)}
         }
     }
     private var rubric:some View {
         VStack(alignment:.leading,spacing:16) {
-            Text("All required and critical steps must pass. Minimum overall score: \(content.passingScore)%.").font(.system(.body,design:.serif))
+            Text("All required and critical steps must pass. Minimum overall score: \(content.passingScore)%.").font(.system(.body,design:.default))
             ForEach(content.steps.indices,id:\.self) { index in JPRPaperEvaluationStep(step:$content.steps[index],number:index+1,editing:editing) }
             if editing {
                 Button("+ Add evaluation requirement"){content.steps.append(GuidedStep(id:UUID().uuidString,title:"New evaluation step"))}.frame(minHeight:44)
@@ -1938,6 +2309,35 @@ private struct JPRCamera: UIViewControllerRepresentable {
         func imagePickerController(_ picker:UIImagePickerController,didFinishPickingMediaWithInfo info:[UIImagePickerController.InfoKey:Any]){completion(info[.originalImage] as? UIImage)}
     }
 }
+// AVAssetExportSession is not Sendable on all supported SDKs. Keep access
+// actor-isolated, including completion and cancellation, instead of sending
+// the session into the cancellation handler's concurrent closure.
+@MainActor private final class JPRVideoExport {
+    private let session: AVAssetExportSession
+
+    init(session: AVAssetExportSession) { self.session = session }
+
+    func run() async throws {
+        try Task.checkCancellation()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                session.exportAsynchronously {
+                    Task { @MainActor in
+                        if self.session.status == .completed {
+                            continuation.resume()
+                        } else {
+                            continuation.resume(throwing: self.session.error ?? CancellationError())
+                        }
+                    }
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in self.session.cancelExport() }
+        }
+        try Task.checkCancellation()
+    }
+}
+
 private struct JPRStepMediaEditor:View {
     @Binding var media:[JPRMedia]
     let editing:Bool
@@ -2011,7 +2411,7 @@ private struct JPRStepMediaEditor:View {
                     guard duration.seconds.isFinite,duration.seconds<=180 else{throw APIClient.APIError.unknown("Choose a short instructional clip up to three minutes.")}
                     guard let export=AVAssetExportSession(asset:asset,presetName:AVAssetExportPreset1280x720) else{throw APIClient.APIError.unknown("Unable to prepare video.")}
                     export.outputURL=file;export.outputFileType = .mp4;export.shouldOptimizeForNetworkUse=true
-                    try await withTaskCancellationHandler(operation:{try await withCheckedThrowingContinuation{(continuation:CheckedContinuation<Void,Error>) in export.exportAsynchronously{if export.status == .completed{continuation.resume()}else{continuation.resume(throwing:export.error ?? CancellationError())}}}},onCancel:{export.cancelExport()})
+                    try await JPRVideoExport(session: export).run()
                 }else{
                     guard let source=CGImageSourceCreateWithURL(picked.url as CFURL,nil),let thumbnail=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:1600] as CFDictionary),let bytes=UIImage(cgImage:thumbnail).jpegData(compressionQuality:0.85) else{throw APIClient.APIError.unknown("Unable to prepare photograph. Choose JPEG or PNG.")};try bytes.write(to:file)
                 }
@@ -2025,10 +2425,10 @@ private struct JPRMemberPaper:View {
     var body:some View {
         DisclosureGroup("\(document.content.number) · \(document.content.title) · Revision \(document.revision)"){
             VStack(alignment:.leading,spacing:16){
-                Text(document.content.objective).font(.system(.body,design:.serif));if let conditions=document.content.conditions,!conditions.isEmpty{Text(conditions).font(.subheadline)};Text(document.content.equipment).font(.subheadline)
+                Text(document.content.objective).font(.system(.body,design:.default));if let conditions=document.content.conditions,!conditions.isEmpty{Text(conditions).font(.subheadline)};Text(document.content.equipment).font(.subheadline)
                 ForEach((document.content.performanceObjectives ?? [])+(document.content.prerequisites ?? [])+(document.content.requiredEquipment ?? [])+(document.content.safetyConsiderations ?? []),id:\.self){Text($0).font(.subheadline)}
                 ForEach(document.content.steps){step in
-                    Text(step.title).font(.headline);Text(step.instruction).font(.system(.body,design:.serif));Text(step.demonstration).font(.system(.body,design:.serif));ForEach(step.expectedActions,id:\.self){Text($0).font(.subheadline)};ForEach(step.safetyConsiderations,id:\.self){Text("Safety: "+$0).font(.subheadline)};JPRMediaGallery(media:step.media)
+                    Text(step.title).font(.headline);Text(step.instruction).font(.system(.body,design:.default));Text(step.demonstration).font(.system(.body,design:.default));ForEach(step.expectedActions,id:\.self){Text($0).font(.subheadline)};ForEach(step.safetyConsiderations,id:\.self){Text("Safety: "+$0).font(.subheadline)};JPRMediaGallery(media:step.media)
                 }
             }.padding(18).background(JPRPaperStyle.page).foregroundStyle(JPRPaperStyle.ink).environment(\.jprMediaVersion,document.id)
         }.padding(16).background(Color.white.opacity(0.07),in:RoundedRectangle(cornerRadius:16))
@@ -2125,15 +2525,17 @@ private struct AnnualTrainingSkillsView: View {
             }
             if !pending.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack { Text("Training to conduct or document").font(.headline); Spacer(); if home != nil { Button("Schedule", action: onSchedule).font(.caption) } }
-                    ForEach(Array(pending.prefix(3))) { session in
+                    HStack { Text(home == nil ? "Your scheduled training" : "Training to conduct or document · \(pending.count)").font(.headline); Spacer(); if home != nil { Button("Schedule", action: onSchedule).font(.caption) } }
+                    ForEach(pending) { session in
                         HStack(alignment: .top, spacing: 12) {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(session.title).font(.subheadline.bold())
                                 Text(session.status == "IN_PROGRESS" ? "Documentation outstanding" : session.startAt?.formatted(date: .abbreviated, time: .shortened) ?? "Scheduled").font(.caption).foregroundStyle(.secondary)
+                                if let location = session.location, !location.isEmpty { Text(location).font(.caption).foregroundStyle(.secondary) }
+                                Text("\(session.durationMinutes) minutes").font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue" : "Conduct") { GuidedSessionView(id: session.id) }.buttonStyle(WorkspaceActionStyle()) }
+                            if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue" : "Conduct") { GuidedSessionView(id: session.id).onDisappear { Task { await load() } } }.buttonStyle(WorkspaceActionStyle()) }
                         }.padding(.vertical,6)
                     }
                 }.padding(.top,12)
@@ -2152,19 +2554,28 @@ private struct AnnualTrainingSkillsView: View {
                     Text(first.title).font(.headline).fixedSize(horizontal: false, vertical: true)
                     Text("\(done) / \(target) completions · Revision \(first.revision)").font(.caption).foregroundStyle(.secondary)
                     if home != nil { Text("\(row.filter { $0.completed >= $0.required }.count) / \(row.count) members complete").font(.caption).foregroundStyle(.secondary) }
+                    if let due = row.filter({ $0.completed < $0.required }).compactMap(\.dueAt).min() {
+                        Text("Due \(due.formatted(date: .abbreviated, time: .omitted))" + (row.contains { $0.isOverdue() } ? " · Overdue" : "")).font(.caption).foregroundStyle(row.contains { $0.isOverdue() } ? TrainingVisualStyle.orange : .secondary)
+                    }
+                    if home == nil {
+                        Text(first.nextStep).font(.subheadline.bold()).foregroundStyle(first.completed >= first.required ? TrainingVisualStyle.mint : TrainingVisualStyle.orange)
+                        if let latest = first.latestResult { Text("Latest result: \(latest.label)").font(.caption) }
+                    }
                 }
             }
+            if home == nil && done < target { Text("Arrange the next practice or observed evaluation with your instructor. Attendance alone does not complete this skill.").font(.subheadline).foregroundStyle(.secondary) }
             if let session = sessions.first {
-                if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue & document" : "Conduct") { GuidedSessionView(id: session.id) }.buttonStyle(WorkspaceActionStyle(primary: true)) }
+                if home != nil { NavigationLink(session.status == "IN_PROGRESS" ? "Continue & document" : "Conduct") { GuidedSessionView(id: session.id).onDisappear { Task { await load() } } }.buttonStyle(WorkspaceActionStyle(primary: true)) }
                 if let date = session.startAt { Text("Scheduled \(date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
             } else if home != nil && done < target { Button("Plan") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
             DisclosureGroup(home == nil ? "Results" : "Members & results") {
                 ForEach(row) { requirement in
                     VStack(alignment: .leading, spacing: 6) {
                         Text("\(requirement.member) · \(min(requirement.completed,requirement.required)) / \(requirement.required)")
+                        Text(requirement.nextStep).font(.caption.bold())
                         if let due = requirement.dueAt { Text("Due \(due.formatted(date: .abbreviated, time: .omitted))").font(.caption) }
                         if requirement.history.isEmpty { Text("No locked evaluations in this period.").font(.caption) }
-                        ForEach(requirement.history) { item in Text("\(item.outcome) · \(item.evaluator)" + (item.completedAt.map { " · " + $0.formatted(date: .abbreviated, time: .omitted) } ?? "")).font(.caption) }
+                        ForEach(requirement.history) { item in Text("\(item.label) · \(item.evaluator)" + (item.completedAt.map { " · " + $0.formatted(date: .abbreviated, time: .omitted) } ?? "")).font(.caption) }
                     }.padding(.vertical,6)
                 }
                 if home != nil { Button("Plan another session") { planning = first }.buttonStyle(WorkspaceActionStyle()) }
@@ -2178,7 +2589,7 @@ private struct AnnualTrainingSkillsView: View {
             let response: GuidedSkillsResponse = try await APIClient.shared.trainingWorkspace("/skills?year=\(requestedYear)" + (home == nil ? "" : "&managed=1"))
             guard !Task.isCancelled, requestedYear == year else { return }
             data = response; error = nil
-        } catch { if !APIClient.isRequestCancellation(error) { self.error = error.localizedDescription } }
+        } catch { if !APIClient.isRequestCancellation(error), requestedYear == year { self.error = error.localizedDescription } }
     }
     @MainActor private func loadDuty() async {
         loadingDuty = true; defer { loadingDuty = false }
@@ -2368,5 +2779,350 @@ private struct ManageAnnualTrainingProgramView: View {
         if !completed.isEmpty { notice = "\(completed.count) skills assigned to \(members.count) members. Return to Annual Training to plan sessions." }
         if !failures.isEmpty { error = failures.joined(separator: "\n") }
         await load()
+    }
+}
+
+private struct QuickTrainingBuilder: View {
+    let home: GuidedHome
+    var initialCourseId: String? = nil
+    var initialScheduled = false
+    let onCancel: () -> Void
+    let onStarted: (String) -> Void
+    let onScheduled: () -> Void
+    @State private var step = 0
+    @State private var custom = false
+    @State private var useJprs = true
+    @State private var title = ""
+    @State private var plan = TrainingSessionPlan()
+    @State private var notes = ""
+    @State private var courseId = ""
+    @State private var versions = Set<String>()
+    @State private var query = ""
+    @State private var selected = Set<String>()
+    @State private var memberQuery = ""
+    @State private var minutes = 60
+    @State private var location = ""
+    @State private var scheduled = false
+    @State private var date = Date()
+    @State private var rosterLoaded = false
+    @State private var busy = false
+    @State private var error: String?
+    @State private var notice = ""
+    @State private var templates: [SavedTrainingDrill] = []
+    @State private var templateId: String?
+    @State private var requestId = UUID().uuidString
+    @State private var confirmingCancel = false
+    @State private var initialized = false
+    @Environment(\.dynamicTypeSize) private var dynamicType
+    private var topic: GuidedTopic? { home.topics.first { $0.id == courseId } }
+    private var chosen: [GuidedVersion] { topic?.latestJprs.filter { versions.contains($0.id) } ?? [] }
+    private var storageKey: String? { home.viewerId.map { "mtfd.training-drills.v1.\($0)" } }
+    private var validPlan: Bool {
+        (!custom || title.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 && title.utf16.count <= 180) &&
+        (!useJprs || topic != nil && !chosen.isEmpty && chosen.count <= 20) && plan.valid && notes.utf16.count <= 5000 &&
+        (5...1440).contains(minutes) && location.utf16.count <= 300 && (!scheduled || date > Date())
+    }
+    private var heading: String { ["Start your training",custom ? "Build your session plan" : "Choose approved JPRs","Bring your crew","Ready to run?"][step] }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("On-the-fly training", systemImage: "bolt.fill").font(.caption.bold()).foregroundStyle(AppTheme.gold)
+                Spacer()
+                Button("Cancel") { if step == 0 { onCancel() } else { confirmingCancel = true } }.frame(minHeight: 44)
+            }
+            Text(heading).font(.title2.bold()).accessibilityAddTraits(.isHeader)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) { steps }
+                VStack(alignment: .leading, spacing: 6) { steps }
+            }
+            if let error { WorkspaceNotice(message: error, warning: true) }
+            if !notice.isEmpty { Text(notice).font(.caption).foregroundStyle(AppTheme.gold).accessibilityAddTraits(.updatesFrequently) }
+            QuickTrainingColumns(allowsColumns: !dynamicType.isAccessibilitySize) {
+                VStack(alignment: .leading, spacing: 16) {
+                    if step == 0 { sourceChoices }
+                    else if step == 1 { planEditor }
+                    else if step == 2 { crewEditor }
+                    else { review }
+                    if step > 0 { actions }
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                if step > 0 { summary.frame(maxWidth: .infinity, alignment: .leading) }
+            }
+        }.foregroundStyle(.white).disabled(busy)
+        .task { initialize() }
+        .confirmationDialog("Discard this unsaved session setup?", isPresented: $confirmingCancel, titleVisibility: .visible) {
+            Button("Discard setup", role: .destructive) { onCancel() }
+            Button("Keep editing", role: .cancel) { }
+        } message: { Text("Saved reusable drills will remain.") }
+    }
+    @ViewBuilder private var steps: some View {
+        ForEach(Array(["Choose","Plan","Crew","Review"].enumerated()), id: \.offset) { index, label in
+            Button { step = index } label: { Text("\(index + 1). \(label)") }
+                .buttonStyle(CourseHomeButtonStyle(primary: index == step, compact: true)).disabled(index > step)
+                .accessibilityAddTraits(index == step ? .isSelected : [])
+        }
+    }
+    private var sourceChoices: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Start with approved skills or build a session around your own topic.").font(.subheadline).foregroundStyle(.white.opacity(0.75))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: dynamicType.isAccessibilitySize ? 1000 : 300), alignment: .top)], alignment: .leading, spacing: 16) {
+            Button { custom = false; useJprs = true; step = 1 } label: {
+                QuickTrainingChoice(title: "Choose approved JPRs", detail: "Find a course, select the skills, and teach, practice, and evaluate.", symbol: "checkmark.seal.fill")
+            }.buttonStyle(.plain)
+            Button { custom = true; useJprs = false; step = 1 } label: {
+                QuickTrainingChoice(title: "Create your own training", detail: "Use an idea or a blank plan. Add approved JPRs when they fit.", symbol: "square.and.pencil")
+            }.buttonStyle(.plain)
+            }
+            if !templates.isEmpty {
+                Text("Your saved drills").font(.headline)
+                Text("Reusable plans on this device").font(.caption).foregroundStyle(.white.opacity(0.65))
+                ForEach(templates) { drill in
+                    HStack {
+                        Button { load(drill) } label: { WorkspaceToolRow(title: drill.title, subtitle: "\(drill.durationMinutes) min · \(drill.jprIds.count) skill references", icon: "bookmark.fill") }.buttonStyle(.plain)
+                        Button { remove(drill) } label: { Image(systemName: "trash").frame(width: 44, height: 44) }.accessibilityLabel("Remove saved drill \(drill.title)")
+                    }
+                }
+            }
+        }
+    }
+    private var planEditor: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if custom {
+                input("Training topic", text: $title)
+                if let ideas = home.starterIdeas, !ideas.isEmpty {
+                    Text("Need a starting point?").font(.headline)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], alignment: .leading, spacing: 8) {
+                        ForEach(ideas) { idea in
+                            Button { title = idea.title } label: { Label(idea.title, systemImage: idea.symbol).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(CourseHomeButtonStyle(compact: true))
+                        }
+                    }
+                }
+                Button { Task { await buildOutline() } } label: { Label("Help me build this drill", systemImage: "wand.and.stars") }.buttonStyle(CourseHomeButtonStyle(primary: true)).disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).count < 2 || title.utf16.count > 180)
+                Text("Adds starter prompts to empty fields. Edit before use and follow department-approved procedures.").font(.caption).foregroundStyle(.white.opacity(0.65))
+                input("What should the crew learn?", text: $plan.goal, multiline: true)
+                input("Equipment & preparation", text: $plan.equipment, multiline: true)
+                input("Activities", text: $plan.activities, multiline: true)
+                input("Debrief", text: $plan.debrief, multiline: true)
+                Toggle("Add approved JPRs", isOn: $useJprs).tint(AppTheme.gold)
+            }
+            if useJprs { jprPicker }
+            input("Instructor notes", text: $notes, multiline: true)
+            if !plan.valid || notes.utf16.count > 5000 || title.utf16.count > 180 { Text("Some text is too long. Shorten the title (180), goal/debrief (1,000), preparation (1,500), activities (2,500), or notes (5,000 characters).").font(.caption).foregroundStyle(.orange) }
+        }
+    }
+    private var jprPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Course", selection: Binding(get: { courseId }, set: { value in
+                courseId = value; versions = []; query = ""
+                if !custom { minutes = home.topics.first { $0.id == value }?.durationMinutes ?? 60 }
+            })) {
+                Text("Choose a course").tag("")
+                ForEach(home.topics) { topic in Text(topic.title).tag(topic.id) }
+            }
+            Text("Choose up to 20 approved JPRs from one course.").font(.caption).foregroundStyle(.white.opacity(0.65))
+            input("Search JPR title or number", text: $query)
+            if let topic {
+                if topic.latestJprs.count <= 20 { Button("Select all \(topic.latestJprs.count) JPRs") { versions = Set(topic.latestJprs.map(\.id)) }.buttonStyle(CourseHomeButtonStyle(compact: true)) }
+                Text("\(chosen.count) JPRs selected").font(.caption.bold()).foregroundStyle(AppTheme.gold)
+                ForEach(topic.latestJprs.filter { query.isEmpty || "\($0.content.number) \($0.content.title)".localizedCaseInsensitiveContains(query) }) { version in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Toggle(isOn: Binding(get: { versions.contains(version.id) }, set: { value in if value { if chosen.count < 20 { versions.insert(version.id) } } else { versions.remove(version.id) } })) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(version.content.number) · \(version.content.title)").font(.subheadline.weight(.semibold))
+                                Text("Approved revision \(version.revision)").font(.caption).foregroundStyle(.green)
+                            }
+                        }.tint(AppTheme.gold).disabled(!versions.contains(version.id) && chosen.count >= 20)
+                        NavigationLink("View approved sheet") { ScrollView { JPRPaperDocument(content: .constant(version.content), revision: version.revision, status: "APPROVED", stage: "TEACH", editing: false, selectedScenario: .constant(""), versionId: version.id).padding(16) }.trainingDestinationNavigation() }
+                            .font(.caption.weight(.semibold)).frame(minHeight: 44)
+                    }.workspaceCard()
+                }
+            } else if home.topics.isEmpty { Text("No published courses with approved JPRs are available yet. You can create a custom attendance-only session.").font(.subheadline).foregroundStyle(.white.opacity(0.75)) }
+        }
+    }
+    private var crewEditor: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker("When", selection: $scheduled) { Text("Run now").tag(false); Text("Schedule").tag(true) }.pickerStyle(.segmented)
+            DatePicker("Session time", selection: $date).onChange(of: date) { _, _ in if rosterLoaded { selected = []; rosterLoaded = false; notice = "Time changed. Reload the roster or choose members again." } }
+            input("Location", text: $location)
+            Stepper("\(minutes) minutes", value: $minutes, in: 5...1440, step: 5)
+            Text("Participants · \(selected.count) selected").font(.headline)
+            Button("Load FirstDue roster at session time") { Task { await loadRoster() } }.buttonStyle(CourseHomeButtonStyle())
+            Menu("Add a department group") {
+                ForEach(home.groups, id: \.name) { group in
+                    Button(group.name) {
+                        let value = selected.union(group.userIds)
+                        if value.count <= 100 { selected = value } else { error = "Choose no more than 100 participants." }
+                    }
+                }
+            }.frame(minHeight: 44)
+            input("Find a firefighter", text: $memberQuery)
+            ForEach(home.members.filter { memberQuery.isEmpty ? selected.contains($0.id) : $0.name.localizedCaseInsensitiveContains(memberQuery) }) { member in
+                Toggle(member.name, isOn: Binding(get: { selected.contains(member.id) }, set: { value in if value { selected.insert(member.id) } else { selected.remove(member.id) } }))
+                    .tint(AppTheme.gold).frame(minHeight: 44).disabled(!selected.contains(member.id) && selected.count >= 100)
+            }
+            if selected.isEmpty && memberQuery.isEmpty { Text("Load the roster, add a group, or search for individual firefighters.").font(.caption).foregroundStyle(.white.opacity(0.65)) }
+            if scheduled && date <= Date() { Text("Choose a future date for scheduled training.").font(.caption).foregroundStyle(.orange) }
+        }
+    }
+    private var review: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(custom ? title : topic?.title ?? "Training").font(.title3.bold())
+            Text(useJprs ? "Teach → Practice → Evaluate" : "Attendance and hours only").font(.subheadline).foregroundStyle(AppTheme.gold)
+            TrainingSessionPlanSection(plan: plan, notes: notes)
+            if useJprs {
+                ForEach(chosen) { version in Text("\(version.content.number) · \(version.content.title) · Rev \(version.revision)").font(.subheadline) }
+            }
+            DisclosureGroup("Review \(selected.count) participants") {
+                ForEach(home.members.filter { selected.contains($0.id) }) { Text($0.name).font(.subheadline).padding(.vertical, 4) }
+            }
+            Text(scheduled ? "Scheduling awards no credit. Begin the saved session when training takes place." : "Starting awards no credit. Confirm actual attendance, duration, and applicable skill results before finalizing.").font(.caption).foregroundStyle(.white.opacity(0.7))
+        }
+    }
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("YOUR SESSION").font(.caption.bold()).tracking(1.5).foregroundStyle(AppTheme.gold)
+            Text(custom ? (title.isEmpty ? "Your custom topic" : title) : topic?.title ?? "Choose a skill").font(.headline)
+            summaryLine("Source", custom ? (useJprs ? "Custom plan + JPRs" : "Custom topic") : "Approved JPRs")
+            summaryLine("Skills", useJprs ? "\(chosen.count) selected" : "Attendance only")
+            summaryLine("Crew", "\(selected.count) selected")
+            summaryLine("Duration", "\(minutes) min")
+            summaryLine("When", scheduled ? date.formatted(date: .abbreviated, time: .shortened) : "Run now")
+            summaryLine("Location", location.isEmpty ? "Not entered" : location)
+            if step > 0 {
+                Button { saveTemplate() } label: { Label("Save reusable drill", systemImage: "bookmark.fill") }.buttonStyle(CourseHomeButtonStyle()).disabled(!validPlan || storageKey == nil)
+            }
+            Text("Reusable drills stay on this device for your account. Each session starts with a fresh roster and results.").font(.caption).foregroundStyle(.white.opacity(0.65))
+        }.padding(16).background(CourseHomeStyle.row, in: RoundedRectangle(cornerRadius: 16))
+    }
+    private var actions: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) { actionButtons }
+            VStack(alignment: .leading, spacing: 10) { actionButtons }
+        }.padding(.top, 8)
+    }
+    @ViewBuilder private var actionButtons: some View {
+        Button("← Back") { step -= 1 }.buttonStyle(CourseHomeButtonStyle())
+        if step < 3 {
+            Button(step == 1 ? "Choose the crew →" : "Review session →") { error = nil; step += 1 }.buttonStyle(CourseHomeButtonStyle(primary: true))
+                .disabled(!validPlan || step == 2 && selected.isEmpty)
+        } else {
+            Button(scheduled ? "Schedule training →" : "Start training →") { Task { await start() } }.buttonStyle(CourseHomeButtonStyle(primary: true)).disabled(!validPlan || selected.isEmpty)
+        }
+    }
+    private func input(_ label: String, text: Binding<String>, multiline: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+            if multiline { TextField(label, text: text, axis: .vertical).lineLimit(2...8).workspaceInput() }
+            else { TextField(label, text: text).workspaceInput() }
+        }
+    }
+    private func summaryLine(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top) { Text(label).foregroundStyle(.white.opacity(0.65)); Spacer(); Text(value).multilineTextAlignment(.trailing) }.font(.caption)
+    }
+    private func initialize() {
+        guard !initialized else { return }; initialized = true; scheduled = initialScheduled
+        if let initialCourseId, let t = home.topics.first(where: { $0.id == initialCourseId }) { courseId = t.id; versions = t.latestJprs.count <= 20 ? Set(t.latestJprs.map(\.id)) : []; minutes = t.durationMinutes; step = 1 }
+        if let key = storageKey, let data = UserDefaults.standard.data(forKey: key) {
+            do { let saved = try JSONDecoder().decode([SavedTrainingDrill].self, from: data); guard saved.count <= 20 && saved.allSatisfy(\.valid) else { throw CocoaError(.coderReadCorrupt) }; templates = saved }
+            catch { notice = "Saved drills could not be read. You can still build a new session." }
+        }
+    }
+    private func load(_ drill: SavedTrainingDrill) {
+        let t = home.topics.first { $0.id == drill.courseId }
+        let matches = t?.latestJprs.filter { drill.jprIds.contains($0.jprId ?? $0.id) } ?? []
+        custom = drill.custom; useJprs = !drill.jprIds.isEmpty; courseId = t?.id ?? ""; versions = Set(matches.map(\.id))
+        title = drill.title; plan = drill.plan; notes = drill.notes; minutes = drill.durationMinutes; selected = []; templateId = drill.id; requestId = UUID().uuidString; step = 1
+        notice = matches.count == drill.jprIds.count ? "Review your plan and the current approved JPR revisions before continuing." : "Some saved skills are unavailable. Choose current approved JPRs before continuing."
+    }
+    private func saveTemplate() {
+        guard validPlan, let key = storageKey else { return }
+        guard templates.count < 20 || templates.contains(where: { $0.id == templateId }) else { error = "You have 20 saved drills. Remove a drill or update an existing one before saving another."; return }
+        let drill = SavedTrainingDrill(id: templateId ?? UUID().uuidString, title: custom ? title.trimmingCharacters(in: .whitespacesAndNewlines) : topic?.title ?? "", custom: custom, courseId: useJprs ? courseId : "", jprIds: useJprs ? chosen.map { $0.jprId ?? $0.id } : [], plan: plan, notes: notes, durationMinutes: minutes)
+        let values = [drill] + templates.filter { $0.id != drill.id }
+        do { guard values.allSatisfy(\.valid) else { throw CocoaError(.coderInvalidValue) }; let data = try JSONEncoder().encode(values); UserDefaults.standard.set(data, forKey: key); templates = values; templateId = drill.id; notice = "Reusable drill saved on this device. Rosters and results are not copied." }
+        catch { self.error = "The drill could not be saved. Your current plan is still here." }
+    }
+    private func remove(_ drill: SavedTrainingDrill) {
+        guard let key = storageKey else { return }
+        let values = templates.filter { $0.id != drill.id }
+        do { UserDefaults.standard.set(try JSONEncoder().encode(values), forKey: key); templates = values }
+        catch { self.error = "The saved drill could not be removed." }
+    }
+    @MainActor private func buildOutline() async {
+        busy = true; defer { busy = false }; error = nil
+        do { let response: TrainingOutlineResponse = try await APIClient.shared.trainingWorkspace("/guided/outline", body: JSONSerialization.data(withJSONObject: ["title": title])); plan = plan.fillingEmptyFields(with: response.plan); notice = "Starter prompts added to empty fields. Edit the outline before use." }
+        catch { self.error = error.localizedDescription }
+    }
+    @MainActor private func loadRoster() async {
+        busy = true; defer { busy = false }; error = nil
+        do { let response: GuidedDuty = try await APIClient.shared.trainingWorkspace("/guided?onDuty=1&at=\(ISO8601DateFormatter().string(from: date).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"); let ids = Set(response.userIds).intersection(home.members.map(\.id)); guard ids.count <= 100 else { throw NSError(domain: "Training", code: 1, userInfo: [NSLocalizedDescriptionKey:"Choose a roster of no more than 100 participants."]) }; selected = ids; rosterLoaded = true; notice = ids.isEmpty ? "No eligible roster returned. Choose a group or individual firefighters." : "Roster loaded. Check coverage and absences." }
+        catch { self.error = error.localizedDescription }
+    }
+    @MainActor private func start() async {
+        guard validPlan, !selected.isEmpty, selected.count <= 100 else { return }
+        busy = true; defer { busy = false }; error = nil
+        let body = QuickTrainingRequest(requestId: requestId, oneOff: !useJprs, title: custom ? title.trimmingCharacters(in: .whitespacesAndNewlines) : nil, courseId: useJprs ? courseId : nil, versionIds: useJprs ? chosen.map(\.id) : [], plan: plan, notes: notes, durationMinutes: minutes, location: location, scheduled: scheduled, startAt: ISO8601DateFormatter().string(from: date), participantIds: selected.sorted())
+        do { let response: GuidedMutation = try await APIClient.shared.trainingWorkspace("/guided", body: JSONEncoder().encode(body)); if scheduled { onScheduled() } else if let id = response.sessionId { onStarted(id) } else { error = "The server did not confirm a saved session. Retry before leaving." } }
+        catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct QuickTrainingChoice: View {
+    let title: String
+    let detail: String
+    let symbol: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol).font(.title2).frame(width: 32)
+            VStack(alignment: .leading, spacing: 7) { Text(title).font(.headline); Text(detail).font(.subheadline).opacity(0.75).fixedSize(horizontal: false, vertical: true) }
+            Spacer(minLength: 0); Image(systemName: "arrow.right")
+        }.foregroundStyle(AppTheme.navy).padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .background(LinearGradient(colors: [Color(red: 1, green: 0.94, blue: 0.77), Color(red: 1, green: 0.85, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+private struct TrainingSessionPlanSection: View {
+    let plan: TrainingSessionPlan?
+    var notes = ""
+    var body: some View {
+        if plan?.isEmpty == false || !notes.isEmpty {
+            DisclosureGroup("Session plan & instructor notes") {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let plan {
+                        section("Learning goal", plan.goal); section("Equipment & preparation", plan.equipment)
+                        section("Activities", plan.activities); section("Debrief", plan.debrief)
+                    }
+                    section("Instructor notes", notes)
+                }.padding(.vertical, 10)
+            }.font(.subheadline).tint(AppTheme.gold)
+        }
+    }
+    @ViewBuilder private func section(_ title: String, _ text: String) -> some View {
+        if !text.isEmpty { Text(title).font(.subheadline.bold()); Text(text).font(.subheadline).foregroundStyle(.white.opacity(0.75)) }
+    }
+}
+private struct QuickTrainingColumns: Layout {
+    var allowsColumns = true
+    private func wide(_ width: CGFloat) -> Bool { allowsColumns && width >= 760 }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 360
+        if wide(width), subviews.count == 2 {
+            let left = (width - 20) * 0.62
+            let heights = [subviews[0].sizeThatFits(.init(width: left, height: nil)).height,subviews[1].sizeThatFits(.init(width: width - left - 20, height: nil)).height]
+            return .init(width: width, height: heights.max() ?? 0)
+        }
+        let height = subviews.reduce(CGFloat(0)) { $0 + $1.sizeThatFits(.init(width: width, height: nil)).height }
+        return .init(width: width, height: height + CGFloat(max(0, subviews.count - 1)) * 20)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        if wide(bounds.width), subviews.count == 2 {
+            let left = (bounds.width - 20) * 0.62
+            subviews[0].place(at: bounds.origin, anchor: .topLeading, proposal: .init(width: left, height: nil))
+            subviews[1].place(at: .init(x: bounds.minX + left + 20, y: bounds.minY), anchor: .topLeading, proposal: .init(width: bounds.width - left - 20, height: nil))
+        } else {
+            var y = bounds.minY
+            for view in subviews {
+                let size = view.sizeThatFits(.init(width: bounds.width, height: nil))
+                view.place(at: .init(x: bounds.minX, y: y), anchor: .topLeading, proposal: .init(width: bounds.width, height: nil)); y += size.height + 20
+            }
+        }
     }
 }

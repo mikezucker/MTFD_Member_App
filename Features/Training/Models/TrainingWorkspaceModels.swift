@@ -28,6 +28,9 @@ struct TrainingWorkspaceManagedCourse: Decodable, Identifiable {
     let delivery: String
 }
 struct TrainingWorkspaceCourse: Decodable, Identifiable {
+    var progressPercent: Int? = nil
+    var completedItemCount: Int? = nil
+    var totalItemCount: Int? = nil
     let id: String
     let title: String
     let description: String?
@@ -40,8 +43,12 @@ struct TrainingWorkspaceCourse: Decodable, Identifiable {
     let durationMinutes: Int?
     let creditedMinutes: Int
     let pendingForm: Bool
+    var displayProgressPercent: Int? {
+        if progressStatus == "COMPLETED" { return 100 }
+        return progressPercent.map { min(99, max(0, $0)) }
+    }
     var legacyItem: MobileTrainingItem {
-        MobileTrainingItem(id: id, courseId: id, title: title, description: description, status: "PUBLISHED", dueAt: dueAt, isOverdue: dueAt.map { $0 < Date() && progressStatus != "COMPLETED" } ?? false, assignedAt: nil, assignmentType: "USER", progressStatus: progressStatus, progressPercent: progressStatus == "COMPLETED" ? 100 : 0, completedAt: completedAt, moduleCount: 0, lessonCount: 0, objectiveCount: 0, practicalObjectiveCount: 0)
+        MobileTrainingItem(id: id, courseId: id, title: title, description: description, status: "PUBLISHED", dueAt: dueAt, isOverdue: dueAt.map { $0 < Date() && progressStatus != "COMPLETED" } ?? false, assignedAt: nil, assignmentType: "USER", progressStatus: progressStatus, progressPercent: displayProgressPercent ?? 0, completedAt: completedAt, moduleCount: 0, lessonCount: 0, objectiveCount: 0, practicalObjectiveCount: 0)
     }
 }
 struct TrainingWorkspaceDetail: Decodable {
@@ -453,10 +460,11 @@ extension GuidedTopic {
 struct GuidedMember: Decodable, Identifiable { let id: String; let name: String; let attended: Bool? }
 struct GuidedGroup: Decodable { let name: String; let userIds: [String] }
 struct GuidedHistory: Decodable, Identifiable { let startAt: Date?; let location: String?; let oneOff: Bool?; let id: String; let title: String; let status: String; let stage: String; let updatedAt: Date; let participantCount: Int }
-struct GuidedHome: Decodable { var scheduledTraining: [ScheduledTrainingItem]? = nil; var pendingCourses: [GuidedPendingCourse]? = nil; let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
+struct GuidedHome: Decodable { var viewerId: String? = nil; var starterIdeas: [TrainingStarterIdea]? = nil; var scheduledTraining: [ScheduledTrainingItem]? = nil; var pendingCourses: [GuidedPendingCourse]? = nil; let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
 struct GuidedObservation: Decodable { let rating: String; let comment: String; let observedAt: String? }
 struct GuidedSessionResponse: Decodable { let session: GuidedSession }
 struct GuidedSession: Decodable, Identifiable {
+    var plan: TrainingSessionPlan? = nil
     let id: String; let title: String; let courseId: String; let status: String; let stage: String; let jprIndex: Int; let stepIndex: Int; let durationMinutes: Int; let revision: Int
     let participants: [GuidedMember]; let jprs: [GuidedVersion]; let observations: [String: GuidedObservation]
     var selectedScenarios: [String:String]? = nil
@@ -465,14 +473,36 @@ struct GuidedSession: Decodable, Identifiable {
     var startAt: Date? = nil
     var location: String? = nil
     var locked: Bool { status == "FINALIZED" }
+    var review: GuidedSessionReview {
+        var result = GuidedSessionReview()
+        for member in participants {
+            if member.attended == false { result.absent += 1; continue }
+            result.attended += 1
+            if oneOff == true { continue }
+            let outcomes = jprs.map { outcome($0, member) }
+            if outcomes.contains("Needs additional training") { result.needsWork += 1 }
+            else if outcomes.isEmpty || outcomes.contains("Incomplete") { result.incomplete += 1 }
+            else { result.passed += 1 }
+        }
+        return result
+    }
     func key(_ version: GuidedVersion, _ step: GuidedStep, _ member: GuidedMember) -> String { "\(version.id):\(step.id):\(member.id)" }
     func outcome(_ version: GuidedVersion, _ member: GuidedMember) -> String {
         let steps = version.content.steps
+        guard !steps.isEmpty else { return "Incomplete" }
         if steps.contains(where: { ($0.required || $0.critical) && observations[key(version,$0,member)]?.rating == "NEEDS_WORK" }) { return "Needs additional training" }
         if steps.contains(where: { ($0.required || $0.critical) && (observations[key(version,$0,member)]?.rating ?? "NOT_EVALUATED") == "NOT_EVALUATED" }) { return "Incomplete" }
         let score = Int((100.0 * Double(steps.filter { observations[key(version,$0,member)]?.rating == "PASS" }.count) / Double(steps.count)).rounded())
         return score >= version.content.passingScore ? "Passed" : "Needs additional training"
     }
+}
+struct GuidedSessionReview {
+    var attended = 0
+    var absent = 0
+    var passed = 0
+    var needsWork = 0
+    var incomplete = 0
+    var description: String { "\(attended) attended · \(absent) absent · \(passed) passed all selected JPRs · \(needsWork) need more practice · \(incomplete) need evaluation" }
 }
 struct GuidedMutation: Decodable { let success: Bool; let sessionId: String?; let revision: Int? }
 struct GuidedDuty: Decodable { let userIds: [String] }
@@ -501,9 +531,23 @@ struct GuidedSkillRequirement: Decodable, Identifiable {
  let id: String; let userId: String; let member: String; let versionId: String; let courseId: String; let number: String; let title: String; let revision: Int
  let required: Int; let completed: Int; let percent: Int; let dueAt: Date?; let history: [GuidedSkillHistory]
  var periodYear: Int? = nil
+ var latestResult: GuidedSkillHistory? { history.max { ($0.completedAt ?? .distantPast) < ($1.completedAt ?? .distantPast) } }
+ var nextStep: String {
+    if completed >= required { return "Complete" }
+    if latestResult?.outcome == "FAIL" { return "Practice & reevaluate" }
+    if latestResult?.outcome == "INCOMPLETE" { return "Finish evaluation" }
+    return completed > 0 ? "More repetitions due" : "Evaluation due"
+ }
+ func isOverdue(at now: Date = Date()) -> Bool {
+    guard completed < required, let dueAt else { return false }
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "America/New_York")!
+    return calendar.startOfDay(for: dueAt) < calendar.startOfDay(for: now)
+ }
 }
 struct GuidedSkillHistory: Decodable, Identifiable {
  let id: String; let outcome: String; let completedAt: Date?; let evaluator: String
+ var label: String { outcome == "PASS" ? "Passed" : outcome == "FAIL" ? "Needs additional training" : "Incomplete" }
 }
 
 struct ScheduledTrainingItem: Decodable, Identifiable {
@@ -552,4 +596,49 @@ enum AnnualTrainingBoardSelection {
         if selection.hasPrefix("member:") { return [String(selection.dropFirst(7))] }
         return Set(groups.first { "group:"+$0.name == selection }?.userIds ?? [])
     }
+}
+
+// Shared with the web session-plan contract. Plans do not grant JPR competency.
+struct TrainingSessionPlan: Codable, Equatable {
+    var goal = ""
+    var equipment = ""
+    var activities = ""
+    var debrief = ""
+    var isEmpty: Bool { [goal,equipment,activities,debrief].allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
+    var valid: Bool { goal.utf16.count <= 1000 && equipment.utf16.count <= 1500 && activities.utf16.count <= 2500 && debrief.utf16.count <= 1000 }
+    func fillingEmptyFields(with other: Self) -> Self {
+        var value = self
+        if goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.goal = other.goal }
+        if equipment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.equipment = other.equipment }
+        if activities.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.activities = other.activities }
+        if debrief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.debrief = other.debrief }
+        return value
+    }
+}
+struct TrainingStarterIdea: Decodable, Identifiable { let title: String; let symbol: String; var id: String { title } }
+struct TrainingOutlineResponse: Decodable { let success: Bool; let plan: TrainingSessionPlan }
+struct SavedTrainingDrill: Codable, Identifiable {
+    let id: String
+    let title: String
+    let custom: Bool
+    let courseId: String
+    let jprIds: [String]
+    let plan: TrainingSessionPlan
+    let notes: String
+    let durationMinutes: Int
+    var valid: Bool { !id.isEmpty && id.utf16.count <= 100 && courseId.utf16.count <= 200 && (custom || !jprIds.isEmpty) && (jprIds.isEmpty || !courseId.isEmpty) && jprIds.allSatisfy { !$0.isEmpty && $0.utf16.count <= 200 } && title.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 && title.utf16.count <= 180 && jprIds.count <= 20 && plan.valid && notes.utf16.count <= 5000 && (5...1440).contains(durationMinutes) }
+}
+struct QuickTrainingRequest: Encodable {
+    let requestId: String
+    let oneOff: Bool
+    let title: String?
+    let courseId: String?
+    let versionIds: [String]
+    let plan: TrainingSessionPlan
+    let notes: String
+    let durationMinutes: Int
+    let location: String
+    let scheduled: Bool
+    let startAt: String
+    let participantIds: [String]
 }

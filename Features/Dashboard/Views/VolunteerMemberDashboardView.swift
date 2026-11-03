@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct VolunteerMemberDashboardView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let activeDispatches: [APIClient.ActiveDispatch]
     let volunteerContext: APIClient.VolunteerContext?
     let stationDisplayName: String?
@@ -59,11 +60,15 @@ struct VolunteerMemberDashboardView: View {
                 activeDispatchSection
                 contributionCard
 
-                ForEach(dashboardCards) { card in
-                    dashboardCard(card)
+                DashboardCardGrid(allowsColumns: !dynamicTypeSize.isAccessibilitySize) {
+                    ForEach(dashboardCards) { card in
+                        dashboardCard(card)
+                    }
                 }
             }
+            .frame(maxWidth: 1200, alignment: .topLeading)
             .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .top)
             .padding(.top, 22)
             .padding(.bottom, 120)
         }
@@ -667,7 +672,7 @@ struct VolunteerMemberDashboardView: View {
     }
 
     private var filteredWorkOrders: [DashboardApparatusWorkOrder] {
-        if selectedApparatusName == "All" {
+        if selectedApparatusName == "All" || !apparatusFilterNames.contains(selectedApparatusName) {
             return workOrders
         }
 

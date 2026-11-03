@@ -171,6 +171,8 @@ private func isConfidentMorrisMapItem(_ item: MKMapItem, query: String) -> Bool 
 
 struct DispatchDetailView: View {
     let dispatch: DispatchNotificationPayload
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.dismiss) private var dismiss
 
     @StateObject private var viewModel = DispatchDetailViewModel()
     @State private var refreshTask: Task<Void, Never>?
@@ -230,23 +232,53 @@ struct DispatchDetailView: View {
                     systemImage: "bell.and.waves.left.and.right.fill"
                 )
 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        headerCard
-                        locationCard
-                        arrivalPreviewCard
-                        unitsCard
-                        notesCard
-                        metadataCard
-                        actionButtons
+                GeometryReader { geometry in
+                    ScrollView {
+                        Group {
+                            if geometry.size.width >= 900 && !dynamicTypeSize.isAccessibilitySize {
+                                HStack(alignment: .top, spacing: 20) {
+                                    VStack(spacing: 16) {
+                                        headerCard
+                                        locationCard
+                                        unitsCard
+                                        notesCard
+                                        metadataCard
+                                        actionButtons
+                                    }
+                                    .frame(width: min(420, geometry.size.width * 0.38))
+
+                                    VStack(spacing: 16) {
+                                        incidentMapCard
+                                        arrivalPreviewCard
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                            } else {
+                                VStack(spacing: 16) {
+                                    headerCard
+                                    locationCard
+                                    arrivalPreviewCard
+                                    unitsCard
+                                    notesCard
+                                    metadataCard
+                                    actionButtons
+                                }
+                            }
+                        }
+                        .padding()
+                        .frame(maxWidth: 1400)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding()
                 }
             }
             .background(AppTheme.navy.ignoresSafeArea())
             .navigationTitle("Dispatch")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") { dismiss() }
+                        .foregroundStyle(AppTheme.gold)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task {
@@ -270,6 +302,20 @@ struct DispatchDetailView: View {
                 stopAutoRefresh()
             }
         }
+        .modifier(MemberReadingPresentation())
+    }
+
+    private var incidentMapCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Incident Map", icon: "map.fill")
+            DispatchDetailIncidentMap(address: address, latitude: liveDispatch?.latitude, longitude: liveDispatch?.longitude)
+                .frame(height: 320)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
     }
 
     private var headerCard: some View {
@@ -362,7 +408,7 @@ struct DispatchDetailView: View {
 
     private var arrivalPreviewCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("Arrival Preview", icon: "binoculars.fill")
+            sectionTitle("Arrival Preview · Street View", icon: "binoculars.fill")
 
             DispatchDetailLookAroundPreview(
                 address: address,
@@ -585,6 +631,39 @@ private struct FlowLayout: View {
     }
 }
 
+
+private struct DispatchDetailIncidentMap: View {
+    let address: String
+    let latitude: Double?
+    let longitude: Double?
+    @State private var coordinate: CLLocationCoordinate2D?
+    @State private var position = MapCameraPosition.automatic
+    @State private var loading = false
+
+    var body: some View {
+        Group {
+            if let coordinate {
+                Map(position: $position) {
+                    Marker("Incident", coordinate: coordinate).tint(.red)
+                }
+                .mapControls { MapCompass(); MapScaleView() }
+            } else {
+                DispatchMapPreview(address: address, coordinate: nil, isLoading: loading)
+            }
+        }
+        .task(id: address + "|" + String(describing: latitude) + "|" + String(describing: longitude)) {
+            loading = true
+            coordinate = nil
+            defer { if !Task.isCancelled { loading = false } }
+            let resolved = await DispatchIncidentLocationResolver.resolve(address: address, latitude: latitude, longitude: longitude)
+            guard !Task.isCancelled else { return }
+            coordinate = resolved
+            if let resolved {
+                position = .region(MKCoordinateRegion(center: resolved, span: MKCoordinateSpan(latitudeDelta: 0.012, longitudeDelta: 0.012)))
+            }
+        }
+    }
+}
 
 private struct DispatchDetailLookAroundPreview: View {
     let address: String

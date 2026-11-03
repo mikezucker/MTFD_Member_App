@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CareerMemberDashboardView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let activeDispatches: [APIClient.ActiveDispatch]
     let departmentStats: APIClient.DispatchBucket?
@@ -54,11 +55,15 @@ struct CareerMemberDashboardView: View {
                 activeDispatchSection
                 callTotalsSection
 
-                ForEach(dashboardCards) { card in
-                    dashboardCard(card)
+                DashboardCardGrid(allowsColumns: !dynamicTypeSize.isAccessibilitySize) {
+                    ForEach(dashboardCards) { card in
+                        dashboardCard(card)
+                    }
                 }
             }
+            .frame(maxWidth: 1200, alignment: .topLeading)
             .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .top)
             .padding(.top, 22)
             .padding(.bottom, 120)
             .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -332,55 +337,22 @@ struct CareerMemberDashboardView: View {
         }
     }
 
-    private var resolvedApparatusStation: String? {
-        let station = upcomingSchedule?.nextShift?.station?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return station?.isEmpty == false ? station : nil
-    }
-
-    private var stationScopedWorkOrders: [DashboardApparatusWorkOrder] {
-        guard let station = resolvedApparatusStation?.lowercased() else {
-            return workOrders
-        }
-
-        let stationNumber = station
-            .replacingOccurrences(of: "station", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        return workOrders.filter { order in
-            let apparatus = order.apparatusName.lowercased()
-
-            return apparatus.contains(station) ||
-                (!stationNumber.isEmpty && apparatus.contains(" \(stationNumber)")) ||
-                (!stationNumber.isEmpty && apparatus.contains(stationNumber))
-        }
-    }
-
-    private var apparatusStatusSubtitle: String {
-        if let station = resolvedApparatusStation {
-            return "Current or next shift apparatus for \(station)."
-        }
-
-        return "Current or next shift apparatus."
-    }
+    private var apparatusStatusSubtitle: String { "All open apparatus work orders." }
 
     private var workOrdersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("Apparatus Status", systemImage: "wrench.and.screwdriver.fill")
 
-            if isLoading && stationScopedWorkOrders.isEmpty {
+            if isLoading && workOrders.isEmpty {
                 loadingCard("Loading apparatus work orders...")
-            } else if stationScopedWorkOrders.isEmpty {
+            } else if workOrders.isEmpty {
                 emptyCard("No open apparatus work orders.")
             } else {
                 DashboardApparatusWorkOrdersCard(
-                    workOrders: stationScopedWorkOrders,
+                    workOrders: workOrders,
                     title: "Apparatus Status",
                     subtitle: apparatusStatusSubtitle,
-                    emptyMessage: resolvedApparatusStation == nil
-                        ? "No open apparatus issues."
-                        : "No open apparatus issues for \(resolvedApparatusStation!)."
+                    emptyMessage: "No open apparatus issues."
                 ) {
                     onOpenWorkOrders()
                 }
@@ -442,7 +414,8 @@ struct CareerMemberDashboardView: View {
                 subtitle: pendingDocuments > 0
                     ? "\(pendingDocuments) item\(pendingDocuments == 1 ? "" : "s") need acknowledgement."
                     : "No policies need acknowledgement.",
-                systemImage: "doc.text.fill"
+                systemImage: "doc.text.fill",
+                requiresAttention: pendingDocuments > 0
             ) {
                 onOpenDocuments()
             }
