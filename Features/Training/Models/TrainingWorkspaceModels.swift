@@ -460,10 +460,11 @@ extension GuidedTopic {
 struct GuidedMember: Decodable, Identifiable { let id: String; let name: String; let attended: Bool? }
 struct GuidedGroup: Decodable { let name: String; let userIds: [String] }
 struct GuidedHistory: Decodable, Identifiable { let startAt: Date?; let location: String?; let oneOff: Bool?; let id: String; let title: String; let status: String; let stage: String; let updatedAt: Date; let participantCount: Int }
-struct GuidedHome: Decodable { var scheduledTraining: [ScheduledTrainingItem]? = nil; var pendingCourses: [GuidedPendingCourse]? = nil; let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
+struct GuidedHome: Decodable { var viewerId: String? = nil; var starterIdeas: [TrainingStarterIdea]? = nil; var scheduledTraining: [ScheduledTrainingItem]? = nil; var pendingCourses: [GuidedPendingCourse]? = nil; let canCreate: Bool; let topics: [GuidedTopic]; let members: [GuidedMember]; let groups: [GuidedGroup]; let sessions: [GuidedHistory] }
 struct GuidedObservation: Decodable { let rating: String; let comment: String; let observedAt: String? }
 struct GuidedSessionResponse: Decodable { let session: GuidedSession }
 struct GuidedSession: Decodable, Identifiable {
+    var plan: TrainingSessionPlan? = nil
     let id: String; let title: String; let courseId: String; let status: String; let stage: String; let jprIndex: Int; let stepIndex: Int; let durationMinutes: Int; let revision: Int
     let participants: [GuidedMember]; let jprs: [GuidedVersion]; let observations: [String: GuidedObservation]
     var selectedScenarios: [String:String]? = nil
@@ -595,4 +596,49 @@ enum AnnualTrainingBoardSelection {
         if selection.hasPrefix("member:") { return [String(selection.dropFirst(7))] }
         return Set(groups.first { "group:"+$0.name == selection }?.userIds ?? [])
     }
+}
+
+// Shared with the web session-plan contract. Plans do not grant JPR competency.
+struct TrainingSessionPlan: Codable, Equatable {
+    var goal = ""
+    var equipment = ""
+    var activities = ""
+    var debrief = ""
+    var isEmpty: Bool { [goal,equipment,activities,debrief].allSatisfy { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } }
+    var valid: Bool { goal.utf16.count <= 1000 && equipment.utf16.count <= 1500 && activities.utf16.count <= 2500 && debrief.utf16.count <= 1000 }
+    func fillingEmptyFields(with other: Self) -> Self {
+        var value = self
+        if goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.goal = other.goal }
+        if equipment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.equipment = other.equipment }
+        if activities.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.activities = other.activities }
+        if debrief.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.debrief = other.debrief }
+        return value
+    }
+}
+struct TrainingStarterIdea: Decodable, Identifiable { let title: String; let symbol: String; var id: String { title } }
+struct TrainingOutlineResponse: Decodable { let success: Bool; let plan: TrainingSessionPlan }
+struct SavedTrainingDrill: Codable, Identifiable {
+    let id: String
+    let title: String
+    let custom: Bool
+    let courseId: String
+    let jprIds: [String]
+    let plan: TrainingSessionPlan
+    let notes: String
+    let durationMinutes: Int
+    var valid: Bool { !id.isEmpty && id.utf16.count <= 100 && courseId.utf16.count <= 200 && (custom || !jprIds.isEmpty) && (jprIds.isEmpty || !courseId.isEmpty) && jprIds.allSatisfy { !$0.isEmpty && $0.utf16.count <= 200 } && title.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2 && title.utf16.count <= 180 && jprIds.count <= 20 && plan.valid && notes.utf16.count <= 5000 && (5...1440).contains(durationMinutes) }
+}
+struct QuickTrainingRequest: Encodable {
+    let requestId: String
+    let oneOff: Bool
+    let title: String?
+    let courseId: String?
+    let versionIds: [String]
+    let plan: TrainingSessionPlan
+    let notes: String
+    let durationMinutes: Int
+    let location: String
+    let scheduled: Bool
+    let startAt: String
+    let participantIds: [String]
 }
